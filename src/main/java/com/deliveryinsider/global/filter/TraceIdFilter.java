@@ -1,4 +1,4 @@
-package com.deliveryinsider.auth.global.filter;
+package com.deliveryinsider.global.filter;
 
 import java.io.IOException;
 import java.util.UUID;

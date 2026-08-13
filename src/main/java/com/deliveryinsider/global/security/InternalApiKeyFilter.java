@@ -1,4 +1,4 @@
-package com.deliveryinsider.auth.global.security;
+package com.deliveryinsider.global.security;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

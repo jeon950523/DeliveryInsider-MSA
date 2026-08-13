@@ -1,9 +1,9 @@
-package com.deliveryinsider.auth.global.error;
+package com.deliveryinsider.global.error;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.deliveryinsider.auth.global.response.GlobalResponse;
+import com.deliveryinsider.global.response.GlobalResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

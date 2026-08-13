@@ -1,4 +1,4 @@
-package com.deliveryinsider.auth.global.error;
+package com.deliveryinsider.global.error;
 
 import org.springframework.http.HttpStatus;
 
