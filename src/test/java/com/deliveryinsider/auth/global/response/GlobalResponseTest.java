@@ -2,7 +2,6 @@ package com.deliveryinsider.auth.global.response;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.deliveryinsider.global.response.GlobalResponse;
 import org.junit.jupiter.api.Test;
 
 class GlobalResponseTest {

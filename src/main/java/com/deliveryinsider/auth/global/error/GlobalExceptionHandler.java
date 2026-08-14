@@ -1,9 +1,9 @@
-package com.deliveryinsider.global.error;
+package com.deliveryinsider.auth.global.error;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.deliveryinsider.global.response.GlobalResponse;
+import com.deliveryinsider.auth.global.response.GlobalResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,4 +47,5 @@ public class GlobalExceptionHandler {
         log.error("Unexpected server error",e); ErrorCode c=CommonErrorCode.INTERNAL_SERVER_ERROR;
         return ResponseEntity.status(c.status()).body(GlobalResponse.error(c.code(),c.message(),null));
     }
+
 }

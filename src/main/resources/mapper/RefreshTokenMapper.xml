@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.auth.mapper.RefreshTokenMapper">
+
+    <resultMap
+            id="refreshTokenResultMap"
+            type="com.deliveryinsider.auth.entity.RefreshTokenEntity">
+
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="tokenHash" column="token_hash"/>
+        <result property="expiresAt" column="expires_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="revokedAt" column="revoked_at"/>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO refresh_tokens(
+            user_id,
+            token_hash,
+            expires_at
+        )
+        VALUES(
+                   #{userId},
+                   #{tokenHash},
+                   #{expiresAt}
+               )
+    </insert>
+
+    <select
+            id="findActiveByTokenHash"
+            resultMap="refreshTokenResultMap">
+
+        SELECT
+            id,
+            user_id,
+            token_hash,
+            expires_at,
+            created_at,
+            revoked_at
+        FROM refresh_tokens
+        WHERE token_hash = #{tokenHash}
+          AND revoked_at IS NULL
+          AND expires_at > CURRENT_TIMESTAMP(6)
+
+    </select>
+
+    <update id="rotate">
+        UPDATE refresh_tokens
+        SET
+        token_hash = #{newTokenHash},
+        expires_at = #{newExpiresAt}
+        WHERE user_id = #{userId}
+        AND token_hash = #{currentTokenHash}
+        AND revoked_at IS NULL
+        AND expires_at > CURRENT_TIMESTAMP(6)
+    </update>
+
+    <update id="revokeByTokenHash">
+        UPDATE refresh_tokens
+        SET revoked_at = CURRENT_TIMESTAMP(6)
+        WHERE token_hash = #{tokenHash}
+        AND revoked_at IS NULL
+    </update>
+
+</mapper>

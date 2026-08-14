@@ -1,4 +1,4 @@
-package com.deliveryinsider.global.error;
+package com.deliveryinsider.auth.global.error;
 
 public class BusinessException extends RuntimeException {
     private final ErrorCode errorCode;

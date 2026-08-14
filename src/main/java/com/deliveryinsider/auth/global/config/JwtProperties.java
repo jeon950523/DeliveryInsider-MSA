@@ -1,4 +1,4 @@
-package com.deliveryinsider.global.config;
+package com.deliveryinsider.auth.global.config;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;

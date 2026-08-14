@@ -1,8 +1,7 @@
 package com.deliveryinsider.auth;
 
-import com.deliveryinsider.global.config.JwtProperties;
+import com.deliveryinsider.auth.global.config.JwtProperties;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
