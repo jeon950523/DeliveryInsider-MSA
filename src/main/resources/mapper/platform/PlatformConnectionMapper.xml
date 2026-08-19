@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.platform.domain.connection.mapper.PlatformConnectionMapper">
+
+    <resultMap id="platformConnectionMap" type="com.deliveryinsider.platform.domain.connection.entity.PlatformConnection">
+        <result property="storeId" column="store_id"/>
+        <result property="platformType" column="platform_type"/>
+        <result property="status" column="status"/>
+        <result property="lastSyncedAt" column="last_synced_at"/>
+        <result property="lastErrorCode" column="last_error_code"/>
+        <result property="lastErrorMessage" column="last_error_message"/>
+    </resultMap>
+
+    <select id="findAllByStoreId" resultMap="platformConnectionMap">
+        SELECT
+            store_id,
+            platform_type,
+            status,
+            last_synced_at,
+            last_error_code,
+            last_error_message
+        FROM platform_connection
+        WHERE store_id = #{storeId}
+    </select>
+    
+    <select id="findByStoreIdAndPlatformType" resultMap="platformConnectionMap">
+        SELECT
+            store_id,
+            platform_type,
+            status,
+            last_synced_at,
+            last_error_code,
+            last_error_message
+        FROM platform_connection
+        WHERE store_id = #{storeId}
+          AND platform_type = #{platformType}
+    </select>
+
+</mapper>
