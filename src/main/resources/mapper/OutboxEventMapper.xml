@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.order.domain.order.mapper.OutboxEventMapper">
+
+    <resultMap
+            id="outboxEventResultMap"
+            type="com.deliveryinsider.order.domain.order.entity.OutboxEventEntity">
+
+        <id property="id" column="id"/>
+
+        <result property="eventId" column="event_id"/>
+
+        <result
+                property="aggregateType"
+                column="aggregate_type"/>
+
+        <result
+                property="aggregateId"
+                column="aggregate_id"/>
+
+        <result property="eventType" column="event_type"/>
+
+        <result
+                property="schemaVersion"
+                column="schema_version"/>
+
+        <result
+                property="eventVersion"
+                column="event_version"/>
+
+        <result property="payload" column="payload"/>
+        <result property="traceId" column="trace_id"/>
+        <result property="status" column="status"/>
+
+        <result property="retryCount" column="retry_count"/>
+
+        <result
+                property="nextRetryAt"
+                column="next_retry_at"/>
+
+        <result
+                property="lastErrorMessage"
+                column="last_error_message"/>
+
+        <result property="createdAt" column="created_at"/>
+
+        <result
+                property="publishedAt"
+                column="published_at"/>
+
+    </resultMap>
+
+    <insert
+            id="insert"
+            useGeneratedKeys="true"
+            keyProperty="id">
+
+        INSERT INTO outbox_events (
+            event_id,
+            aggregate_type,
+            aggregate_id,
+            event_type,
+            schema_version,
+            event_version,
+            payload,
+            trace_id,
+            status
+        )
+        VALUES (
+                   #{eventId},
+                   #{aggregateType},
+                   #{aggregateId},
+                   #{eventType},
+                   #{schemaVersion},
+                   #{eventVersion},
+                   #{payload},
+                   #{traceId},
+                   #{status}
+               )
+
+    </insert>
+
+    <select
+            id="findByEventId"
+            resultMap="outboxEventResultMap">
+
+        SELECT
+            id,
+            event_id,
+            aggregate_type,
+            aggregate_id,
+            event_type,
+            schema_version,
+            event_version,
+            payload,
+            trace_id,
+            status,
+            retry_count,
+            next_retry_at,
+            last_error_message,
+            created_at,
+            published_at
+        FROM outbox_events
+        WHERE event_id = #{eventId}
+        LIMIT 1
+
+    </select>
+
+</mapper>

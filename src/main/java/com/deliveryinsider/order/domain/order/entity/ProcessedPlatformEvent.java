@@ -1,6 +1,7 @@
 package com.deliveryinsider.order.domain.order.entity;
 
 import com.deliveryinsider.order.domain.order.model.PlatformType;
+import com.deliveryinsider.order.domain.order.model.ProcessedPlatformEventResult;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -25,7 +26,7 @@ public class ProcessedPlatformEvent {
 
     private Long sourceSequence;
 
-    private String processingResult;
+    private ProcessedPlatformEventResult processingResult;
 
     private LocalDateTime processedAt;
 
@@ -45,6 +46,7 @@ public class ProcessedPlatformEvent {
         this.platformOrderId = platformOrderId;
         this.eventType = eventType;
         this.sourceSequence = sourceSequence;
-        this.processingResult = processingResult;
+        this.processingResult = ProcessedPlatformEventResult.valueOf(processingResult);
+        this.createdAt = LocalDateTime.now();
     }
 }
