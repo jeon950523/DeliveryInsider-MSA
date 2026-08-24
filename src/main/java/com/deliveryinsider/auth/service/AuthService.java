@@ -4,6 +4,7 @@ import com.deliveryinsider.auth.entity.UserEntity;
 import com.deliveryinsider.auth.entity.UserStatus;
 import com.deliveryinsider.auth.global.error.InvalidCredentialsException;
 import com.deliveryinsider.auth.global.error.UserNotActiveException;
+import com.deliveryinsider.auth.global.error.UserNotFoundException;
 import com.deliveryinsider.auth.global.security.jwt.JwtTokenProvider;
 import com.deliveryinsider.auth.mapper.UserMapper;
 import com.deliveryinsider.auth.request.LoginRequest;
@@ -87,6 +88,11 @@ public class AuthService {
     @Transactional
     public void logout(String refreshToken) {
         refreshTokenService.revoke(refreshToken);
+    }
+    @Transactional(readOnly = true)
+    public UserEntity getCurrentUser(Long userId) {
+        return userMapper.findById(userId)
+            .orElseThrow(UserNotFoundException::new);
     }
 
 }

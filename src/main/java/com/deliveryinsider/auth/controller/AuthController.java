@@ -1,5 +1,7 @@
 package com.deliveryinsider.auth.controller;
 
+import com.deliveryinsider.auth.entity.UserEntity;
+import com.deliveryinsider.auth.global.response.CurrentUserResponse;
 import com.deliveryinsider.auth.global.response.GlobalResponse;
 import com.deliveryinsider.auth.global.response.LoginResponse;
 import com.deliveryinsider.auth.global.response.TokenReissueResponse;
@@ -19,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
-
+    private static final String USER_ID_HEADER = "X-User-Id";
     private final AuthService authService;
     private final RefreshTokenCookieManager refreshTokenCookieManager;
 
@@ -102,6 +104,19 @@ public class AuthController {
                     null
                 )
             );
+    }
+    @GetMapping("/me")
+    public ResponseEntity<GlobalResponse<CurrentUserResponse>> me(
+        @RequestHeader(USER_ID_HEADER) Long userId
+    ) {
+        UserEntity user = authService.getCurrentUser(userId);
+
+        return ResponseEntity.ok(
+            GlobalResponse.success(
+                "사용자 정보를 조회했습니다.",
+                CurrentUserResponse.from(user)
+            )
+        );
     }
 
 
