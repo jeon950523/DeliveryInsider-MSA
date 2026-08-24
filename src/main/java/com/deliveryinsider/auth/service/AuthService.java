@@ -8,6 +8,8 @@ import com.deliveryinsider.auth.global.security.jwt.JwtTokenProvider;
 import com.deliveryinsider.auth.mapper.UserMapper;
 import com.deliveryinsider.auth.request.LoginRequest;
 import com.deliveryinsider.auth.service.model.LoginResult;
+import com.deliveryinsider.auth.service.model.RefreshTokenRotation;
+import com.deliveryinsider.auth.service.model.TokenReissueResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -63,4 +65,28 @@ public class AuthService {
             .trim()
             .toLowerCase(Locale.ROOT);
     }
+    @Transactional
+    public TokenReissueResult reissue(
+        String currentRefreshToken
+    ) {
+        RefreshTokenRotation rotation =
+            refreshTokenService.rotate(currentRefreshToken);
+
+        String accessToken =
+            jwtTokenProvider.createAccessToken(
+                rotation.userId()
+            );
+
+        return new TokenReissueResult(
+            rotation.userId(),
+            accessToken,
+            rotation.refreshToken()
+        );
+    }
+
+    @Transactional
+    public void logout(String refreshToken) {
+        refreshTokenService.revoke(refreshToken);
+    }
+
 }

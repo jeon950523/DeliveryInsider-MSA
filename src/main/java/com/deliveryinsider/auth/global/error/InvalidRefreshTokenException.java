@@ -1,12 +1,12 @@
 package com.deliveryinsider.auth.global.error;
 
-public class InvalidRefreshTokenException extends RuntimeException {
+public class InvalidRefreshTokenException extends BusinessException {
 
     public InvalidRefreshTokenException() {
-        super("Invalid refresh token");
+        super(AuthErrorCode.INVALID_TOKEN);
     }
 
     public InvalidRefreshTokenException(Throwable cause) {
-        super("Invalid refresh token", cause);
+        super(AuthErrorCode.INVALID_TOKEN, cause);
     }
 }
