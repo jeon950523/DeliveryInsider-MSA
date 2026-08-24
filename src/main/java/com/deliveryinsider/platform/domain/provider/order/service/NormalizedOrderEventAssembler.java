@@ -2,7 +2,8 @@ package com.deliveryinsider.platform.domain.provider.order.service;
 
 import com.deliveryinsider.platform.domain.mapping.service.PlatformMenuResolver;
 import com.deliveryinsider.platform.domain.mapping.service.StorePlatformResolver;
-import com.deliveryinsider.platform.domain.provider.order.event.NormalizedOrderEvent;
+import com.deliveryinsider.platform.domain.provider.order.event.PlatformOrderEvent;
+import com.deliveryinsider.platform.domain.provider.order.event.PlatformOrderEventData;
 import com.deliveryinsider.platform.domain.provider.order.model.CanonicalPlatformOrder;
 import com.deliveryinsider.platform.domain.provider.order.model.CanonicalPlatformOrderItem;
 import com.deliveryinsider.platform.domain.provider.order.model.ProviderOrderFinancials;
@@ -22,7 +23,7 @@ public class NormalizedOrderEventAssembler {
     private final StorePlatformResolver storeResolver;
     private final PlatformMenuResolver menuResolver;
 
-    public NormalizedOrderEvent assemble(
+    public PlatformOrderEvent assemble(
         CanonicalPlatformOrder order
     ) {
         validate(order);
@@ -32,33 +33,69 @@ public class NormalizedOrderEventAssembler {
             order.externalStoreId()
         );
 
-        List<NormalizedOrderEvent.Item> items =
+        List<PlatformOrderEventData.Item> items =
             resolveItems(order, storeId);
 
-        return new NormalizedOrderEvent(
+        ProviderOrderFinancials financials =
+            requireFinancials(order);
+
+        PlatformOrderEventData data =
+            new PlatformOrderEventData(
+                order.platformType(),
+                order.externalOrderId(),
+                order.externalStoreId(),
+                order.sourceSequence(),
+                order.orderedAt(),
+                order.providerOccurredAt(),
+                order.deliveryAddress(),
+                order.customerRequestText(),
+                items,
+                financials.status(),
+                financials.grossOrderAmount(),
+                financials.customerPaidAmount(),
+                financials.merchantFundedDiscount(),
+                financials.providerFundedDiscount(),
+                financials.charges()
+                    .stream()
+                    .map(charge ->
+                        new PlatformOrderEventData.Charge(
+                            charge.chargeType(),
+                            charge.amount(),
+                            charge.rate(),
+                            charge.basisAmount(),
+                            charge.provisional(),
+                            charge.sourceCode()
+                        )
+                    )
+                    .toList(),
+                order.providerCancelCode(),
+                order.providerCancelReason()
+            );
+
+        String aggregateId = "%s:%s".formatted(
+            order.platformType().name(),
+            order.externalOrderId()
+        );
+
+        return new PlatformOrderEvent(
             order.sourceEventId(),
-            order.eventType(),
+            order.eventType().name(),
             SCHEMA_VERSION,
-            order.platformType(),
-            order.externalOrderId(),
-            storeId,
-            order.sourceSequence(),
-            order.orderedAt(),
+            null,
             order.providerOccurredAt(),
-            order.deliveryAddress(),
-            order.customerRequestText(),
-            items,
-            toFinancials(order.financials()),
-            order.providerCancelCode(),
-            order.providerCancelReason()
+            null,
+            "PLATFORM_ORDER",
+            aggregateId,
+            storeId,
+            data
         );
     }
 
-    private List<NormalizedOrderEvent.Item> resolveItems(
+    private List<PlatformOrderEventData.Item> resolveItems(
         CanonicalPlatformOrder order,
         Long storeId
     ) {
-        List<NormalizedOrderEvent.Item> resolved =
+        List<PlatformOrderEventData.Item> resolved =
             new ArrayList<>(order.items().size());
 
         for (CanonicalPlatformOrderItem item : order.items()) {
@@ -70,8 +107,9 @@ public class NormalizedOrderEventAssembler {
             );
 
             resolved.add(
-                new NormalizedOrderEvent.Item(
+                new PlatformOrderEventData.Item(
                     menuId,
+                    item.externalMenuId(),
                     item.quantity(),
                     item.orderedUnitPrice()
                 )
@@ -81,39 +119,17 @@ public class NormalizedOrderEventAssembler {
         return List.copyOf(resolved);
     }
 
-    private NormalizedOrderEvent.Financials toFinancials(
-        ProviderOrderFinancials financials
+    private ProviderOrderFinancials requireFinancials(
+        CanonicalPlatformOrder order
     ) {
-        if (financials == null) {
+        if (order.financials() == null) {
             throw new BlockedWebhookProcessingException(
                 "PROVIDER_FINANCIALS_NOT_NORMALIZED",
                 "Provider 금융정보 상태가 정규화되지 않았습니다."
             );
         }
 
-        List<NormalizedOrderEvent.Charge> charges =
-            financials.charges()
-                .stream()
-                .map(charge ->
-                    new NormalizedOrderEvent.Charge(
-                        charge.chargeType(),
-                        charge.amount(),
-                        charge.rate(),
-                        charge.basisAmount(),
-                        charge.provisional(),
-                        charge.sourceCode()
-                    )
-                )
-                .toList();
-
-        return new NormalizedOrderEvent.Financials(
-            financials.status(),
-            financials.grossOrderAmount(),
-            financials.customerPaidAmount(),
-            financials.merchantFundedDiscount(),
-            financials.providerFundedDiscount(),
-            charges
-        );
+        return order.financials();
     }
 
     private void validate(

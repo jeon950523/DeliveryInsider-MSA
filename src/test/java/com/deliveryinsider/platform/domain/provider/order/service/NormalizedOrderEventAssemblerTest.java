@@ -3,7 +3,7 @@ package com.deliveryinsider.platform.domain.provider.order.service;
 import com.deliveryinsider.platform.domain.mapping.service.PlatformMenuResolver;
 import com.deliveryinsider.platform.domain.mapping.service.StorePlatformResolver;
 import com.deliveryinsider.platform.domain.provider.PlatformType;
-import com.deliveryinsider.platform.domain.provider.order.event.NormalizedOrderEvent;
+import com.deliveryinsider.platform.domain.provider.order.event.PlatformOrderEvent;
 import com.deliveryinsider.platform.domain.provider.order.model.CanonicalOrderEventType;
 import com.deliveryinsider.platform.domain.provider.order.model.CanonicalPlatformOrder;
 import com.deliveryinsider.platform.domain.provider.order.model.CanonicalPlatformOrderItem;
@@ -62,7 +62,7 @@ class NormalizedOrderEventAssemblerTest {
             )
         ).thenReturn(37L);
 
-        NormalizedOrderEvent event =
+        PlatformOrderEvent event =
             assembler.assemble(order);
 
         assertEquals(
@@ -72,28 +72,28 @@ class NormalizedOrderEventAssemblerTest {
 
         assertEquals(
             "BAE-ORDER-001",
-            event.platformOrderId()
+            event.data().platformOrderId()
         );
 
         assertEquals(15L, event.storeId());
 
         assertEquals(
             37L,
-            event.items()
+            event.data().items()
                 .getFirst()
                 .menuId()
         );
 
         assertEquals(
             18000L,
-            event.items()
+            event.data().items()
                 .getFirst()
                 .orderedUnitPrice()
         );
 
         assertEquals(
             ProviderFinancialDataStatus.UNAVAILABLE,
-            event.financials().status()
+            event.data().providerFinancialDataStatus()
         );
     }
 
@@ -118,10 +118,10 @@ class NormalizedOrderEventAssemblerTest {
             )
         ).thenReturn(37L);
 
-        NormalizedOrderEvent first =
+        PlatformOrderEvent first =
             assembler.assemble(order);
 
-        NormalizedOrderEvent second =
+        PlatformOrderEvent second =
             assembler.assemble(order);
 
         assertEquals(

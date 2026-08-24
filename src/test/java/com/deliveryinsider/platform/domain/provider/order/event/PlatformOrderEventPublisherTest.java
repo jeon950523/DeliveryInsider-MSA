@@ -11,6 +11,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -46,7 +47,7 @@ class PlatformOrderEventPublisherTest {
 
     @Test
     void normalizedEventIsPublishedWithOrderKey() {
-        NormalizedOrderEvent event =
+        PlatformOrderEvent  event =
             event();
 
         CompletableFuture<SendResult<String, String>>
@@ -74,7 +75,7 @@ class PlatformOrderEventPublisherTest {
 
     @Test
     void kafkaFailureIsRetryable() {
-        NormalizedOrderEvent event =
+        PlatformOrderEvent  event =
             event();
 
         CompletableFuture<SendResult<String, String>>
@@ -101,40 +102,52 @@ class PlatformOrderEventPublisherTest {
         );
     }
 
-    private NormalizedOrderEvent event() {
-        return new NormalizedOrderEvent(
-            "BAE-EVENT-001",
-            CanonicalOrderEventType.ORDER_CREATED,
-            1,
-            PlatformType.BAEMIN,
-            "BAE-ORDER-001",
-            15L,
-            1L,
-            java.time.Instant.parse(
-                "2026-08-24T05:00:00Z"
-            ),
-            java.time.Instant.parse(
-                "2026-08-24T05:01:00Z"
-            ),
-            null,
-            null,
-            List.of(
-                new NormalizedOrderEvent.Item(
-                    37L,
-                    1,
-                    18000L
-                )
-            ),
-            new NormalizedOrderEvent.Financials(
+    private PlatformOrderEvent event() {
+        PlatformOrderEventData data =
+            new PlatformOrderEventData(
+                PlatformType.BAEMIN,
+                "BAE-ORDER-001",
+                "BAE-STORE-001",
+                1L,
+                Instant.parse(
+                    "2026-08-24T05:00:00Z"
+                ),
+                Instant.parse(
+                    "2026-08-24T05:01:00Z"
+                ),
+                null,
+                null,
+                List.of(
+                    new PlatformOrderEventData.Item(
+                        910001L,
+                        "BAE-MENU-001",
+                        1,
+                        18000L
+                    )
+                ),
                 ProviderFinancialDataStatus.UNAVAILABLE,
                 null,
                 null,
                 null,
                 null,
-                List.of()
+                List.of(),
+                null,
+                null
+            );
+
+        return new PlatformOrderEvent(
+            "BAE-EVENT-001",
+            "ORDER_CREATED",
+            1,
+            null,
+            Instant.parse(
+                "2026-08-24T05:01:00Z"
             ),
             null,
-            null
+            "PLATFORM_ORDER",
+            "BAEMIN:BAE-ORDER-001",
+            900001L,
+            data
         );
     }
 }

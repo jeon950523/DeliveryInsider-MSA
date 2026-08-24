@@ -1,6 +1,6 @@
 package com.deliveryinsider.platform.domain.webhook.worker;
 
-import com.deliveryinsider.platform.domain.provider.order.event.NormalizedOrderEvent;
+import com.deliveryinsider.platform.domain.provider.order.event.PlatformOrderEvent;
 import com.deliveryinsider.platform.domain.provider.order.event.PlatformOrderEventPublisher;
 import com.deliveryinsider.platform.domain.provider.order.model.CanonicalPlatformOrder;
 import com.deliveryinsider.platform.domain.provider.order.service.NormalizedOrderEventAssembler;
@@ -31,7 +31,7 @@ public class DefaultProviderWebhookProcessor
         CanonicalPlatformOrder canonicalOrder =
             loader.load(webhook);
 
-        NormalizedOrderEvent event =
+        PlatformOrderEvent event =
             eventAssembler.assemble(
                 canonicalOrder
             );

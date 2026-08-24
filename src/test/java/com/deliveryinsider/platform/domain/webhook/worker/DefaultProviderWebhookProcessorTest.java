@@ -1,7 +1,7 @@
 package com.deliveryinsider.platform.domain.webhook.worker;
 
 import com.deliveryinsider.platform.domain.provider.PlatformType;
-import com.deliveryinsider.platform.domain.provider.order.event.NormalizedOrderEvent;
+import com.deliveryinsider.platform.domain.provider.order.event.PlatformOrderEvent;
 import com.deliveryinsider.platform.domain.provider.order.event.PlatformOrderEventPublisher;
 import com.deliveryinsider.platform.domain.provider.order.model.CanonicalPlatformOrder;
 import com.deliveryinsider.platform.domain.provider.order.service.NormalizedOrderEventAssembler;
@@ -42,8 +42,8 @@ class DefaultProviderWebhookProcessorTest {
         CanonicalPlatformOrder canonical =
             mock(CanonicalPlatformOrder.class);
 
-        NormalizedOrderEvent event =
-            mock(NormalizedOrderEvent.class);
+        PlatformOrderEvent event =
+            mock(PlatformOrderEvent.class);
 
         when(
             resolver.resolve(

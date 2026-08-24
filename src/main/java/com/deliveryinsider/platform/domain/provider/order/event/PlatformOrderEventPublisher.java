@@ -23,7 +23,7 @@ public class PlatformOrderEventPublisher {
     private final PlatformKafkaProperties properties;
 
     public void publish(
-        NormalizedOrderEvent event
+        PlatformOrderEvent event
     ) {
         String key = createKey(event);
         String payload = serialize(event);
@@ -63,26 +63,27 @@ public class PlatformOrderEventPublisher {
     }
 
     private String createKey(
-        NormalizedOrderEvent event
+        PlatformOrderEvent event
     ) {
         return "%s:%s".formatted(
-            event.platformType().name(),
-            event.platformOrderId()
+            event.data()
+                .platformType()
+                .name(),
+            event.data()
+                .platformOrderId()
         );
     }
 
     private String serialize(
-        NormalizedOrderEvent event
+        PlatformOrderEvent event
     ) {
         try {
-            return jsonMapper.writeValueAsString(
-                event
-            );
+            return jsonMapper.writeValueAsString(event);
 
         } catch (JacksonException e) {
             throw new BlockedWebhookProcessingException(
                 "ORDER_EVENT_SERIALIZATION_FAILED",
-                "Normalized 주문 이벤트를 직렬화할 수 없습니다.",
+                "Platform 주문 이벤트를 직렬화할 수 없습니다.",
                 e
             );
         }
