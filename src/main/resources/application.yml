@@ -3,13 +3,17 @@ store-client:
   internal-api-key: ${INTERNAL_API_KEY:}
   connect-timeout: ${STORE_CLIENT_CONNECT_TIMEOUT:2s}
   read-timeout: ${STORE_CLIENT_READ_TIMEOUT:3s}
+
 server:
   port: ${APP_PORT:8094}
+
 spring:
   config:
     import: optional:file:./.env[.properties]
+
   application:
     name: baef-p2-order
+
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:baef_order}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: ${DB_USER:root}
@@ -18,21 +22,32 @@ spring:
     hikari:
       maximum-pool-size: ${DB_POOL_MAX:10}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
+
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
     producer:
       acks: all
       properties:
         enable.idempotence: true
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
     consumer:
       enable-auto-commit: false
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: ${ORDER_PLATFORM_CONSUMER_GROUP:order-platform-event-group}
+
     listener:
       ack-mode: record
+order:
+  kafka:
+    platform-order-topic: ${PLATFORM_ORDER_TOPIC:platform.order-events}
+    platform-order-dlt-topic: ${PLATFORM_ORDER_DLT_TOPIC:platform.order-events.DLT}
+    retry-interval-ms: ${ORDER_KAFKA_RETRY_INTERVAL_MS:1000}
+    max-attempts: ${ORDER_KAFKA_MAX_ATTEMPTS:3}
 
 springdoc:
   default-consumes-media-type: application/json
