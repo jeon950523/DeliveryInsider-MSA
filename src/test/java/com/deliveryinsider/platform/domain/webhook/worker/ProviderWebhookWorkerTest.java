@@ -32,7 +32,8 @@ class ProviderWebhookWorkerTest {
         ProviderWebhookWorkerProperties properties =
             new ProviderWebhookWorkerProperties(
                 500L,
-                30L
+                30L,
+                5
             );
 
         worker = new ProviderWebhookWorker(
@@ -98,6 +99,7 @@ class ProviderWebhookWorkerTest {
                 anyString(),
                 eq(webhook.claimVersion()),
                 eq(Duration.ofSeconds(30)),
+                eq(5),
                 eq("KAFKA_UNAVAILABLE"),
                 eq("Kafka unavailable")
             );

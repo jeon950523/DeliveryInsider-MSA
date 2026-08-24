@@ -13,7 +13,10 @@ public record ProviderWebhookWorkerProperties(
     long fixedDelayMs,
 
     @Positive
-    long retryDelaySeconds
+    long retryDelaySeconds,
+
+    @Min(1)
+    int maxRetryCount
 
 ) {
 }

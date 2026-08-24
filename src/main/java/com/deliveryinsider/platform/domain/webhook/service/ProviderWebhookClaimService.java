@@ -75,17 +75,40 @@ public class ProviderWebhookClaimService {
         String workerId,
         long claimVersion,
         Duration retryDelay,
+        int maxRetryCount,
         String errorCode,
         String errorMessage
     ) {
-        int updated = inboxMapper.markRetryableFailed(
-            inboxId,
-            workerId,
-            claimVersion,
-            retryDelay.toSeconds(),
-            errorCode,
-            errorMessage
-        );
+        String exhaustedMessage =
+            "재시도 최대 횟수에 도달했습니다. cause=%s, message=%s"
+                .formatted(
+                    errorCode,
+                    errorMessage
+                );
+
+        int exhausted =
+            inboxMapper.markRetryExhausted(
+                inboxId,
+                workerId,
+                claimVersion,
+                maxRetryCount,
+                exhaustedMessage
+            );
+
+        if (exhausted == 1) {
+            return;
+        }
+
+        int updated =
+            inboxMapper.markRetryableFailed(
+                inboxId,
+                workerId,
+                claimVersion,
+                retryDelay.toSeconds(),
+                maxRetryCount,
+                errorCode,
+                errorMessage
+            );
 
         validateClaimOwnership(updated);
     }

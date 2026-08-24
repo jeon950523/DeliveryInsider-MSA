@@ -2,6 +2,7 @@ package com.deliveryinsider.platform;
 
 import com.deliveryinsider.platform.domain.webhook.worker.config.ProviderWebhookWorkerProperties;
 import com.deliveryinsider.platform.global.config.ProviderWebhookProperties;
+import com.deliveryinsider.platform.global.kafka.PlatformKafkaProperties;
 import com.deliveryinsider.platform.global.provider.ProviderClientProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -10,7 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableScheduling
 @EnableConfigurationProperties(
-    {ProviderWebhookProperties.class, ProviderWebhookWorkerProperties.class, ProviderClientProperties.class}
+    {ProviderWebhookProperties.class, ProviderWebhookWorkerProperties.class, ProviderClientProperties.class, PlatformKafkaProperties.class}
 )
 @SpringBootApplication
 public class PlatformApplication {

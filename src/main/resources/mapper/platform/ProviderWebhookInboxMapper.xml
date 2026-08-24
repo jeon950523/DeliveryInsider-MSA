@@ -199,6 +199,7 @@
         AND claimed_by = #{workerId}
         AND claim_version = #{claimVersion}
         AND claimed_until >= CURRENT_TIMESTAMP(6)
+        AND retry_count + 1 &lt; #{maxRetryCount}
     </update>
     <update id="markBlocked">
         UPDATE provider_webhook_inbox
@@ -240,5 +241,22 @@
         last_requeued_at = CURRENT_TIMESTAMP(6)
         WHERE id = #{id}
         AND status = 'BLOCKED'
+    </update>
+    <update id="markRetryExhausted">
+        UPDATE provider_webhook_inbox
+        SET
+        status = 'BLOCKED',
+        retry_count = retry_count + 1,
+        next_retry_at = NULL,
+        claimed_by = NULL,
+        claimed_until = NULL,
+        last_error_code = 'RETRY_EXHAUSTED',
+        last_error_message = #{errorMessage}
+        WHERE id = #{id}
+        AND status = 'PROCESSING'
+        AND claimed_by = #{workerId}
+        AND claim_version = #{claimVersion}
+        AND claimed_until >= CURRENT_TIMESTAMP(6)
+        AND retry_count + 1 >= #{maxRetryCount}
     </update>
 </mapper>

@@ -19,6 +19,8 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
@@ -28,6 +30,11 @@ spring:
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     listener:
       ack-mode: record
+
+deliveryinsider:
+  kafka:
+    platform-order-topic: platform.order-events
+    publish-timeout-ms: 10000
 
 springdoc:
   default-consumes-media-type: application/json
@@ -73,6 +80,7 @@ webhook:
     enabled: ${WEBHOOK_WORKER_ENABLED:false}
     fixed-delay-ms: ${WEBHOOK_WORKER_FIXED_DELAY_MS:500}
     retry-delay-seconds: ${WEBHOOK_WORKER_RETRY_DELAY_SECONDS:30}
+    max-retry-count: ${WEBHOOK_WORKER_MAX_RETRY_COUNT:5}
 provider-client:
   baemin:
     base-url: ${BAEMIN_API_BASE_URL:http://localhost:8100}

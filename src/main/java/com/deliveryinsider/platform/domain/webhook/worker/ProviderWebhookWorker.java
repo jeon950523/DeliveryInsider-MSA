@@ -101,6 +101,7 @@ public class ProviderWebhookWorker {
                 Duration.ofSeconds(
                     properties.retryDelaySeconds()
                 ),
+                properties.maxRetryCount(),
                 errorCode,
                 errorMessage
             );

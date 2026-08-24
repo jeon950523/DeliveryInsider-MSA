@@ -59,4 +59,21 @@ public interface ProviderWebhookInboxMapper {
     int requeueBlocked(
         @Param("id") Long id
     );
+    int markRetryableFailed(
+        @Param("id") Long id,
+        @Param("workerId") String workerId,
+        @Param("claimVersion") long claimVersion,
+        @Param("retryDelaySeconds") long retryDelaySeconds,
+        @Param("maxRetryCount") int maxRetryCount,
+        @Param("errorCode") String errorCode,
+        @Param("errorMessage") String errorMessage
+    );
+
+    int markRetryExhausted(
+        @Param("id") Long id,
+        @Param("workerId") String workerId,
+        @Param("claimVersion") long claimVersion,
+        @Param("maxRetryCount") int maxRetryCount,
+        @Param("errorMessage") String errorMessage
+    );
 }

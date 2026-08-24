@@ -249,6 +249,7 @@ class ProviderWebhookClaimServiceIntegrationTest {
             "worker-a",
             claimed.claimVersion(),
             Duration.ofSeconds(30),
+            5,
             "KAFKA_UNAVAILABLE",
             "Kafka broker is temporarily unavailable."
         );
@@ -284,6 +285,7 @@ class ProviderWebhookClaimServiceIntegrationTest {
             "worker-a",
             workerA.claimVersion(),
             Duration.ofSeconds(30),
+            5,
             "KAFKA_UNAVAILABLE",
             "Kafka broker is temporarily unavailable."
         );
@@ -368,6 +370,7 @@ class ProviderWebhookClaimServiceIntegrationTest {
                 "worker-a",
                 workerA.claimVersion(),
                 Duration.ofSeconds(30),
+                5,
                 "KAFKA_UNAVAILABLE",
                 "stale worker"
             )
@@ -499,6 +502,112 @@ class ProviderWebhookClaimServiceIntegrationTest {
         assertEquals(
             PlatformErrorCode.WEBHOOK_REQUEUE_NOT_ALLOWED,
             exception.errorCode()
+        );
+    }
+    @Test
+    void retryableFailureBelowLimitRemainsRetryable() {
+        createReceivedWebhook();
+
+        ClaimedWebhook claimed = claimService
+            .claimNext("worker-a")
+            .orElseThrow();
+
+        jdbcTemplate.update(
+            """
+            UPDATE provider_webhook_inbox
+            SET retry_count = 2
+            WHERE id = ?
+            """,
+            claimed.inboxId()
+        );
+
+        claimService.markRetryableFailed(
+            claimed.inboxId(),
+            "worker-a",
+            claimed.claimVersion(),
+            Duration.ofSeconds(30),
+            5,
+            "PROVIDER_ORDER_NOT_READY",
+            "Provider order is not ready."
+        );
+
+        ProviderWebhookInbox stored =
+            findInbox(claimed);
+
+        assertEquals(
+            ProviderWebhookInboxStatus.RETRYABLE_FAILED,
+            stored.getStatus()
+        );
+
+        assertEquals(
+            3,
+            stored.getRetryCount()
+        );
+
+        assertNotNull(
+            stored.getNextRetryAt()
+        );
+
+        assertEquals(
+            "PROVIDER_ORDER_NOT_READY",
+            stored.getLastErrorCode()
+        );
+    }
+    @Test
+    void retryLimitExhaustionBecomesBlocked() {
+        createReceivedWebhook();
+
+        ClaimedWebhook claimed = claimService
+            .claimNext("worker-a")
+            .orElseThrow();
+
+        jdbcTemplate.update(
+            """
+            UPDATE provider_webhook_inbox
+            SET retry_count = 4
+            WHERE id = ?
+            """,
+            claimed.inboxId()
+        );
+
+        claimService.markRetryableFailed(
+            claimed.inboxId(),
+            "worker-a",
+            claimed.claimVersion(),
+            Duration.ofSeconds(30),
+            5,
+            "PROVIDER_ORDER_NOT_READY",
+            "Provider order is not ready."
+        );
+
+        ProviderWebhookInbox stored =
+            findInbox(claimed);
+
+        assertEquals(
+            ProviderWebhookInboxStatus.BLOCKED,
+            stored.getStatus()
+        );
+
+        assertEquals(
+            5,
+            stored.getRetryCount()
+        );
+
+        assertNull(
+            stored.getNextRetryAt()
+        );
+
+        assertNull(
+            stored.getClaimedBy()
+        );
+
+        assertNull(
+            stored.getClaimedUntil()
+        );
+
+        assertEquals(
+            "RETRY_EXHAUSTED",
+            stored.getLastErrorCode()
         );
     }
 
