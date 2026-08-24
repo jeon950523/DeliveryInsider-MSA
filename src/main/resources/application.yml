@@ -1,6 +1,8 @@
 server:
   port: ${APP_PORT:8093}
 spring:
+  config:
+    import: optional:file:./.env[.properties]
   application:
     name: baef-p2-platform
   datasource:
