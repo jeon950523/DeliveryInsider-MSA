@@ -15,6 +15,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
+    implementation 'org.springframework.boot:spring-boot-starter-restclient'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.1.0'
