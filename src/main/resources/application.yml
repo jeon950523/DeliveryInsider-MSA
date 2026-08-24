@@ -1,0 +1,22 @@
+server:
+  port: 8100
+
+spring:
+  application:
+    name: baef-p2-external-platform-simulator
+  config:
+    import: optional:file:./.env[.properties]
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+provider:
+  baemin:
+    webhook-secret: ${BAEMIN_WEBHOOK_SECRET:}
+
+deliveryinsider:
+  webhook:
+    base-url: ${DELIVERYINSIDER_WEBHOOK_BASE_URL:http://localhost:8080}
