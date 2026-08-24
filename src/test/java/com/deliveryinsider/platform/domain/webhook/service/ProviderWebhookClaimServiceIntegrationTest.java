@@ -476,6 +476,7 @@ class ProviderWebhookClaimServiceIntegrationTest {
 
         assertNull(stored.getClaimedBy());
         assertNull(stored.getClaimedUntil());
+        assertEquals(0, stored.getRetryCount());
     }
     @Test
     void processedWebhookCannotBeRequeued() {

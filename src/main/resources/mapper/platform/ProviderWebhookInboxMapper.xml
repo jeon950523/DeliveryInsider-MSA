@@ -234,6 +234,7 @@
         UPDATE provider_webhook_inbox
         SET
         status = 'RECEIVED',
+        retry_count = 0,
         next_retry_at = CURRENT_TIMESTAMP(6),
         claimed_by = NULL,
         claimed_until = NULL,
