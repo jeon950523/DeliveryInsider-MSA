@@ -1,6 +1,13 @@
+store-client:
+  base-url: ${STORE_SERVICE_URL:http://localhost:8092}
+  internal-api-key: ${INTERNAL_API_KEY:}
+  connect-timeout: ${STORE_CLIENT_CONNECT_TIMEOUT:2s}
+  read-timeout: ${STORE_CLIENT_READ_TIMEOUT:3s}
 server:
   port: ${APP_PORT:8094}
 spring:
+  config:
+    import: optional:file:./.env[.properties]
   application:
     name: baef-p2-order
   datasource:

@@ -39,14 +39,13 @@ public class ProcessedPlatformEvent {
         String platformOrderId,
         String eventType,
         Long sourceSequence,
-        String processingResult
+        ProcessedPlatformEventResult processingResult
     ) {
         this.platformType = platformType;
         this.eventId = eventId;
         this.platformOrderId = platformOrderId;
         this.eventType = eventType;
         this.sourceSequence = sourceSequence;
-        this.processingResult = ProcessedPlatformEventResult.valueOf(processingResult);
-        this.createdAt = LocalDateTime.now();
+        this.processingResult = processingResult;
     }
 }
