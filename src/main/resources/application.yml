@@ -2,6 +2,8 @@ server:
   port: ${APP_PORT:8080}
 
 spring:
+  config:
+    import: optional:file:./.env[.properties]
   application:
     name: baef-p2-scg
   cloud:
@@ -19,49 +21,68 @@ spring:
           routes:
             - id: auth-service
               uri: ${AUTH_SERVICE_URI:http://localhost:8091}
-              predicates: [Path=/api/auth/**]
+              predicates:
+                - Path=/api/auth/**
             - id: store-service
               uri: ${STORE_SERVICE_URI:http://localhost:8092}
-              predicates: [Path=/api/stores/**,/api/menus/**]
+              predicates:
+                - Path=/api/stores/**,/api/menus/**
             - id: platform-service
               uri: ${PLATFORM_SERVICE_URI:http://localhost:8093}
-              predicates: [Path=/api/platform-integrations/**,/external/providers/**]
+              predicates:
+                - Path=/api/platform-integrations/**,/external/providers/**
             - id: order-service
               uri: ${ORDER_SERVICE_URI:http://localhost:8094}
-              predicates: [Path=/api/orders/**]
+              predicates:
+                - Path=/api/orders/**
             - id: billing-service
               uri: ${BILLING_SERVICE_URI:http://localhost:8097}
-              predicates: [Path=/api/billing/**]
+              predicates:
+                - Path=/api/billing/**
 
             # OpenAPI specs: 하위 서비스 UI는 끄고 SCG /docs에서 통합한다.
             - id: auth-service-docs
               uri: ${AUTH_SERVICE_URI:http://localhost:8091}
-              predicates: [Path=/auth-service/api-docs]
-              filters: [RewritePath=/auth-service/api-docs,/api-docs]
+              predicates:
+                - Path=/auth-service/api-docs
+              filters:
+                - RewritePath=/auth-service/api-docs,/api-docs
             - id: store-service-docs
               uri: ${STORE_SERVICE_URI:http://localhost:8092}
-              predicates: [Path=/store-service/api-docs]
-              filters: [RewritePath=/store-service/api-docs,/api-docs]
+              predicates:
+                - Path=/store-service/api-docs
+              filters:
+                - RewritePath=/store-service/api-docs,/api-docs
             - id: platform-service-docs
               uri: ${PLATFORM_SERVICE_URI:http://localhost:8093}
-              predicates: [Path=/platform-service/api-docs]
-              filters: [RewritePath=/platform-service/api-docs,/api-docs]
+              predicates:
+                - Path=/platform-service/api-docs
+              filters:
+                - RewritePath=/platform-service/api-docs,/api-docs
             - id: order-service-docs
               uri: ${ORDER_SERVICE_URI:http://localhost:8094}
-              predicates: [Path=/order-service/api-docs]
-              filters: [RewritePath=/order-service/api-docs,/api-docs]
+              predicates:
+                - Path=/order-service/api-docs
+              filters:
+                - RewritePath=/order-service/api-docs,/api-docs
             - id: report-service-docs
               uri: ${REPORT_SERVICE_URI:http://localhost:8095}
-              predicates: [Path=/report-service/api-docs]
-              filters: [RewritePath=/report-service/api-docs,/api-docs]
+              predicates:
+                - Path=/report-service/api-docs
+              filters:
+                - RewritePath=/report-service/api-docs,/api-docs
             - id: notification-service-docs
               uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8096}
-              predicates: [Path=/notification-service/api-docs]
-              filters: [RewritePath=/notification-service/api-docs,/api-docs]
+              predicates:
+                - Path=/notification-service/api-docs
+              filters:
+                - RewritePath=/notification-service/api-docs,/api-docs
             - id: billing-service-docs
               uri: ${BILLING_SERVICE_URI:http://localhost:8097}
-              predicates: [Path=/billing-service/api-docs]
-              filters: [RewritePath=/billing-service/api-docs,/api-docs]
+              predicates:
+                - Path=/billing-service/api-docs
+              filters:
+                - RewritePath=/billing-service/api-docs,/api-docs
 
 management:
   server:
@@ -93,7 +114,9 @@ springdoc:
 jwt:
   header-key: Authorization
   scheme: Bearer
+  issuer: deliveryinsider
   secret: ${JWT_SECRET:}
+
 
 # TODO: /api/** JWT 검증 + X-User-Id 신뢰 헤더 주입은 Auth 구현과 함께 연결한다.
 # /internal/** 는 Public SCG Route로 만들지 않는다. 내부 서비스는 ClusterIP로 직접 호출한다.
