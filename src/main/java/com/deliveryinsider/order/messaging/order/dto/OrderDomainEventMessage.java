@@ -2,7 +2,7 @@ package com.deliveryinsider.order.messaging.order.dto;
 
 import java.time.Instant;
 
-public record OrderDomainEventMessage(
+public record OrderDomainEventMessage<T>(
 
     String eventId,
     String eventType,
@@ -18,6 +18,6 @@ public record OrderDomainEventMessage(
 
     Long storeId,
 
-    OrderCreatedEventData data
+    T data
 ) {
 }

@@ -48,7 +48,14 @@ order:
     platform-order-dlt-topic: ${PLATFORM_ORDER_DLT_TOPIC:platform.order-events.DLT}
     retry-interval-ms: ${ORDER_KAFKA_RETRY_INTERVAL_MS:1000}
     max-attempts: ${ORDER_KAFKA_MAX_ATTEMPTS:3}
-
+  outbox:
+    topic: ${ORDER_EVENT_TOPIC:order.events}
+    batch-size: ${ORDER_OUTBOX_BATCH_SIZE:20}
+    poll-interval-ms: ${ORDER_OUTBOX_POLL_INTERVAL_MS:500}
+    lease-seconds: ${ORDER_OUTBOX_LEASE_SECONDS:30}
+    retry-delay-seconds: ${ORDER_OUTBOX_RETRY_DELAY_SECONDS:5}
+    publish-timeout-ms: ${ORDER_OUTBOX_PUBLISH_TIMEOUT_MS:5000}
+    warn-retry-count: ${ORDER_OUTBOX_WARN_RETRY_COUNT:5}
 springdoc:
   default-consumes-media-type: application/json
   default-produces-media-type: application/json

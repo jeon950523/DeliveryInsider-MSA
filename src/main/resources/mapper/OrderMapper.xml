@@ -169,5 +169,50 @@
         WHERE id = #{id}
 
     </select>
+    <select
+            id="findByPlatformIdentityForUpdate"
+            resultMap="orderResultMap">
+
+        SELECT
+            id,
+            platform_type,
+            platform_order_id,
+            store_id,
+            external_store_id,
+            status,
+            last_source_sequence,
+            event_version,
+            ordered_at,
+            provider_occurred_at,
+            delivery_address,
+            customer_request_text,
+            provider_gross_order_amount_snapshot,
+            provider_customer_paid_amount_snapshot,
+            provider_merchant_funded_discount_snapshot,
+            provider_funded_discount_snapshot,
+            provider_financial_data_status_snapshot,
+            created_at,
+            updated_at
+        FROM orders
+        WHERE platform_type = #{platformType}
+          AND platform_order_id = #{platformOrderId}
+        LIMIT 1
+        FOR UPDATE
+
+    </select>
+
+    <update id="updateStatus">
+
+        UPDATE orders
+        SET status = #{status},
+        last_source_sequence =
+        COALESCE(
+        #{lastSourceSequence},
+        last_source_sequence
+        ),
+        event_version = #{eventVersion}
+        WHERE id = #{id}
+
+    </update>
 
 </mapper>

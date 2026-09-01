@@ -11,13 +11,14 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
-
+import com.deliveryinsider.order.application.order.PlatformOrderStatusApplicationService;
 import java.util.Objects;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class PlatformOrderEventListener {
+    private final PlatformOrderStatusApplicationService orderStatusService;
 
     private final JsonMapper jsonMapper;
 
@@ -39,9 +40,7 @@ public class PlatformOrderEventListener {
         );
 
         OrderEventHandlingResult result =
-            orderCreatedService.handle(
-                message
-            );
+            handle(message);
 
         log.info(
             "Platform order event handled. eventType={}, result={}, partition={}, offset={}",
@@ -50,6 +49,36 @@ public class PlatformOrderEventListener {
             record.partition(),
             record.offset()
         );
+    }
+    private OrderEventHandlingResult handle(
+        PlatformOrderEventMessage message
+    ) {
+        if (message == null) {
+            throw new NonRetryableOrderEventProcessingException(
+                "PLATFORM_EVENT_INVALID",
+                "Platform 주문 이벤트가 올바르지 않습니다."
+            );
+        }
+
+        return switch (message.eventType()) {
+            case "ORDER_CREATED" ->
+                orderCreatedService.handle(
+                    message
+                );
+
+            case "ORDER_PICKED_UP",
+                 "ORDER_DELIVERED",
+                 "ORDER_CANCELED" ->
+                orderStatusService.handle(
+                    message
+                );
+
+            default ->
+                throw new NonRetryableOrderEventProcessingException(
+                    "PLATFORM_EVENT_TYPE_UNSUPPORTED",
+                    "지원하지 않는 Platform 주문 이벤트입니다."
+                );
+        };
     }
 
     private PlatformOrderEventMessage deserialize(

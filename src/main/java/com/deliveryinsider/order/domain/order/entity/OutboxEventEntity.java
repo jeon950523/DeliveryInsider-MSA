@@ -39,6 +39,10 @@ public class OutboxEventEntity {
 
     private String lastErrorMessage;
 
+    private String claimedBy;
+
+    private LocalDateTime claimedUntil;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime publishedAt;

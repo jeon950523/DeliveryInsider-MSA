@@ -12,7 +12,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
-
+import com.deliveryinsider.order.domain.order.model.OrderStatus;
+import com.deliveryinsider.order.messaging.order.dto.OrderStatusChangedEventData;
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
@@ -39,8 +40,8 @@ public class OrderOutboxEventFactory {
                 charges
             );
 
-        OrderDomainEventMessage event =
-            new OrderDomainEventMessage(
+        OrderDomainEventMessage<OrderCreatedEventData> event =
+            new OrderDomainEventMessage<>(
                 UUID.randomUUID().toString(),
                 "ORDER_CREATED",
                 SCHEMA_VERSION,
@@ -121,7 +122,7 @@ public class OrderOutboxEventFactory {
     }
 
     private String serialize(
-        OrderDomainEventMessage event
+        OrderDomainEventMessage<?> event
     ) {
         try {
             return jsonMapper.writeValueAsString(event);
@@ -132,5 +133,55 @@ public class OrderOutboxEventFactory {
                 e
             );
         }
+    }
+    public OutboxEventEntity createOrderStatusChanged(
+        OrderEntity order,
+        OrderStatus previousStatus,
+        PlatformOrderEventMessage sourceEvent
+    ) {
+        OrderStatusChangedEventData data =
+            new OrderStatusChangedEventData(
+                order.getId(),
+                order.getPlatformType(),
+                order.getPlatformOrderId(),
+                order.getExternalStoreId(),
+                previousStatus,
+                order.getStatus(),
+                order.getLastSourceSequence(),
+                sourceEvent.data().providerOccurredAt(),
+                sourceEvent.data().providerCancelCode(),
+                sourceEvent.data().providerCancelReason()
+            );
+
+        String eventType =
+            order.getStatus() == OrderStatus.CANCELED
+                ? "ORDER_CANCELED"
+                : "ORDER_STATUS_CHANGED";
+
+        OrderDomainEventMessage<OrderStatusChangedEventData> event =
+            new OrderDomainEventMessage<>(
+                UUID.randomUUID().toString(),
+                eventType,
+                SCHEMA_VERSION,
+                order.getEventVersion(),
+                clock.instant(),
+                sourceEvent.traceId(),
+                "ORDER",
+                order.getId().toString(),
+                order.getStoreId(),
+                data
+            );
+
+        return OutboxEventEntity.builder()
+            .eventId(event.eventId())
+            .aggregateType(event.aggregateType())
+            .aggregateId(event.aggregateId())
+            .eventType(event.eventType())
+            .schemaVersion(event.schemaVersion())
+            .eventVersion(event.eventVersion())
+            .payload(serialize(event))
+            .traceId(event.traceId())
+            .status(OutboxStatus.PENDING)
+            .build();
     }
 }
