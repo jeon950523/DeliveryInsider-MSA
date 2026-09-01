@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.report.domain.order.mapper.ReportOrderMapper">
+
+    <resultMap
+            id="reportOrderResultMap"
+            type="com.deliveryinsider.report.domain.order.entity.ReportOrderEntity">
+
+        <id column="order_id" property="orderId"/>
+
+        <result column="store_id" property="storeId"/>
+
+        <result column="platform_type" property="platformType"/>
+        <result column="platform_order_id" property="platformOrderId"/>
+        <result column="external_store_id" property="externalStoreId"/>
+
+        <result column="status" property="status"/>
+
+        <result column="source_sequence" property="sourceSequence"/>
+        <result column="last_event_version" property="lastEventVersion"/>
+
+        <result column="ordered_at" property="orderedAt"/>
+
+        <result column="gross_order_amount" property="grossOrderAmount"/>
+        <result column="customer_paid_amount" property="customerPaidAmount"/>
+        <result column="merchant_funded_discount" property="merchantFundedDiscount"/>
+        <result column="provider_funded_discount" property="providerFundedDiscount"/>
+
+        <result
+                column="provider_financial_data_status"
+                property="providerFinancialDataStatus"/>
+
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+
+    </resultMap>
+
+    <insert id="insert">
+
+        INSERT INTO report_orders (
+            order_id,
+            store_id,
+            platform_type,
+            platform_order_id,
+            external_store_id,
+            status,
+            source_sequence,
+            last_event_version,
+            ordered_at,
+            gross_order_amount,
+            customer_paid_amount,
+            merchant_funded_discount,
+            provider_funded_discount,
+            provider_financial_data_status
+        )
+        VALUES (
+                   #{orderId},
+                   #{storeId},
+                   #{platformType},
+                   #{platformOrderId},
+                   #{externalStoreId},
+                   #{status},
+                   #{sourceSequence},
+                   #{lastEventVersion},
+                   #{orderedAt},
+                   #{grossOrderAmount},
+                   #{customerPaidAmount},
+                   #{merchantFundedDiscount},
+                   #{providerFundedDiscount},
+                   #{providerFinancialDataStatus}
+               )
+
+    </insert>
+
+    <select
+            id="findByOrderIdForUpdate"
+            resultMap="reportOrderResultMap">
+
+        SELECT
+            order_id,
+            store_id,
+            platform_type,
+            platform_order_id,
+            external_store_id,
+            status,
+            source_sequence,
+            last_event_version,
+            ordered_at,
+            gross_order_amount,
+            customer_paid_amount,
+            merchant_funded_discount,
+            provider_funded_discount,
+            provider_financial_data_status,
+            created_at,
+            updated_at
+        FROM report_orders
+        WHERE order_id = #{orderId}
+            FOR UPDATE
+
+    </select>
+
+    <update id="updateStatus">
+
+        UPDATE report_orders
+        SET status = #{status},
+        source_sequence =
+        COALESCE(
+        #{sourceSequence},
+        source_sequence
+        ),
+        last_event_version = #{eventVersion}
+        WHERE order_id = #{orderId}
+        AND last_event_version <![CDATA[ < ]]> #{eventVersion}
+
+    </update>
+
+</mapper>
