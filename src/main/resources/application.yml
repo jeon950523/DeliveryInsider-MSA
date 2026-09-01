@@ -17,16 +17,23 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       enable-auto-commit: false
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: ${REPORT_ORDER_CONSUMER_GROUP:report-order-event-group}
     listener:
       ack-mode: record
-
+report:
+  kafka:
+    order-event-topic: ${ORDER_EVENT_TOPIC:order.events}
+    order-event-dlt-topic: ${ORDER_EVENT_REPORT_DLT_TOPIC:order.events.report.DLT}
+    order-consumer-group: ${REPORT_ORDER_CONSUMER_GROUP:report-order-event-group}
+    retry-interval-ms: ${REPORT_KAFKA_RETRY_INTERVAL_MS:1000}
+    max-attempts: ${REPORT_KAFKA_MAX_ATTEMPTS:3}
 springdoc:
   default-consumes-media-type: application/json
   default-produces-media-type: application/json
