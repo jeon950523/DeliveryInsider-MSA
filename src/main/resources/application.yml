@@ -63,3 +63,8 @@ mybatis:
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
+store-client:
+  base-url: ${STORE_SERVICE_URL:http://localhost:8092}
+  internal-api-key: ${INTERNAL_API_KEY:}
+  connect-timeout: ${STORE_CLIENT_CONNECT_TIMEOUT:2s}
+  read-timeout: ${STORE_CLIENT_READ_TIMEOUT:3s}
