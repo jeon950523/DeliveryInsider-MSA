@@ -92,13 +92,13 @@
 
 
     <select
-            id="findInitialBySubscriptionId"
+            id="findLatestBySubscriptionIdAndBillingCycleKey"
             resultMap="paymentResultMap">
 
         SELECT *
         FROM payments
         WHERE subscription_id = #{subscriptionId}
-          AND payment_type = 'INITIAL'
+          AND billing_cycle_key = #{billingCycleKey}
         ORDER BY attempt_no DESC
         LIMIT 1
 

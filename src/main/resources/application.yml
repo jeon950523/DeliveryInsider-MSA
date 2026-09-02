@@ -66,3 +66,6 @@ billing:
   scheduler-enabled: ${BILLING_SCHEDULER_ENABLED:true}
   scheduler-fixed-delay-ms: ${BILLING_SCHEDULER_FIXED_DELAY_MS:60000}
   toss-secret-key: ${TOSS_SECRET_KEY:}
+  payment:
+    mock:
+      mode: ${BILLING_MOCK_PAYMENT_MODE:SUCCESS}

@@ -18,8 +18,12 @@ public interface PaymentMapper {
         @Param("id") Long id
     );
 
-    Optional<PaymentEntity> findInitialBySubscriptionId(
-        @Param("subscriptionId") Long subscriptionId
+    Optional<PaymentEntity> findLatestBySubscriptionIdAndBillingCycleKey(
+        @Param("subscriptionId")
+        Long subscriptionId,
+
+        @Param("billingCycleKey")
+        String billingCycleKey
     );
 
     int markSucceeded(

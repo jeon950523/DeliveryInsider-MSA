@@ -22,9 +22,21 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class InitialPaymentTransactionService {
 
+    private static final String INITIAL_BILLING_CYCLE_KEY = "INITIAL";
+
     private final SubscriptionMapper subscriptionMapper;
     private final PaymentMapper paymentMapper;
 
+    /**
+     * 초기 결제 시도 준비.
+     *
+     * 1. 현재 구독 조회
+     * 2. Subscription row lock
+     * 3. PENDING 상태 확인
+     * 4. 같은 INITIAL 결제 주기의 마지막 Payment 확인
+     * 5. FAILED인 경우에만 재시도 허용
+     * 6. 새로운 REQUESTED Payment 생성
+     */
     @Transactional
     public PaymentEntity prepare(
         Long storeId
@@ -40,7 +52,9 @@ public class InitialPaymentTransactionService {
 
         subscription =
             subscriptionMapper
-                .findByIdForUpdate(subscription.getId())
+                .findByIdForUpdate(
+                    subscription.getId()
+                )
                 .orElseThrow(() ->
                     new BusinessException(
                         BillingErrorCode.SUBSCRIPTION_NOT_FOUND
@@ -49,21 +63,46 @@ public class InitialPaymentTransactionService {
 
         if (subscription.getStatus()
             != SubscriptionStatus.PENDING) {
-            throw new BusinessException(
-                BillingErrorCode.PAYMENT_STATE_CONFLICT
-            );
-        }
-
-        if (paymentMapper
-            .findInitialBySubscriptionId(
-                subscription.getId()
-            )
-            .isPresent()) {
 
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
             );
         }
+
+        var latestPayment =
+            paymentMapper
+                .findLatestBySubscriptionIdAndBillingCycleKey(
+                    subscription.getId(),
+                    INITIAL_BILLING_CYCLE_KEY
+                );
+
+        if (latestPayment.isPresent()) {
+
+            PaymentStatus latestStatus =
+                latestPayment
+                    .get()
+                    .getStatus();
+
+            if (latestStatus == PaymentStatus.REQUESTED
+                || latestStatus == PaymentStatus.SUCCEEDED
+                || latestStatus == PaymentStatus.UNKNOWN) {
+
+                throw new BusinessException(
+                    BillingErrorCode.PAYMENT_STATE_CONFLICT
+                );
+            }
+        }
+
+        int attemptNo =
+            latestPayment
+                .map(PaymentEntity::getAttemptNo)
+                .map(value -> value + 1)
+                .orElse(1);
+
+        PaymentType paymentType =
+            attemptNo == 1
+                ? PaymentType.INITIAL
+                : PaymentType.RETRY;
 
         LocalDateTime now =
             LocalDateTime.now(
@@ -75,13 +114,17 @@ public class InitialPaymentTransactionService {
                 .subscriptionId(
                     subscription.getId()
                 )
-                .billingCycleKey("INITIAL")
-                .attemptNo(1)
-                .paymentType(
-                    PaymentType.INITIAL
+                .billingCycleKey(
+                    INITIAL_BILLING_CYCLE_KEY
                 )
+                .attemptNo(attemptNo)
+                .paymentType(paymentType)
                 .paymentOrderId(
                     "DI-INITIAL-"
+                        + subscription.getId()
+                        + "-"
+                        + attemptNo
+                        + "-"
                         + UUID.randomUUID()
                 )
                 .idempotencyKey(
@@ -102,6 +145,14 @@ public class InitialPaymentTransactionService {
         return payment;
     }
 
+    /**
+     * PG 성공 결과 확정.
+     *
+     * Payment REQUESTED -> SUCCEEDED
+     * Subscription PENDING -> ACTIVE
+     *
+     * 두 변경은 같은 DB Transaction으로 처리한다.
+     */
     @Transactional
     public PaymentEntity succeed(
         Long paymentId,
@@ -118,6 +169,7 @@ public class InitialPaymentTransactionService {
 
         if (payment.getStatus()
             != PaymentStatus.REQUESTED) {
+
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
             );
@@ -136,6 +188,7 @@ public class InitialPaymentTransactionService {
 
         if (subscription.getStatus()
             != SubscriptionStatus.PENDING) {
+
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
             );
@@ -196,6 +249,14 @@ public class InitialPaymentTransactionService {
             .orElseThrow();
     }
 
+    /**
+     * PG가 명확한 결제 실패를 반환한 경우.
+     *
+     * Payment만 FAILED로 변경하고
+     * Subscription은 PENDING으로 유지한다.
+     *
+     * FAILED는 이후 재시도가 가능하다.
+     */
     @Transactional
     public PaymentEntity fail(
         Long paymentId,
@@ -210,18 +271,43 @@ public class InitialPaymentTransactionService {
                     )
                 );
 
-        paymentMapper.markFailed(
-            paymentId,
-            result.failureCode(),
-            result.failureMessage(),
-            LocalDateTime.now(ZoneOffset.UTC)
-        );
+        if (payment.getStatus()
+            != PaymentStatus.REQUESTED) {
+
+            throw new BusinessException(
+                BillingErrorCode.PAYMENT_STATE_CONFLICT
+            );
+        }
+
+        int updated =
+            paymentMapper.markFailed(
+                paymentId,
+                result.failureCode(),
+                result.failureMessage(),
+                LocalDateTime.now(
+                    ZoneOffset.UTC
+                )
+            );
+
+        if (updated != 1) {
+            throw new IllegalStateException(
+                "Payment 실패 상태 변경에 실패했습니다."
+            );
+        }
 
         return paymentMapper
             .findByIdForUpdate(paymentId)
             .orElseThrow();
     }
 
+    /**
+     * Timeout 등으로 PG 결제 결과를 알 수 없는 경우.
+     *
+     * 실제 결제가 성공했을 가능성이 있기 때문에
+     * FAILED가 아니라 UNKNOWN으로 기록한다.
+     *
+     * UNKNOWN 상태에서는 자동 재결제를 허용하지 않는다.
+     */
     @Transactional
     public PaymentEntity unknown(
         Long paymentId,
@@ -236,11 +322,26 @@ public class InitialPaymentTransactionService {
                     )
                 );
 
-        paymentMapper.markUnknown(
-            paymentId,
-            "PROVIDER_CALL_UNKNOWN",
-            errorMessage
-        );
+        if (payment.getStatus()
+            != PaymentStatus.REQUESTED) {
+
+            throw new BusinessException(
+                BillingErrorCode.PAYMENT_STATE_CONFLICT
+            );
+        }
+
+        int updated =
+            paymentMapper.markUnknown(
+                paymentId,
+                "PROVIDER_CALL_UNKNOWN",
+                errorMessage
+            );
+
+        if (updated != 1) {
+            throw new IllegalStateException(
+                "Payment UNKNOWN 상태 변경에 실패했습니다."
+            );
+        }
 
         return paymentMapper
             .findByIdForUpdate(paymentId)
