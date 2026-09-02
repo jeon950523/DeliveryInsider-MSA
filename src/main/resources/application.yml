@@ -43,3 +43,17 @@ security:
 logging:
   pattern:
     level: "%5p [traceId:%X{traceId:-}]"
+notification:
+  kafka:
+    order-event-topic: ${ORDER_EVENT_TOPIC:order.events}
+    order-event-dlt-topic: ${ORDER_EVENT_NOTIFICATION_DLT_TOPIC:order.events.notification.DLT}
+    order-consumer-group: ${NOTIFICATION_ORDER_CONSUMER_GROUP:notification-order-event-group}
+    retry-interval-ms: ${NOTIFICATION_KAFKA_RETRY_INTERVAL_MS:1000}
+    max-attempts: ${NOTIFICATION_KAFKA_MAX_ATTEMPTS:3}
+  websocket:
+      ticket-ttl: ${WEBSOCKET_TICKET_TTL:30s}
+store-client:
+  base-url: ${STORE_SERVICE_URL:http://localhost:8092}
+  internal-api-key: ${INTERNAL_API_KEY:}
+  connect-timeout: ${STORE_CLIENT_CONNECT_TIMEOUT:2s}
+  read-timeout: ${STORE_CLIENT_READ_TIMEOUT:3s}
