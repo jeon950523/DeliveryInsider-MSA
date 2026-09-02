@@ -2,6 +2,7 @@ package com.deliveryinsider.report.domain.report.controller;
 
 import com.deliveryinsider.report.domain.report.request.ReportOrderSearchRequest;
 import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
+import com.deliveryinsider.report.domain.report.response.ReportMenuPerformanceResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderPageResponse;
 import com.deliveryinsider.report.domain.report.response.ReportSummaryResponse;
 import com.deliveryinsider.report.domain.report.service.ReportReadService;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -95,5 +97,33 @@ public class ReportReadController {
                 direction
             )
         );
+    }
+    @GetMapping("/menus")
+    public List<ReportMenuPerformanceResponse> getMenuPerformance(
+        @RequestHeader("X-User-Id")
+        Long userId,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime from,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime to,
+
+        @RequestParam(required = false)
+        String platformType
+    ) {
+        return reportReadService
+            .getMenuPerformance(
+                userId,
+                from,
+                to,
+                platformType
+            );
     }
 }

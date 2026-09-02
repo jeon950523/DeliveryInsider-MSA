@@ -289,4 +289,76 @@
         <include refid="orderFilter"/>
 
     </select>
+    <select
+            id="findMenuPerformance"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportMenuPerformanceProjection">
+
+        SELECT
+        ri.menu_id AS menuId,
+        ri.menu_name AS menuName,
+
+        COALESCE(
+        SUM(ri.quantity),
+        0
+        ) AS soldQuantity,
+
+        COALESCE(
+        SUM(
+        ri.ordered_unit_price
+        * ri.quantity
+        ),
+        0
+        ) AS grossSales,
+
+        COALESCE(
+        SUM(
+        ri.menu_cost
+        * ri.quantity
+        ),
+        0
+        ) AS estimatedMenuCost,
+
+        COALESCE(
+        SUM(
+        ri.packaging_cost
+        * ri.quantity
+        ),
+        0
+        ) AS estimatedPackagingCost
+
+        FROM report_order_items ri
+
+        INNER JOIN report_orders ro
+        ON ro.order_id = ri.order_id
+
+        WHERE ro.store_id = #{storeId}
+
+        AND ro.status = 'DELIVERED'
+
+        <if test="from != null">
+            AND ro.ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND ro.platform_type = #{platformType}
+        </if>
+
+        GROUP BY
+        ri.menu_id,
+        ri.menu_name
+
+        ORDER BY
+        grossSales DESC,
+        soldQuantity DESC,
+        ri.menu_id ASC
+
+    </select>
 </mapper>

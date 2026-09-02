@@ -1,5 +1,6 @@
 package com.deliveryinsider.report.domain.report.mapper;
 
+import com.deliveryinsider.report.domain.report.projection.ReportMenuPerformanceProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportOrderProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportSummaryProjection;
 import org.apache.ibatis.annotations.Mapper;
@@ -40,5 +41,11 @@ public interface ReportReadMapper {
         @Param("to") LocalDateTime to,
         @Param("platformType") String platformType,
         @Param("status") String status
+    );
+    List<ReportMenuPerformanceProjection> findMenuPerformance(
+        @Param("storeId") Long storeId,
+        @Param("from") LocalDateTime from,
+        @Param("to") LocalDateTime to,
+        @Param("platformType") String platformType
     );
 }

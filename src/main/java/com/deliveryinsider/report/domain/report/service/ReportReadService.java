@@ -4,6 +4,7 @@ import com.deliveryinsider.report.domain.report.mapper.ReportReadMapper;
 import com.deliveryinsider.report.domain.report.projection.ReportSummaryProjection;
 import com.deliveryinsider.report.domain.report.request.ReportOrderSearchRequest;
 import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
+import com.deliveryinsider.report.domain.report.response.ReportMenuPerformanceResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderPageResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderResponse;
 import com.deliveryinsider.report.domain.report.response.ReportSummaryResponse;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -209,6 +211,52 @@ public class ReportReadService {
         return new BusinessException(
             ReportErrorCode.REPORT_QUERY_INVALID
         );
+    }
+    private void validateMenuPerformanceQuery(
+        LocalDateTime from,
+        LocalDateTime to,
+        String platformType
+    ) {
+        if (from != null
+            && to != null
+            && from.isAfter(to)) {
+            throw invalidQuery();
+        }
+
+        if (platformType != null
+            && !SUPPORTED_PLATFORMS.contains(
+            platformType
+        )) {
+            throw invalidQuery();
+        }
+    }
+    public List<ReportMenuPerformanceResponse> getMenuPerformance(
+        Long userId,
+        LocalDateTime from,
+        LocalDateTime to,
+        String platformType
+    ) {
+        validateMenuPerformanceQuery(
+            from,
+            to,
+            platformType
+        );
+
+        CurrentStoreResponse store =
+            currentStoreClient.findByUserId(
+                userId
+            );
+
+        return reportReadMapper
+            .findMenuPerformance(
+                store.storeId(),
+                from,
+                to,
+                platformType
+            )
+            .stream()
+            .map(ReportMenuPerformanceResponse::from)
+            .toList();
     }
 
 }
