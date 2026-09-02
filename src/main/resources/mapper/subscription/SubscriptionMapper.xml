@@ -88,5 +88,45 @@
         LIMIT 1
 
     </select>
+    <select
+            id="findByIdForUpdate"
+            resultMap="subscriptionResultMap">
+
+        SELECT
+            id,
+            store_id,
+            plan_id,
+            status,
+            billing_amount,
+            started_at,
+            current_period_start,
+            current_period_end,
+            next_billing_at,
+            past_due_at,
+            canceled_at,
+            expired_at,
+            version,
+            created_at,
+            updated_at
+        FROM subscriptions
+        WHERE id = #{id}
+            FOR UPDATE
+
+    </select>
+
+
+    <update id="activate">
+
+        UPDATE subscriptions
+        SET status = 'ACTIVE',
+        started_at = #{startedAt},
+        current_period_start = #{periodStart},
+        current_period_end = #{periodEnd},
+        next_billing_at = #{nextBillingAt},
+        version = #{nextVersion}
+        WHERE id = #{id}
+        AND status = 'PENDING'
+
+    </update>
 
 </mapper>
