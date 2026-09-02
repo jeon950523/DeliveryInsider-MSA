@@ -119,7 +119,7 @@
         failure_code = NULL,
         failure_message = NULL
         WHERE id = #{id}
-        AND status = 'REQUESTED'
+        AND status IN ('REQUESTED','UNKNOWN')
 
     </update>
 
@@ -132,7 +132,7 @@
         failure_code = #{failureCode},
         failure_message = #{failureMessage}
         WHERE id = #{id}
-        AND status = 'REQUESTED'
+        AND status IN ('REQUESTED','UNKNOWN')
 
     </update>
 
@@ -147,5 +147,25 @@
         AND status = 'REQUESTED'
 
     </update>
+    <select
+            id="findInitialReconciliationCandidates"
+            resultMap="paymentResultMap">
 
+        SELECT p.*
+        FROM payments p
+                 INNER JOIN subscriptions s
+                            ON s.id = p.subscription_id
+        WHERE p.billing_cycle_key = 'INITIAL'
+          AND s.status = 'PENDING'
+          AND (
+            p.status = 'UNKNOWN'
+                OR (
+                p.status = 'REQUESTED'
+                    AND p.requested_at &lt;= DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 30 SECOND)
+                )
+            )
+        ORDER BY p.requested_at
+        LIMIT #{limit}
+
+    </select>
 </mapper>

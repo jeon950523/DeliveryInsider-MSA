@@ -116,7 +116,6 @@
 
 
     <update id="activate">
-
         UPDATE subscriptions
         SET status = 'ACTIVE',
         started_at = #{startedAt},
@@ -126,7 +125,6 @@
         version = #{nextVersion}
         WHERE id = #{id}
         AND status = 'PENDING'
-
     </update>
 
 </mapper>

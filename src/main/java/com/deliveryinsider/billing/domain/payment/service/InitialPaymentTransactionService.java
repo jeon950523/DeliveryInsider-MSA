@@ -170,7 +170,7 @@ public class InitialPaymentTransactionService {
                 );
 
         if (payment.getStatus()
-            != PaymentStatus.REQUESTED) {
+            != PaymentStatus.REQUESTED && payment.getStatus() != PaymentStatus.UNKNOWN) {
 
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
@@ -284,7 +284,7 @@ public class InitialPaymentTransactionService {
                 );
 
         if (payment.getStatus()
-            != PaymentStatus.REQUESTED) {
+            != PaymentStatus.REQUESTED && payment.getStatus() != PaymentStatus.UNKNOWN) {
 
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
@@ -301,6 +301,13 @@ public class InitialPaymentTransactionService {
                         BillingErrorCode.SUBSCRIPTION_NOT_FOUND
                     )
                 );
+        if (subscription.getStatus()
+            != SubscriptionStatus.PENDING) {
+
+            throw new BusinessException(
+                BillingErrorCode.PAYMENT_STATE_CONFLICT
+            );
+        }
 
         int updated =
             paymentMapper.markFailed(

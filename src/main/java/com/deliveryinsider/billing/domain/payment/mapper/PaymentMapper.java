@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Mapper
@@ -48,5 +49,8 @@ public interface PaymentMapper {
         @Param("id") Long id,
         @Param("failureCode") String failureCode,
         @Param("failureMessage") String failureMessage
+    );
+    List<PaymentEntity> findInitialReconciliationCandidates(
+        @Param("limit") int limit
     );
 }

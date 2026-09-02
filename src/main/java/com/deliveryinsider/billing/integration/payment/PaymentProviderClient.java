@@ -7,4 +7,8 @@ public interface PaymentProviderClient {
         long amount,
         String idempotencyKey
     );
+
+    PaymentProviderResult findPayment(
+        String paymentOrderId
+    );
 }
