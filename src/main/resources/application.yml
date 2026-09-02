@@ -22,6 +22,9 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
@@ -66,6 +69,13 @@ billing:
   scheduler-enabled: ${BILLING_SCHEDULER_ENABLED:true}
   scheduler-fixed-delay-ms: ${BILLING_SCHEDULER_FIXED_DELAY_MS:60000}
   toss-secret-key: ${TOSS_SECRET_KEY:}
+  kafka:
+    topic: ${BILLING_EVENTS_TOPIC:billing.events}
   payment:
     mock:
-      mode: ${BILLING_MOCK_PAYMENT_MODE:SUCCESS}
+      mode: ${BILLING_MOCK_PAYMENT_MODE:TIMEOUT}
+  outbox:
+    publisher:
+      fixed-delay-ms: ${BILLING_OUTBOX_FIXED_DELAY_MS:500}
+      batch-size: ${BILLING_OUTBOX_BATCH_SIZE:20}
+      lease-seconds: ${BILLING_OUTBOX_LEASE_SECONDS:30}

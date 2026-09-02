@@ -1,5 +1,6 @@
 package com.deliveryinsider.billing.domain.payment.service;
 
+import com.deliveryinsider.billing.domain.outbox.service.BillingOutboxWriter;
 import com.deliveryinsider.billing.domain.payment.entity.PaymentEntity;
 import com.deliveryinsider.billing.domain.payment.mapper.PaymentMapper;
 import com.deliveryinsider.billing.domain.payment.model.PaymentStatus;
@@ -22,6 +23,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class InitialPaymentTransactionService {
 
+    private final BillingOutboxWriter billingOutboxWriter;
     private static final String INITIAL_BILLING_CYCLE_KEY = "INITIAL";
 
     private final SubscriptionMapper subscriptionMapper;
@@ -241,6 +243,16 @@ public class InitialPaymentTransactionService {
                 "Subscription ACTIVE 전환에 실패했습니다."
             );
         }
+        billingOutboxWriter.appendSubscriptionActivated(
+            subscription.getId(),
+            subscription.getStoreId(),
+            subscription.getPlanId(),
+            payment.getId(),
+            payment.getAmount(),
+            periodStart,
+            periodEnd,
+            nextVersion
+        );
 
         return paymentMapper
             .findByIdForUpdate(
@@ -279,6 +291,17 @@ public class InitialPaymentTransactionService {
             );
         }
 
+        SubscriptionEntity subscription =
+            subscriptionMapper
+                .findByIdForUpdate(
+                    payment.getSubscriptionId()
+                )
+                .orElseThrow(() ->
+                    new BusinessException(
+                        BillingErrorCode.SUBSCRIPTION_NOT_FOUND
+                    )
+                );
+
         int updated =
             paymentMapper.markFailed(
                 paymentId,
@@ -294,6 +317,17 @@ public class InitialPaymentTransactionService {
                 "Payment 실패 상태 변경에 실패했습니다."
             );
         }
+
+        billingOutboxWriter.appendPaymentFailed(
+            payment.getId(),
+            payment.getSubscriptionId(),
+            subscription.getStoreId(),
+            payment.getAttemptNo(),
+            payment.getPaymentType().name(),
+            payment.getAmount(),
+            result.failureCode(),
+            result.failureMessage()
+        );
 
         return paymentMapper
             .findByIdForUpdate(paymentId)

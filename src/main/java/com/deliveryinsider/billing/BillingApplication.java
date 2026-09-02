@@ -4,7 +4,9 @@ import com.deliveryinsider.billing.global.store.StoreClientProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
+@EnableScheduling
 @EnableConfigurationProperties(StoreClientProperties.class)
 @SpringBootApplication
 public class BillingApplication {

@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.billing.domain.outbox.mapper.OutboxEventMapper">
+
+    <resultMap
+            id="outboxResultMap"
+            type="com.deliveryinsider.billing.domain.outbox.entity.OutboxEventEntity">
+
+        <id column="id" property="id"/>
+
+        <result column="event_id" property="eventId"/>
+
+        <result column="aggregate_type" property="aggregateType"/>
+        <result column="aggregate_id" property="aggregateId"/>
+
+        <result column="event_type" property="eventType"/>
+
+        <result column="schema_version" property="schemaVersion"/>
+        <result column="event_version" property="eventVersion"/>
+
+        <result column="topic" property="topic"/>
+        <result column="kafka_key" property="kafkaKey"/>
+        <result column="payload_json" property="payloadJson"/>
+
+        <result column="trace_id" property="traceId"/>
+
+        <result column="status" property="status"/>
+
+        <result column="retry_count" property="retryCount"/>
+        <result column="next_retry_at" property="nextRetryAt"/>
+
+        <result column="claimed_by" property="claimedBy"/>
+        <result column="claimed_until" property="claimedUntil"/>
+
+        <result column="published_at" property="publishedAt"/>
+        <result column="created_at" property="createdAt"/>
+
+    </resultMap>
+
+
+    <insert
+            id="insert"
+            useGeneratedKeys="true"
+            keyProperty="id">
+
+        INSERT INTO outbox_events (
+            event_id,
+            aggregate_type,
+            aggregate_id,
+            event_type,
+            schema_version,
+            event_version,
+            topic,
+            kafka_key,
+            payload_json,
+            trace_id,
+            status,
+            retry_count,
+            next_retry_at,
+            created_at
+        )
+        VALUES (
+                   #{eventId},
+                   #{aggregateType},
+                   #{aggregateId},
+                   #{eventType},
+                   #{schemaVersion},
+                   #{eventVersion},
+                   #{topic},
+                   #{kafkaKey},
+                   #{payloadJson},
+                   #{traceId},
+                   #{status},
+                   0,
+                   #{nextRetryAt},
+                   #{createdAt}
+               )
+
+    </insert>
+
+
+    <select
+            id="findClaimCandidates"
+            resultMap="outboxResultMap">
+
+        SELECT
+            o.id,
+            o.event_id,
+            o.aggregate_type,
+            o.aggregate_id,
+            o.event_type,
+            o.schema_version,
+            o.event_version,
+            o.topic,
+            o.kafka_key,
+            o.payload_json,
+            o.trace_id,
+            o.status,
+            o.retry_count,
+            o.next_retry_at,
+            o.claimed_by,
+            o.claimed_until,
+            o.published_at,
+            o.created_at
+        FROM outbox_events o
+        WHERE (
+            (
+                o.status = 'PENDING'
+                    AND (
+                    o.next_retry_at IS NULL
+                        OR o.next_retry_at &lt;= NOW(6)
+                    )
+                )
+                OR
+            (
+                o.status = 'PROCESSING'
+                    AND o.claimed_until &lt; NOW(6)
+                )
+            )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM outbox_events older
+            WHERE older.aggregate_type = o.aggregate_type
+              AND older.aggregate_id = o.aggregate_id
+              AND older.event_version &lt; o.event_version
+              AND older.status != 'PUBLISHED'
+        )
+        ORDER BY o.id
+        LIMIT #{limit}
+        FOR UPDATE SKIP LOCKED
+
+    </select>
+
+
+    <update id="markProcessing">
+
+        UPDATE outbox_events
+        SET status = 'PROCESSING',
+        claimed_by = #{claimedBy},
+        claimed_until = #{claimedUntil}
+        WHERE id = #{id}
+        AND (
+        status = 'PENDING'
+        OR (
+        status = 'PROCESSING'
+        AND claimed_until &lt; NOW(6)
+        )
+        )
+
+    </update>
+
+
+    <update id="markPublished">
+
+        UPDATE outbox_events
+        SET status = 'PUBLISHED',
+        published_at = #{publishedAt},
+        claimed_by = NULL,
+        claimed_until = NULL
+        WHERE id = #{id}
+        AND status = 'PROCESSING'
+        AND claimed_by = #{claimedBy}
+
+    </update>
+
+
+    <update id="releasePending">
+
+        UPDATE outbox_events
+        SET status = 'PENDING',
+        retry_count = retry_count + 1,
+        next_retry_at = #{nextRetryAt},
+        claimed_by = NULL,
+        claimed_until = NULL
+        WHERE id = #{id}
+        AND status = 'PROCESSING'
+        AND claimed_by = #{claimedBy}
+
+    </update>
+
+</mapper>
