@@ -4,9 +4,14 @@ import org.springframework.http.HttpStatus;
 
 public enum BillingErrorCode implements ErrorCode {
     SUBSCRIPTION_NOT_FOUND("BILLING-001", HttpStatus.NOT_FOUND, "구독 정보를 찾을 수 없습니다."),
-    PAYMENT_NOT_FOUND("BILLING-002", HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),
-    PAYMENT_AMOUNT_MISMATCH("BILLING-003", HttpStatus.BAD_REQUEST, "결제 금액이 일치하지 않습니다."),
-    PAYMENT_STATE_CONFLICT("BILLING-004", HttpStatus.CONFLICT, "현재 결제 상태에서 처리할 수 없습니다.");
+    PAYMENT_NOT_FOUND("BILLING-101", HttpStatus.NOT_FOUND, "결제 정보를 찾을 수 없습니다."),
+    PAYMENT_AMOUNT_MISMATCH("BILLING-102", HttpStatus.BAD_REQUEST, "결제 금액이 일치하지 않습니다."),
+    PAYMENT_STATE_CONFLICT("BILLING-103", HttpStatus.CONFLICT, "현재 결제 상태에서 처리할 수 없습니다."),
+    INTERNAL_SERVER_ERROR("COMMON-500-001", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),
+    PLAN_NOT_FOUND("BILLING-002", HttpStatus.NOT_FOUND, "사용할 수 있는 요금제를 찾을 수 없습니다."),
+    CURRENT_SUBSCRIPTION_EXISTS("BILLING-003", HttpStatus.CONFLICT, "이미 현재 구독이 존재합니다."),
+    STORE_DELETION_BLOCKED("BILLING-004", HttpStatus.CONFLICT, "삭제 진행 중인 매장은 구독을 생성할 수 없습니다."),
+    STORE_RESOLVE_FAILED("BILLING-005", HttpStatus.NOT_FOUND, "사용자의 매장을 찾을 수 없습니다.");
 
     private final String code;
     private final HttpStatus status;

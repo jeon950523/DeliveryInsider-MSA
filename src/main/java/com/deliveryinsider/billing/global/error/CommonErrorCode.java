@@ -9,7 +9,6 @@ public enum CommonErrorCode implements ErrorCode {
     INTERNAL_API_UNAUTHORIZED("COMMON-401-001", HttpStatus.UNAUTHORIZED, "내부 서비스 인증에 실패했습니다."),
     INTERNAL_API_NOT_CONFIGURED("COMMON-503-001", HttpStatus.SERVICE_UNAVAILABLE, "내부 서비스 인증 설정이 없습니다."),
     INTERNAL_SERVER_ERROR("COMMON-500-001", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
-
     private final String code;
     private final HttpStatus status;
     private final String message;

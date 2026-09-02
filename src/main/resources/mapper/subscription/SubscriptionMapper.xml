@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.billing.domain.subscription.mapper.SubscriptionMapper">
+
+    <resultMap
+            id="subscriptionResultMap"
+            type="com.deliveryinsider.billing.domain.subscription.entity.SubscriptionEntity">
+
+        <id column="id" property="id"/>
+
+        <result column="store_id" property="storeId"/>
+        <result column="plan_id" property="planId"/>
+
+        <result column="status" property="status"/>
+
+        <result column="billing_amount" property="billingAmount"/>
+
+        <result column="started_at" property="startedAt"/>
+
+        <result column="current_period_start" property="currentPeriodStart"/>
+        <result column="current_period_end" property="currentPeriodEnd"/>
+        <result column="next_billing_at" property="nextBillingAt"/>
+
+        <result column="past_due_at" property="pastDueAt"/>
+        <result column="canceled_at" property="canceledAt"/>
+        <result column="expired_at" property="expiredAt"/>
+
+        <result column="version" property="version"/>
+
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+
+    </resultMap>
+
+    <insert
+            id="insert"
+            useGeneratedKeys="true"
+            keyProperty="id">
+
+        INSERT INTO subscriptions (
+            store_id,
+            plan_id,
+            status,
+            billing_amount,
+            version
+        )
+        VALUES (
+            #{storeId},
+            #{planId},
+            #{status},
+            #{billingAmount},
+            #{version}
+        )
+
+    </insert>
+
+    <select
+            id="findCurrentByStoreId"
+            resultMap="subscriptionResultMap">
+
+        SELECT
+            id,
+            store_id,
+            plan_id,
+            status,
+            billing_amount,
+            started_at,
+            current_period_start,
+            current_period_end,
+            next_billing_at,
+            past_due_at,
+            canceled_at,
+            expired_at,
+            version,
+            created_at,
+            updated_at
+        FROM subscriptions
+        WHERE store_id = #{storeId}
+          AND status IN (
+              'PENDING',
+              'ACTIVE',
+              'PAST_DUE',
+              'CANCELED'
+          )
+        LIMIT 1
+
+    </select>
+
+</mapper>
