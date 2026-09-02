@@ -1,0 +1,99 @@
+package com.deliveryinsider.report.domain.report.controller;
+
+import com.deliveryinsider.report.domain.report.request.ReportOrderSearchRequest;
+import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
+import com.deliveryinsider.report.domain.report.response.ReportOrderPageResponse;
+import com.deliveryinsider.report.domain.report.response.ReportSummaryResponse;
+import com.deliveryinsider.report.domain.report.service.ReportReadService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDateTime;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/reports")
+public class ReportReadController {
+
+    private final ReportReadService reportReadService;
+
+    @GetMapping("/summary")
+    public ReportSummaryResponse getSummary(
+        @RequestHeader("X-User-Id")
+        Long userId,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime from,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime to
+    ) {
+        return reportReadService.getSummary(
+            userId,
+            new ReportSummaryRequest(
+                from,
+                to
+            )
+        );
+    }
+    @GetMapping("/orders")
+    public ReportOrderPageResponse getOrders(
+        @RequestHeader("X-User-Id")
+        Long userId,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime from,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime to,
+
+        @RequestParam(required = false)
+        String platformType,
+
+        @RequestParam(required = false)
+        String status,
+
+        @RequestParam(defaultValue = "0")
+        int page,
+
+        @RequestParam(defaultValue = "20")
+        int size,
+
+        @RequestParam(defaultValue = "orderedAt")
+        String sortBy,
+
+        @RequestParam(defaultValue = "desc")
+        String direction
+    ) {
+        return reportReadService.getOrders(
+            userId,
+            new ReportOrderSearchRequest(
+                from,
+                to,
+                platformType,
+                status,
+                page,
+                size,
+                sortBy,
+                direction
+            )
+        );
+    }
+}

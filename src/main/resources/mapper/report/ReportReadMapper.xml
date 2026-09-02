@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.report.domain.report.mapper.ReportReadMapper">
+
+    <resultMap
+            id="reportSummaryResultMap"
+            type="com.deliveryinsider.report.domain.report.projection.ReportSummaryProjection">
+
+        <result
+                column="total_order_count"
+                property="totalOrderCount"/>
+
+        <result
+                column="completed_order_count"
+                property="completedOrderCount"/>
+
+        <result
+                column="canceled_order_count"
+                property="canceledOrderCount"/>
+
+        <result
+                column="gross_order_amount"
+                property="grossOrderAmount"/>
+
+        <result
+                column="customer_paid_amount"
+                property="customerPaidAmount"/>
+
+        <result
+                column="provider_charge_amount"
+                property="providerChargeAmount"/>
+
+        <result
+                column="estimated_menu_cost"
+                property="estimatedMenuCost"/>
+
+        <result
+                column="estimated_packaging_cost"
+                property="estimatedPackagingCost"/>
+
+    </resultMap>
+    <sql id="orderFilter">
+
+        WHERE store_id = #{storeId}
+
+        <if test="from != null">
+            AND ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND platform_type = #{platformType}
+        </if>
+
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+
+    </sql>
+
+    <select
+            id="findSummary"
+            resultMap="reportSummaryResultMap">
+
+        SELECT
+        COUNT(*) AS total_order_count,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN ro.status = 'DELIVERED'
+        THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS completed_order_count,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN ro.status = 'CANCELED'
+        THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS canceled_order_count,
+
+        COALESCE(
+        SUM(ro.gross_order_amount),
+        0
+        ) AS gross_order_amount,
+
+        COALESCE(
+        SUM(ro.customer_paid_amount),
+        0
+        ) AS customer_paid_amount,
+
+        COALESCE(
+        (
+        SELECT SUM(rc.amount)
+        FROM report_order_charges rc
+        INNER JOIN report_orders charge_order
+        ON charge_order.order_id = rc.order_id
+        WHERE charge_order.store_id = #{storeId}
+
+        <if test="from != null">
+            AND charge_order.ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND charge_order.ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+        ),
+        0
+        ) AS provider_charge_amount,
+
+        COALESCE(
+        (
+        SELECT
+        SUM(
+        ri.menu_cost * ri.quantity
+        )
+        FROM report_order_items ri
+        INNER JOIN report_orders item_order
+        ON item_order.order_id = ri.order_id
+        WHERE item_order.store_id = #{storeId}
+
+        <if test="from != null">
+            AND item_order.ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND item_order.ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+        ),
+        0
+        ) AS estimated_menu_cost,
+
+        COALESCE(
+        (
+        SELECT
+        SUM(
+        ri.packaging_cost * ri.quantity
+        )
+        FROM report_order_items ri
+        INNER JOIN report_orders item_order
+        ON item_order.order_id = ri.order_id
+        WHERE item_order.store_id = #{storeId}
+
+        <if test="from != null">
+            AND item_order.ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND item_order.ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+        ),
+        0
+        ) AS estimated_packaging_cost
+
+        FROM report_orders ro
+
+        WHERE ro.store_id = #{storeId}
+
+        <if test="from != null">
+            AND ro.ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+    </select>
+
+
+    <select
+            id="findFinancialDataStatuses"
+            resultType="java.lang.String">
+
+        SELECT DISTINCT
+        provider_financial_data_status
+
+        FROM report_orders
+
+        WHERE store_id = #{storeId}
+
+        AND provider_financial_data_status IS NOT NULL
+
+        <if test="from != null">
+            AND ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+        ORDER BY provider_financial_data_status
+
+    </select>
+
+    <select
+            id="findOrders"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportOrderProjection">
+
+        SELECT
+        order_id AS orderId,
+        platform_type AS platformType,
+        platform_order_id AS platformOrderId,
+        status,
+        ordered_at AS orderedAt,
+        gross_order_amount AS grossOrderAmount,
+        customer_paid_amount AS customerPaidAmount,
+        provider_financial_data_status AS financialDataStatus
+
+        FROM report_orders
+
+        <include refid="orderFilter"/>
+
+        ORDER BY
+
+        <choose>
+            <when test="sortBy == 'grossOrderAmount'">
+                gross_order_amount
+            </when>
+
+            <when test="sortBy == 'status'">
+                status
+            </when>
+
+            <otherwise>
+                ordered_at
+            </otherwise>
+        </choose>
+
+        <choose>
+            <when test="direction == 'asc'">
+                ASC
+            </when>
+
+            <otherwise>
+                DESC
+            </otherwise>
+        </choose>
+
+        LIMIT #{size}
+        OFFSET #{offset}
+
+    </select>
+    <select
+            id="countOrders"
+            resultType="long">
+
+        SELECT COUNT(*)
+
+        FROM report_orders
+
+        <include refid="orderFilter"/>
+
+    </select>
+</mapper>
