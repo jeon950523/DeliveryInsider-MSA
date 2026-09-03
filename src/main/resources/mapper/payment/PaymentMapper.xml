@@ -168,4 +168,16 @@
         LIMIT #{limit}
 
     </select>
+    <select
+            id="existsFinancialInFlightBySubscriptionId"
+            resultType="boolean">
+
+        SELECT EXISTS (
+            SELECT 1
+            FROM payments
+            WHERE subscription_id = #{subscriptionId}
+              AND status IN ('REQUESTED', 'UNKNOWN')
+        )
+
+    </select>
 </mapper>

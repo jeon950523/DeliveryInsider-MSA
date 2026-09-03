@@ -6,6 +6,7 @@ import com.deliveryinsider.billing.domain.outbox.model.OutboxStatus;
 import com.deliveryinsider.billing.integration.event.BillingEventEnvelope;
 import com.deliveryinsider.billing.integration.event.PaymentFailedEventData;
 import com.deliveryinsider.billing.integration.event.SubscriptionActivatedEventData;
+import com.deliveryinsider.billing.integration.event.SubscriptionCanceledEventData;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
@@ -213,5 +214,54 @@ public class BillingOutboxWriter {
             .orElseGet(() ->
                 UUID.randomUUID().toString()
             );
+    }
+    public void appendSubscriptionCanceled(
+        Long subscriptionId,
+        Long storeId,
+        Long planId,
+        LocalDateTime canceledAt,
+        LocalDateTime currentPeriodEnd,
+        long subscriptionVersion
+    ) {
+        String eventId =
+            UUID.randomUUID().toString();
+
+        String traceId =
+            currentTraceId();
+
+        var data =
+            new SubscriptionCanceledEventData(
+                subscriptionId,
+                planId,
+                canceledAt.toString(),
+                currentPeriodEnd.toString()
+            );
+
+        var envelope =
+            new BillingEventEnvelope<>(
+                eventId,
+                "SUBSCRIPTION_CANCELED",
+                SCHEMA_VERSION,
+                subscriptionVersion,
+                LocalDateTime.now(
+                    ZoneOffset.UTC
+                ).toString(),
+                traceId,
+                "SUBSCRIPTION",
+                String.valueOf(subscriptionId),
+                storeId,
+                data
+            );
+
+        insert(
+            eventId,
+            "SUBSCRIPTION",
+            String.valueOf(subscriptionId),
+            "SUBSCRIPTION_CANCELED",
+            subscriptionVersion,
+            storeId,
+            traceId,
+            envelope
+        );
     }
 }

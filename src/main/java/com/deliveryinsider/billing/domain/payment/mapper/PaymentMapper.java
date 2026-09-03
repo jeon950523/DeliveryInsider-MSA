@@ -53,4 +53,8 @@ public interface PaymentMapper {
     List<PaymentEntity> findInitialReconciliationCandidates(
         @Param("limit") int limit
     );
+    boolean existsFinancialInFlightBySubscriptionId(
+        @Param("subscriptionId")
+        Long subscriptionId
+    );
 }

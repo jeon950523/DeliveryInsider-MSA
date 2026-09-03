@@ -1,6 +1,7 @@
 package com.deliveryinsider.billing.domain.subscription.controller;
 
 import com.deliveryinsider.billing.domain.subscription.request.CreateSubscriptionRequest;
+import com.deliveryinsider.billing.domain.subscription.response.CancelSubscriptionResponse;
 import com.deliveryinsider.billing.domain.subscription.response.SubscriptionResponse;
 import com.deliveryinsider.billing.domain.subscription.service.SubscriptionService;
 import jakarta.validation.Valid;
@@ -43,4 +44,14 @@ public class SubscriptionController {
             request
         );
     }
+    @PostMapping("/cancel")
+    public CancelSubscriptionResponse cancel(
+        @RequestHeader("X-User-Id")
+        Long userId
+    ) {
+        return subscriptionService.cancel(
+            userId
+        );
+    }
 }
+

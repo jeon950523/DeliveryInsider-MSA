@@ -11,7 +11,9 @@ public enum BillingErrorCode implements ErrorCode {
     PLAN_NOT_FOUND("BILLING-002", HttpStatus.NOT_FOUND, "사용할 수 있는 요금제를 찾을 수 없습니다."),
     CURRENT_SUBSCRIPTION_EXISTS("BILLING-003", HttpStatus.CONFLICT, "이미 현재 구독이 존재합니다."),
     STORE_DELETION_BLOCKED("BILLING-004", HttpStatus.CONFLICT, "삭제 진행 중인 매장은 구독을 생성할 수 없습니다."),
-    STORE_RESOLVE_FAILED("BILLING-005", HttpStatus.NOT_FOUND, "사용자의 매장을 찾을 수 없습니다.");
+    STORE_RESOLVE_FAILED("BILLING-005", HttpStatus.NOT_FOUND, "사용자의 매장을 찾을 수 없습니다."),
+    SUBSCRIPTION_CANCEL_NOT_ALLOWED("BILLING-104", HttpStatus.CONFLICT, "현재 구독 상태에서는 해지할 수 없습니다."),
+    FINANCIAL_IN_FLIGHT("BILLING-105", HttpStatus.CONFLICT, "처리 중인 결제가 있어 구독을 해지할 수 없습니다.");
 
     private final String code;
     private final HttpStatus status;

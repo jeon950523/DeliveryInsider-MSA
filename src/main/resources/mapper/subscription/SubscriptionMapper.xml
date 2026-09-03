@@ -126,5 +126,16 @@
         WHERE id = #{id}
         AND status = 'PENDING'
     </update>
+    <update id="cancel">
+
+        UPDATE subscriptions
+        SET status = 'CANCELED',
+        canceled_at = #{canceledAt},
+        next_billing_at = NULL,
+        version = #{nextVersion}
+        WHERE id = #{id}
+        AND status = 'ACTIVE'
+
+    </update>
 
 </mapper>

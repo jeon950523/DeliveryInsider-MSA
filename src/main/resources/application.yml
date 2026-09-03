@@ -75,8 +75,8 @@ billing:
     reconciliation:
       fixed-delay-ms: ${BILLING_PAYMENT_RECONCILIATION_DELAY_MS:5000}
     mock:
-      mode: ${BILLING_MOCK_PAYMENT_MODE:SUCCESS}
-      reconcile-mode: SUCCESS #${BILLING_MOCK_PAYMENT_RECONCILE_MODE:UNKNOWN}
+      mode: ${BILLING_MOCK_PAYMENT_MODE:TIMEOUT}
+      reconcile-mode: UNKNOWN #${BILLING_MOCK_PAYMENT_RECONCILE_MODE:UNKNOWN}
   outbox:
     publisher:
       fixed-delay-ms: ${BILLING_OUTBOX_FIXED_DELAY_MS:500}

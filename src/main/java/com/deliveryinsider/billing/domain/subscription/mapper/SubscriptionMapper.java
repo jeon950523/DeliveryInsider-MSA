@@ -29,4 +29,14 @@ public interface SubscriptionMapper {
         @Param("nextBillingAt") LocalDateTime nextBillingAt,
         @Param("nextVersion") long nextVersion
     );
+    int cancel(
+        @Param("id")
+        Long id,
+
+        @Param("canceledAt")
+        LocalDateTime canceledAt,
+
+        @Param("nextVersion")
+        long nextVersion
+    );
 }
