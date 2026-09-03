@@ -1,7 +1,9 @@
 package com.deliveryinsider.report.domain.report.controller;
 
+import com.deliveryinsider.report.domain.report.request.ReportDailyTrendRequest;
 import com.deliveryinsider.report.domain.report.request.ReportOrderSearchRequest;
 import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
+import com.deliveryinsider.report.domain.report.response.ReportDailyTrendResponse;
 import com.deliveryinsider.report.domain.report.response.ReportMenuPerformanceResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderPageResponse;
 import com.deliveryinsider.report.domain.report.response.ReportSummaryResponse;
@@ -39,16 +41,21 @@ public class ReportReadController {
         @DateTimeFormat(
             iso = DateTimeFormat.ISO.DATE_TIME
         )
-        LocalDateTime to
+        LocalDateTime to,
+
+        @RequestParam(required = false)
+        String platformType
     ) {
         return reportReadService.getSummary(
             userId,
             new ReportSummaryRequest(
                 from,
-                to
+                to,
+                platformType
             )
         );
     }
+
     @GetMapping("/orders")
     public ReportOrderPageResponse getOrders(
         @RequestHeader("X-User-Id")
@@ -98,6 +105,7 @@ public class ReportReadController {
             )
         );
     }
+
     @GetMapping("/menus")
     public List<ReportMenuPerformanceResponse> getMenuPerformance(
         @RequestHeader("X-User-Id")
@@ -118,12 +126,41 @@ public class ReportReadController {
         @RequestParam(required = false)
         String platformType
     ) {
-        return reportReadService
-            .getMenuPerformance(
-                userId,
+        return reportReadService.getMenuPerformance(
+            userId,
+            from,
+            to,
+            platformType
+        );
+    }
+
+    @GetMapping("/daily")
+    public List<ReportDailyTrendResponse> getDailyTrend(
+        @RequestHeader("X-User-Id")
+        Long userId,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime from,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime to,
+
+        @RequestParam(required = false)
+        String platformType
+    ) {
+        return reportReadService.getDailyTrend(
+            userId,
+            new ReportDailyTrendRequest(
                 from,
                 to,
                 platformType
-            );
+            )
+        );
     }
 }

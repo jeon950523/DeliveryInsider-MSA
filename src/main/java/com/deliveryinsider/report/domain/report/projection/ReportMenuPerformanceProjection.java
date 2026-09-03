@@ -12,6 +12,7 @@ public class ReportMenuPerformanceProjection {
     private Long menuId;
     private String menuName;
 
+    private long orderCount;
     private long soldQuantity;
     private long grossSales;
 

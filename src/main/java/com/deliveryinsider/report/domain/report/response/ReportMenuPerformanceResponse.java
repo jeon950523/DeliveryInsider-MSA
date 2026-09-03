@@ -5,6 +5,7 @@ import com.deliveryinsider.report.domain.report.projection.ReportMenuPerformance
 public record ReportMenuPerformanceResponse(
     Long menuId,
     String menuName,
+    long orderCount,
     long soldQuantity,
     long grossSales,
     long estimatedMenuCost,
@@ -17,6 +18,7 @@ public record ReportMenuPerformanceResponse(
         return new ReportMenuPerformanceResponse(
             projection.getMenuId(),
             projection.getMenuName(),
+            projection.getOrderCount(),
             projection.getSoldQuantity(),
             projection.getGrossSales(),
             projection.getEstimatedMenuCost(),

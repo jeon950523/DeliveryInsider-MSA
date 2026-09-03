@@ -1,5 +1,6 @@
 package com.deliveryinsider.report.domain.report.mapper;
 
+import com.deliveryinsider.report.domain.report.projection.ReportDailyTrendProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportMenuPerformanceProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportOrderProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportSummaryProjection;
@@ -15,14 +16,17 @@ public interface ReportReadMapper {
     ReportSummaryProjection findSummary(
         @Param("storeId") Long storeId,
         @Param("from") LocalDateTime from,
-        @Param("to") LocalDateTime to
+        @Param("to") LocalDateTime to,
+        @Param("platformType") String platformType
     );
 
     List<String> findFinancialDataStatuses(
         @Param("storeId") Long storeId,
         @Param("from") LocalDateTime from,
-        @Param("to") LocalDateTime to
+        @Param("to") LocalDateTime to,
+        @Param("platformType") String platformType
     );
+
     List<ReportOrderProjection> findOrders(
         @Param("storeId") Long storeId,
         @Param("from") LocalDateTime from,
@@ -42,7 +46,15 @@ public interface ReportReadMapper {
         @Param("platformType") String platformType,
         @Param("status") String status
     );
+
     List<ReportMenuPerformanceProjection> findMenuPerformance(
+        @Param("storeId") Long storeId,
+        @Param("from") LocalDateTime from,
+        @Param("to") LocalDateTime to,
+        @Param("platformType") String platformType
+    );
+
+    List<ReportDailyTrendProjection> findDailyTrend(
         @Param("storeId") Long storeId,
         @Param("from") LocalDateTime from,
         @Param("to") LocalDateTime to,

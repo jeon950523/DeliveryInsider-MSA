@@ -2,8 +2,10 @@ package com.deliveryinsider.report.domain.report.service;
 
 import com.deliveryinsider.report.domain.report.mapper.ReportReadMapper;
 import com.deliveryinsider.report.domain.report.projection.ReportSummaryProjection;
+import com.deliveryinsider.report.domain.report.request.ReportDailyTrendRequest;
 import com.deliveryinsider.report.domain.report.request.ReportOrderSearchRequest;
 import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
+import com.deliveryinsider.report.domain.report.response.ReportDailyTrendResponse;
 import com.deliveryinsider.report.domain.report.response.ReportMenuPerformanceResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderPageResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderResponse;
@@ -23,6 +25,7 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class ReportReadService {
+
     private static final int MAX_PAGE_SIZE = 100;
 
     private static final Set<String> SUPPORTED_STATUSES =
@@ -47,6 +50,7 @@ public class ReportReadService {
             "grossOrderAmount",
             "status"
         );
+
     private final CurrentStoreClient currentStoreClient;
     private final ReportReadMapper reportReadMapper;
 
@@ -55,7 +59,11 @@ public class ReportReadService {
         Long userId,
         ReportSummaryRequest request
     ) {
-        validateDateRange(request);
+        validateRangeAndPlatform(
+            request.from(),
+            request.to(),
+            request.platformType()
+        );
 
         CurrentStoreResponse store =
             currentStoreClient.findByUserId(
@@ -66,7 +74,8 @@ public class ReportReadService {
             reportReadMapper.findSummary(
                 store.storeId(),
                 request.from(),
-                request.to()
+                request.to(),
+                request.platformType()
             );
 
         List<String> financialDataStatuses =
@@ -74,7 +83,8 @@ public class ReportReadService {
                 .findFinancialDataStatuses(
                     store.storeId(),
                     request.from(),
-                    request.to()
+                    request.to(),
+                    request.platformType()
                 );
 
         return new ReportSummaryResponse(
@@ -90,22 +100,7 @@ public class ReportReadService {
         );
     }
 
-    private void validateDateRange(
-        ReportSummaryRequest request
-    ) {
-        if (request.from() == null
-            || request.to() == null) {
-            return;
-        }
-
-        if (request.from().isAfter(
-            request.to()
-        )) {
-            throw new BusinessException(
-                ReportErrorCode.REPORT_QUERY_INVALID
-            );
-        }
-    }
+    @Transactional(readOnly = true)
     public ReportOrderPageResponse getOrders(
         Long userId,
         ReportOrderSearchRequest request
@@ -157,6 +152,65 @@ public class ReportReadService {
             totalPages
         );
     }
+
+    @Transactional(readOnly = true)
+    public List<ReportMenuPerformanceResponse> getMenuPerformance(
+        Long userId,
+        LocalDateTime from,
+        LocalDateTime to,
+        String platformType
+    ) {
+        validateRangeAndPlatform(
+            from,
+            to,
+            platformType
+        );
+
+        CurrentStoreResponse store =
+            currentStoreClient.findByUserId(
+                userId
+            );
+
+        return reportReadMapper
+            .findMenuPerformance(
+                store.storeId(),
+                from,
+                to,
+                platformType
+            )
+            .stream()
+            .map(ReportMenuPerformanceResponse::from)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReportDailyTrendResponse> getDailyTrend(
+        Long userId,
+        ReportDailyTrendRequest request
+    ) {
+        validateRangeAndPlatform(
+            request.from(),
+            request.to(),
+            request.platformType()
+        );
+
+        CurrentStoreResponse store =
+            currentStoreClient.findByUserId(
+                userId
+            );
+
+        return reportReadMapper
+            .findDailyTrend(
+                store.storeId(),
+                request.from(),
+                request.to(),
+                request.platformType()
+            )
+            .stream()
+            .map(ReportDailyTrendResponse::from)
+            .toList();
+    }
+
     private void validateOrderSearch(
         ReportOrderSearchRequest request
     ) {
@@ -169,20 +223,11 @@ public class ReportReadService {
             throw invalidQuery();
         }
 
-        if (request.from() != null
-            && request.to() != null
-            && request.from().isAfter(
-            request.to()
-        )) {
-            throw invalidQuery();
-        }
-
-        if (request.platformType() != null
-            && !SUPPORTED_PLATFORMS.contains(
+        validateRangeAndPlatform(
+            request.from(),
+            request.to(),
             request.platformType()
-        )) {
-            throw invalidQuery();
-        }
+        );
 
         if (request.status() != null
             && !SUPPORTED_STATUSES.contains(
@@ -207,12 +252,7 @@ public class ReportReadService {
         }
     }
 
-    private BusinessException invalidQuery() {
-        return new BusinessException(
-            ReportErrorCode.REPORT_QUERY_INVALID
-        );
-    }
-    private void validateMenuPerformanceQuery(
+    private void validateRangeAndPlatform(
         LocalDateTime from,
         LocalDateTime to,
         String platformType
@@ -230,33 +270,10 @@ public class ReportReadService {
             throw invalidQuery();
         }
     }
-    public List<ReportMenuPerformanceResponse> getMenuPerformance(
-        Long userId,
-        LocalDateTime from,
-        LocalDateTime to,
-        String platformType
-    ) {
-        validateMenuPerformanceQuery(
-            from,
-            to,
-            platformType
+
+    private BusinessException invalidQuery() {
+        return new BusinessException(
+            ReportErrorCode.REPORT_QUERY_INVALID
         );
-
-        CurrentStoreResponse store =
-            currentStoreClient.findByUserId(
-                userId
-            );
-
-        return reportReadMapper
-            .findMenuPerformance(
-                store.storeId(),
-                from,
-                to,
-                platformType
-            )
-            .stream()
-            .map(ReportMenuPerformanceResponse::from)
-            .toList();
     }
-
 }

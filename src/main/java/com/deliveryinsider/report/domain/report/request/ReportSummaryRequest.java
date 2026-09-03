@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 public record ReportSummaryRequest(
     LocalDateTime from,
-    LocalDateTime to
+    LocalDateTime to,
+    String platformType
 ) {
 }
