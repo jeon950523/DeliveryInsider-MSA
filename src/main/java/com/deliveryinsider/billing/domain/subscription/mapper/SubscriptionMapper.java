@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Mapper
@@ -35,6 +36,24 @@ public interface SubscriptionMapper {
 
         @Param("canceledAt")
         LocalDateTime canceledAt,
+
+        @Param("nextVersion")
+        long nextVersion
+    );
+    List<Long> findCanceledExpirationCandidateIds(
+        @Param("now")
+        LocalDateTime now,
+
+        @Param("limit")
+        int limit
+    );
+
+    int expire(
+        @Param("id")
+        Long id,
+
+        @Param("expiredAt")
+        LocalDateTime expiredAt,
 
         @Param("nextVersion")
         long nextVersion

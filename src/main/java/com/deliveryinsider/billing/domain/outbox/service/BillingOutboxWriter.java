@@ -3,10 +3,7 @@ package com.deliveryinsider.billing.domain.outbox.service;
 import com.deliveryinsider.billing.domain.outbox.entity.OutboxEventEntity;
 import com.deliveryinsider.billing.domain.outbox.mapper.OutboxEventMapper;
 import com.deliveryinsider.billing.domain.outbox.model.OutboxStatus;
-import com.deliveryinsider.billing.integration.event.BillingEventEnvelope;
-import com.deliveryinsider.billing.integration.event.PaymentFailedEventData;
-import com.deliveryinsider.billing.integration.event.SubscriptionActivatedEventData;
-import com.deliveryinsider.billing.integration.event.SubscriptionCanceledEventData;
+import com.deliveryinsider.billing.integration.event.*;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
@@ -258,6 +255,55 @@ public class BillingOutboxWriter {
             "SUBSCRIPTION",
             String.valueOf(subscriptionId),
             "SUBSCRIPTION_CANCELED",
+            subscriptionVersion,
+            storeId,
+            traceId,
+            envelope
+        );
+    }
+    public void appendSubscriptionExpired(
+        Long subscriptionId,
+        Long storeId,
+        Long planId,
+        LocalDateTime expiredAt,
+        LocalDateTime currentPeriodEnd,
+        long subscriptionVersion
+    ) {
+        String eventId =
+            UUID.randomUUID().toString();
+
+        String traceId =
+            currentTraceId();
+
+        var data =
+            new SubscriptionExpiredEventData(
+                subscriptionId,
+                planId,
+                expiredAt.toString(),
+                currentPeriodEnd.toString()
+            );
+
+        var envelope =
+            new BillingEventEnvelope<>(
+                eventId,
+                "SUBSCRIPTION_EXPIRED",
+                SCHEMA_VERSION,
+                subscriptionVersion,
+                LocalDateTime.now(
+                    ZoneOffset.UTC
+                ).toString(),
+                traceId,
+                "SUBSCRIPTION",
+                String.valueOf(subscriptionId),
+                storeId,
+                data
+            );
+
+        insert(
+            eventId,
+            "SUBSCRIPTION",
+            String.valueOf(subscriptionId),
+            "SUBSCRIPTION_EXPIRED",
             subscriptionVersion,
             storeId,
             traceId,

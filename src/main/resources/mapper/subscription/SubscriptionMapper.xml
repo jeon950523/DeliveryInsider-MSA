@@ -137,5 +137,28 @@
         AND status = 'ACTIVE'
 
     </update>
+    <select
+            id="findCanceledExpirationCandidateIds"
+            resultType="java.lang.Long">
+
+        SELECT id
+        FROM subscriptions
+        WHERE status = 'CANCELED'
+          AND current_period_end IS NOT NULL
+          AND current_period_end &lt;= #{now}
+        ORDER BY current_period_end, id
+        LIMIT #{limit}
+
+    </select>
+    <update id="expire">
+        UPDATE subscriptions
+        SET status = 'EXPIRED',
+        expired_at = #{expiredAt},
+        next_billing_at = NULL,
+        version = #{nextVersion}
+        WHERE id = #{id}
+        AND status = 'CANCELED'
+        AND current_period_end &lt;= #{expiredAt}
+    </update>
 
 </mapper>

@@ -67,15 +67,19 @@ mybatis:
 
 billing:
   scheduler-enabled: ${BILLING_SCHEDULER_ENABLED:true}
-  scheduler-fixed-delay-ms: ${BILLING_SCHEDULER_FIXED_DELAY_MS:60000}
+  scheduler-fixed-delay-ms: ${BILLING_SCHEDULER_FIXED_DELAY_MS:3000}
   toss-secret-key: ${TOSS_SECRET_KEY:}
+  subscription:
+    expiration:
+      fixed-delay-ms: ${BILLING_SUBSCRIPTION_EXPIRATION_DELAY_MS:3000}
+      batch-size: ${BILLING_SUBSCRIPTION_EXPIRATION_BATCH_SIZE:50}
   kafka:
     topic: ${BILLING_EVENTS_TOPIC:billing.events}
   payment:
     reconciliation:
       fixed-delay-ms: ${BILLING_PAYMENT_RECONCILIATION_DELAY_MS:5000}
     mock:
-      mode: ${BILLING_MOCK_PAYMENT_MODE:TIMEOUT}
+      mode: ${BILLING_MOCK_PAYMENT_MODE:SUCCESS}
       reconcile-mode: UNKNOWN #${BILLING_MOCK_PAYMENT_RECONCILE_MODE:UNKNOWN}
   outbox:
     publisher:
