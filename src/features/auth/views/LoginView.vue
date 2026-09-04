@@ -1,13 +1,14 @@
 <script setup>
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useAuthStore } from '../stores/useAuthStore.js'; // 실제 경로에 맞게 조정 필요
+import { useAuthStore } from '../stores/useAuthStore.js';
 import { useStoreStore } from '../../store/stores/useStoreStore.js';
+import { isStoreNotFoundError } from '../../onboarding/utils/storeOnboarding.js';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const storeStore = useStoreStore();
-// 로그인 관련 상태 관리
+
 const isLoading = ref(false);
 const showPassword = ref(false);
 
@@ -16,39 +17,76 @@ const loginForm = reactive({
   password: '',
 });
 
-// 비밀번호 숨김/보기 토글
 const togglePassword = () => {
   showPassword.value = !showPassword.value;
 };
 
-// 로그인 폼 제출 함수
-const handleSubmit = async () => {
-  if (isLoading.value) return;
-
+const moveAfterLogin = async () => {
   try {
-    if(loginForm.email && loginForm.password) {
-      isLoading.value = true;
-
-      await authStore.login({
-        email: loginForm.email,
-        password: loginForm.password
-      });
     /*
-    * 로그인 성공 후 매장 등록 여부 확인
-    */
-    const myStore = await storeStore.checkMyStore(true);
+     * 다른 계정의 Store 조회 결과가 Pinia에 남아 있을 수 있으므로
+     * 로그인 직후에는 강제로 현재 사용자의 Store를 다시 확인한다.
+     */
+    const myStore =
+      await storeStore.checkMyStore(true);
 
     if (myStore) {
-    router.push('/dashboard');
-    return;
-    }
-    alert('신규 회원입니다. \n 매장 등록을 먼저 해야 합니다. 매장 정보를 등록한 뒤 서비스를 이용해주세요.');
-    router.push('/store');
+      await router.replace({
+        name: 'dashboard',
+      });
 
+      return;
     }
 
+    await router.replace({
+      name: 'store-onboarding',
+    });
   } catch (error) {
-    const message = error.response?.data?.data || error.response?.data?.message || '로그인에 실패했습니다.';
+    /*
+     * 신규 사용자:
+     * GET /api/stores/me → 404 STORE-001
+     *
+     * 오류가 아니라 Onboarding 진입 조건이다.
+     */
+    if (isStoreNotFoundError(error)) {
+      await router.replace({
+        name: 'store-onboarding',
+      });
+
+      return;
+    }
+
+    throw error;
+  }
+};
+
+const handleSubmit = async () => {
+  if (isLoading.value) {
+    return;
+  }
+
+  if (
+    !loginForm.email ||
+    !loginForm.password
+  ) {
+    return;
+  }
+
+  isLoading.value = true;
+
+  try {
+    await authStore.login({
+      email: loginForm.email.trim(),
+      password: loginForm.password,
+    });
+
+    await moveAfterLogin();
+  } catch (error) {
+    const message =
+      error.response?.data?.data ||
+      error.response?.data?.message ||
+      '로그인에 실패했습니다.';
+
     alert(message);
   } finally {
     isLoading.value = false;
@@ -60,14 +98,16 @@ const handleSubmit = async () => {
   <div class="pos-layout">
     <main class="pos-content">
       <div class="login-card">
-        <img src="/logo.png" alt="BAEF 로고" class="brand-logo" />
+        <div class="brand">
+          <strong>DeliveryInsider</strong>
+        </div>
 
         <form class="login-form" @submit.prevent="handleSubmit">
           <div class="form-group">
             <label>이메일</label>
             <input
-              type="email"
               v-model="loginForm.email"
+              type="email"
               placeholder="이메일을 입력해주세요"
               required
             />
@@ -75,31 +115,68 @@ const handleSubmit = async () => {
 
           <div class="form-group password-group">
             <label>비밀번호</label>
+
             <div class="input-wrapper">
               <input
-                :type="showPassword ? 'text' : 'password'"
                 v-model="loginForm.password"
+                :type="showPassword ? 'text' : 'password'"
                 placeholder="비밀번호를 입력해주세요"
                 required
               />
-              <button type="button" class="icon-btn" @click="togglePassword" tabindex="-1">
-                <svg v-if="!showPassword" viewBox="0 0 24 24" class="eye-icon">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                  <line x1="1" y1="1" x2="23" y2="23"></line>
+
+              <button
+                type="button"
+                class="icon-btn"
+                tabindex="-1"
+                @click="togglePassword"
+              >
+                <svg
+                  v-if="!showPassword"
+                  viewBox="0 0 24 24"
+                  class="eye-icon"
+                >
+                  <path
+                    d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                  />
+                  <line
+                    x1="1"
+                    y1="1"
+                    x2="23"
+                    y2="23"
+                  />
                 </svg>
-                <svg v-else viewBox="0 0 24 24" class="eye-icon">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                  <circle cx="12" cy="12" r="3"></circle>
+
+                <svg
+                  v-else
+                  viewBox="0 0 24 24"
+                  class="eye-icon"
+                >
+                  <path
+                    d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+                  />
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="3"
+                  />
                 </svg>
               </button>
             </div>
           </div>
 
-          <button type="submit" class="submit-btn" :disabled="isLoading">
+          <button
+            type="submit"
+            class="submit-btn"
+            :disabled="isLoading"
+          >
             {{ isLoading ? '로그인 중...' : '로그인' }}
           </button>
 
-          <button type="button" class="signup-btn" @click="router.push('/register')">
+          <button
+            type="button"
+            class="signup-btn"
+            @click="router.push('/register')"
+          >
             회원가입
           </button>
         </form>
@@ -109,9 +186,6 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-/* ============================================================
-   전체 배경 레이아웃 (헤더/푸터 없음)
-   ============================================================ */
 .pos-layout {
   display: flex;
   flex-direction: column;
@@ -122,9 +196,6 @@ const handleSubmit = async () => {
   overflow: hidden;
 }
 
-/* ============================================================
-   중앙 로그인 컨텐츠 
-   ============================================================ */
 .pos-content {
   flex: 1;
   display: flex;
@@ -138,17 +209,19 @@ const handleSubmit = async () => {
   background-color: #ffffff;
   padding: 50px 40px;
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 4px 20px
+    rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-.brand-logo {
-  max-width: 180px;
-  height: auto;
+.brand {
   margin-bottom: 40px;
-  object-fit: contain;
+  color: #2563eb;
+  font-size: 28px;
+  font-weight: 800;
 }
 
 .login-form {
@@ -163,9 +236,8 @@ const handleSubmit = async () => {
   margin-bottom: 20px;
 }
 
-/* 비밀번호 영역과 로그인 버튼 사이의 간격 추가 */
 .password-group {
-  margin-bottom: 36px; 
+  margin-bottom: 36px;
 }
 
 .form-group label {
@@ -186,13 +258,15 @@ const handleSubmit = async () => {
   width: 100%;
   height: 52px;
   padding: 0 16px;
+  box-sizing: border-box;
   background-color: #f9fafb;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 15px;
   color: #111827;
   outline: none;
-  transition: border-color 0.2s;
+  transition:
+    border-color 0.2s;
 }
 
 .form-group input::placeholder {
@@ -201,7 +275,7 @@ const handleSubmit = async () => {
 }
 
 .form-group input:focus {
-  border-color: #2563EB;
+  border-color: #2563eb;
   background-color: #ffffff;
 }
 
@@ -228,26 +302,29 @@ const handleSubmit = async () => {
   stroke-linejoin: round;
 }
 
-/* ============================================================
-   버튼 스타일링
-   ============================================================ */
 .submit-btn {
   width: 100%;
   height: 54px;
-  background-color: #2563EB;
+  background-color: #2563eb;
   color: #ffffff;
   border: none;
   border-radius: 6px;
   font-size: 18px;
   font-weight: 700;
   cursor: pointer;
-  /* 로그인 버튼과 회원가입 버튼 사이 간격 */
-  margin-bottom: 16px; 
-  transition: background-color 0.2s;
+  margin-bottom: 16px;
+  transition:
+    background-color 0.2s;
 }
 
-.submit-btn:hover { background-color: #1e4fbb; }
-.submit-btn:disabled { background-color: #93c5fd; cursor: not-allowed; }
+.submit-btn:hover {
+  background-color: #1e4fbb;
+}
+
+.submit-btn:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+}
 
 .signup-btn {
   width: 100%;
@@ -267,7 +344,6 @@ const handleSubmit = async () => {
   border-color: #9ca3af;
 }
 
-/* 모바일 화면 대응 */
 @media (max-width: 768px) {
   .login-card {
     padding: 40px 20px;

@@ -60,7 +60,9 @@ const handleRegister = async () => {
   <div class="pos-layout">
     <main class="pos-content">
       <div class="login-card">
-        <img src="/logo.png" alt="BAEF 로고" class="brand-logo" />
+        <div class="brand">
+  <strong>DeliveryInsider</strong>
+</div>
 
         <form class="login-form" @submit.prevent="handleRegister">
           

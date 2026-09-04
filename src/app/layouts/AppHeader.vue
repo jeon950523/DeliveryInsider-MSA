@@ -2,25 +2,22 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../../features/auth/stores/useAuthStore.js'
-import { fetchDelayRisks, fetchTodayOrders } from '../../features/order/api/orderApi.js'
+import { fetchTodayOrders } from '../../features/order/api/orderApi.js'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
-// 알림 드롭다운 상태 관리
 const isNotiOpen = ref(false)
 const dropdownContainer = ref(null)
 const notifications = ref([])
 const isNotificationLoading = ref(false)
 
-const DISMISSED_NOTIFICATION_STORAGE_KEY = 'deliveryinsider.dismissedHeaderNotifications.v1'
-const ACTIVE_ORDER_STATUSES = ['WAITING', 'COOKING', 'DELIVERING']
+const DISMISSED_NOTIFICATION_STORAGE_KEY = 'deliveryinsider.dismissedHeaderNotifications.v2'
+const ACTIVE_ORDER_STATUSES = ['WAITING', 'COOKING', 'READY_FOR_PICKUP', 'DELIVERING']
 const REQUEST_ATTENTION_STATUSES = ['WAITING']
 
-const isActiveOrder = (order = {}) => {
-  return ACTIVE_ORDER_STATUSES.includes(order.orderStatus)
-}
+const isActiveOrder = (order = {}) => ACTIVE_ORDER_STATUSES.includes(order.orderStatus)
 
 const readDismissedNotificationKeys = () => {
   try {
@@ -59,14 +56,11 @@ const normalizeNotificationText = (value) => {
 }
 
 const getOrderTimeValue = (order = {}) => {
-  const rawDateTime =
-    order.orderedAt ||
-    order.createdAt ||
-    order.cookingStartedAt ||
-    order.completedAt ||
-    ''
-
-  const time = new Date(rawDateTime).getTime()
+  const rawDateTime = order.orderedAt || order.createdAt || ''
+  const normalized = rawDateTime && !/(Z|[+-]\d{2}:?\d{2})$/i.test(rawDateTime)
+    ? `${rawDateTime}Z`
+    : rawDateTime
+  const time = new Date(normalized).getTime()
 
   if (!Number.isNaN(time)) {
     return time
@@ -75,10 +69,8 @@ const getOrderTimeValue = (order = {}) => {
   return Number(order.id || 0)
 }
 
-const sortLatestOrders = (orderList = []) => {
-  return [...orderList].sort((a, b) => {
-    return getOrderTimeValue(b) - getOrderTimeValue(a)
-  })
+const sortOldestOrders = (orderList = []) => {
+  return [...orderList].sort((a, b) => getOrderTimeValue(a) - getOrderTimeValue(b))
 }
 
 const REQUEST_ATTENTION_TYPES = [
@@ -92,9 +84,7 @@ const REQUEST_ATTENTION_TYPES = [
 
 const REQUEST_ATTENTION_LEVELS = ['WARNING', 'DANGER']
 
-const normalizeRiskValue = (value) => {
-  return String(value || '').trim().toUpperCase()
-}
+const normalizeRiskValue = (value) => String(value || '').trim().toUpperCase()
 
 const hasRequestAttention = (order = {}) => {
   if (!REQUEST_ATTENTION_STATUSES.includes(order.orderStatus)) {
@@ -110,20 +100,8 @@ const hasRequestAttention = (order = {}) => {
   )
 }
 
-const isDelayAttention = (order = {}, todayOrderMap = new Map()) => {
-  const baseOrder = todayOrderMap.get(order.id) || {}
-
-  if (!isActiveOrder(baseOrder)) {
-    return false
-  }
-
-  const delayRiskLevel = order.delayRiskLevel || baseOrder.delayRiskLevel || 'SAFE'
-
-  return delayRiskLevel !== 'SAFE'
-}
-
 const createNotificationKey = (type, orderList = []) => {
-  const firstOrder = sortLatestOrders(orderList)[0]
+  const firstOrder = sortOldestOrders(orderList)[0]
   const firstId = firstOrder?.id || firstOrder?.orderNo || 'none'
 
   return `${type}:${orderList.length}:${firstId}`
@@ -132,24 +110,16 @@ const createNotificationKey = (type, orderList = []) => {
 const buildVisibleNotifications = (candidateNotifications = []) => {
   const dismissedKeys = new Set(readDismissedNotificationKeys())
 
-  return candidateNotifications.filter((notification) => {
-    return !dismissedKeys.has(notification.dismissKey)
-  })
+  return candidateNotifications.filter((notification) => !dismissedKeys.has(notification.dismissKey))
 }
 
-const buildNotificationsFromOrders = (todayOrders = [], delayRiskOrders = []) => {
+const buildNotificationsFromOrders = (todayOrders = []) => {
   const activeOrders = todayOrders.filter(isActiveOrder)
-  const waitingOrders = sortLatestOrders(
+  const waitingOrders = sortOldestOrders(
     activeOrders.filter((order) => order.orderStatus === 'WAITING')
   )
-  const requestOrders = sortLatestOrders(
+  const requestOrders = sortOldestOrders(
     activeOrders.filter(hasRequestAttention)
-  )
-  const todayOrderMap = new Map(
-    todayOrders.map((order) => [order.id, order])
-  )
-  const delayOrders = sortLatestOrders(
-    delayRiskOrders.filter((order) => isDelayAttention(order, todayOrderMap))
   )
 
   const result = []
@@ -158,7 +128,7 @@ const buildNotificationsFromOrders = (todayOrders = [], delayRiskOrders = []) =>
     result.push({
       type: 'WAITING_ORDER',
       title: '신규 주문 접수',
-      description: `접수대기 주문 ${waitingOrders.length}건이 있습니다. 주문을 확인해 주세요.`,
+      description: `접수대기 주문 ${waitingOrders.length}건이 있습니다. 먼저 들어온 주문부터 확인해 주세요.`,
       path: '/orders?status=WAITING',
       dismissKey: createNotificationKey('WAITING_ORDER', waitingOrders),
     })
@@ -171,16 +141,6 @@ const buildNotificationsFromOrders = (todayOrders = [], delayRiskOrders = []) =>
       description: `${requestOrders.length}건의 접수대기 주문에 확인이 필요한 요청사항이 있습니다.`,
       path: '/orders?attention=REQUEST',
       dismissKey: createNotificationKey('REQUEST_ATTENTION', requestOrders),
-    })
-  }
-
-  if (delayOrders.length > 0) {
-    result.push({
-      type: 'DELAY_RISK',
-      title: '지연 위험 주문',
-      description: `${delayOrders.length}건의 주문이 조리 지연 위험 상태입니다.`,
-      path: '/orders?attention=DELAY',
-      dismissKey: createNotificationKey('DELAY_RISK', delayOrders),
     })
   }
 
@@ -202,25 +162,10 @@ const findHeaderNotifications = async () => {
   try {
     isNotificationLoading.value = true
 
-    const [todayOrdersResult, delayRiskResult] = await Promise.allSettled([
-      fetchTodayOrders(),
-      fetchDelayRisks(),
-    ])
+    const result = await fetchTodayOrders()
+    const todayOrders = result.data.data || []
 
-    const todayOrders =
-      todayOrdersResult.status === 'fulfilled'
-        ? todayOrdersResult.value.data.data || []
-        : []
-
-    const delayRiskOrders =
-      delayRiskResult.status === 'fulfilled'
-        ? delayRiskResult.value.data.data || []
-        : []
-
-    notifications.value = buildNotificationsFromOrders(
-      todayOrders,
-      delayRiskOrders
-    )
+    notifications.value = buildNotificationsFromOrders(todayOrders)
   } catch (error) {
     notifications.value = []
     console.error(error)
@@ -233,7 +178,6 @@ const handleNotificationRefreshRequest = async () => {
   await findHeaderNotifications()
 }
 
-// 알림 메뉴 토글
 const toggleNoti = () => {
   isNotiOpen.value = !isNotiOpen.value
 }
@@ -245,9 +189,8 @@ const moveNotification = (noti) => {
   isNotiOpen.value = false
 }
 
-// 외부 영역 클릭 시 알림 메뉴 닫기
-const closeNoti = (e) => {
-  if (isNotiOpen.value && dropdownContainer.value && !dropdownContainer.value.contains(e.target)) {
+const closeNoti = (event) => {
+  if (isNotiOpen.value && dropdownContainer.value && !dropdownContainer.value.contains(event.target)) {
     isNotiOpen.value = false
   }
 }
@@ -255,7 +198,6 @@ const closeNoti = (e) => {
 onMounted(async () => {
   document.addEventListener('click', closeNoti)
   window.addEventListener('deliveryinsider:notifications-refresh', handleNotificationRefreshRequest)
-
   await findHeaderNotifications()
 })
 

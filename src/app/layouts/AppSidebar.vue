@@ -1,27 +1,32 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../../features/auth/stores/useAuthStore.js'
+import { useStoreStore } from '../../features/store/stores/useStoreStore.js'
 import { useDashboardStore } from '../../features/dashboard/stores/useDashboardStore.js'
+import { formatDurationMinutes } from '../../shared/utils/timeFormatters.js'
 
 defineProps({
   isOpen: {
     type: Boolean,
-    default: true
-  }
+    default: true,
+  },
 })
 
 const emit = defineEmits(['toggle'])
 const router = useRouter()
 const dashboardStore = useDashboardStore()
+const authStore = useAuthStore()
+const storeStore = useStoreStore()
 
-// 1. HTML 시안 및 캡처 이미지 기준 메뉴 리스트
 const navItems = ref([
   { name: '실시간 운영 대시보드', path: '/dashboard' },
   { name: '통합 주문 관리', path: '/orders' },
   { name: '메뉴 수익 관리', path: '/menus' },
   { name: '매장 관리', path: '/store' },
   { name: '운영 리포트', path: '/reports' },
-  { name: 'Mock 데이터', path: '/mockdata' }
+  { name: '구독 관리', path: '/billing' },
+  { name: 'Mock 데이터', path: '/mockdata' },
 ])
 
 const REQUEST_ATTENTION_TYPES = [
@@ -35,9 +40,7 @@ const REQUEST_ATTENTION_TYPES = [
 
 const REQUEST_ATTENTION_LEVELS = ['WARNING', 'DANGER']
 
-const normalizeRiskValue = (value) => {
-  return String(value || '').trim().toUpperCase()
-}
+const normalizeRiskValue = (value) => String(value || '').trim().toUpperCase()
 
 const isRequestRiskOrder = (order = {}) => {
   if (order.orderStatus !== 'WAITING') {
@@ -53,57 +56,39 @@ const isRequestRiskOrder = (order = {}) => {
   )
 }
 
-const getOperationLevel = (summary) => {
-  const loadRate = Number(summary.loadRate || 0)
-  const delayRisk = Number(summary.delayRisk || 0)
-  const requestRisk = Number(summary.requestRisk || 0)
-  const lossRisk = Number(summary.lossRisk || 0)
-  const kitchenLoadLevel = summary.kitchenLoadLevel || ''
-
-  if (kitchenLoadLevel === 'OVERLOAD' || loadRate >= 100 || delayRisk >= 3) {
-    return '위험'
-  }
-
-  if (
-    kitchenLoadLevel === 'HIGH' ||
-    loadRate >= 70 ||
-    delayRisk >= 1 ||
-    requestRisk >= 2 ||
-    lossRisk >= 1
-  ) {
-    return '주의'
-  }
-
-  return '정상'
-}
-
 const operationSummary = computed(() => {
   const data = dashboardStore.operationSummary
+  const requestRisk = dashboardStore.todayOrders.filter(isRequestRiskOrder).length
 
   if (!data) {
     return {
-      level: '정상',
-      loadRate: 0,
-      delayRisk: 0,
-      requestRisk: 0,
-      lossRisk: 0,
       orderCount: 0,
+      progressCount: 0,
+      waitingCount: 0,
+      cookingCount: 0,
+      readyForPickupCount: 0,
+      deliveringCount: 0,
+      oldestActiveOrderElapsedMinutes: 0,
+      averageCompletedProcessingMinutes: null,
+      requestRisk,
+      lossRisk: 0,
       sales: 0,
       profit: 0,
       completedCount: 0,
       cancelCount: 0,
       cancelRate: 0,
-      kitchenLoadLevel: ''
     }
   }
 
-  const requestRisk =
-    dashboardStore.todayOrders.filter(isRequestRiskOrder).length
-
-  const summary = {
-    loadRate: data.loadRate || 0,
+  return {
     orderCount: data.todayOrderCount || 0,
-    delayRisk: data.delayRiskCount || 0,
+    progressCount: data.progressOrderCount || 0,
+    waitingCount: data.waitingCount || 0,
+    cookingCount: data.cookingCount || 0,
+    readyForPickupCount: data.readyForPickupCount || 0,
+    deliveringCount: data.deliveringCount || 0,
+    oldestActiveOrderElapsedMinutes: data.oldestActiveOrderElapsedMinutes || 0,
+    averageCompletedProcessingMinutes: data.averageCompletedProcessingMinutes ?? null,
     requestRisk,
     lossRisk: data.lossRiskCount || 0,
     sales: data.todaySales || 0,
@@ -111,12 +96,6 @@ const operationSummary = computed(() => {
     completedCount: data.completedCount || 0,
     cancelCount: data.canceledCount || data.cancelCount || 0,
     cancelRate: data.cancelRate || 0,
-    kitchenLoadLevel: data.kitchenLoadLevel || ''
-  }
-
-  return {
-    ...summary,
-    level: getOperationLevel(summary)
   }
 })
 
@@ -128,21 +107,25 @@ const updatedAtText = computed(() => {
   return `${dashboardStore.lastUpdatedAt.toLocaleTimeString('ko-KR', {
     hour: '2-digit',
     minute: '2-digit',
-    hour12: false
+    hour12: false,
   })} 기준`
 })
 
-// 돈 단위 포맷 함수
-const formatMoney = (val) => `${Number(val || 0).toLocaleString('ko-KR')}원`
+const formatMoney = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`
+const formatDuration = (value) => formatDurationMinutes(value, { zeroAsLessThanMinute: true })
 
 onMounted(async () => {
-  if (dashboardStore.operationSummary) {
+  if (!authStore.isLoggedIn || !storeStore.hasStore || dashboardStore.operationSummary) {
     return
   }
 
   try {
     await dashboardStore.loadDashboard({ showAlert: false })
   } catch (error) {
+    if (error?.code === 'AUTH_REQUIRED' || error?.response?.status === 401) {
+      return
+    }
+
     console.error('사이드바 운영 요약 조회 실패:', error)
   }
 })
@@ -157,23 +140,29 @@ onMounted(async () => {
     
     <div class="sidebar-content">
       <div class="logo-area">
-        <img src="/logo.png" alt="배프(BAEF) 로고" class="main-logo" />
+        <div class="brand">
+          <strong>DeliveryInsider</strong>
+        </div>
+        <!-- <img src="/logo.png" alt="배프(BAEF) 로고" class="main-logo" /> -->
       </div>
 
-      <section class="side-operation-card" :class="`level-${operationSummary.level}`">
+      <section class="side-operation-card">
         <span class="side-card-label">
           현재 운영 <em>{{ updatedAtText }}</em>
         </span>
-        <strong>{{ operationSummary.level }}</strong>
-        <p class="side-load-text">부하율 {{ operationSummary.loadRate }}%</p>
+        <strong>진행 {{ operationSummary.progressCount }}건</strong>
+        <p class="side-load-text">
+          가장 오래된 주문 {{ formatDuration(operationSummary.oldestActiveOrderElapsedMinutes) }}
+        </p>
         <div class="side-risk-lines">
-          <span>주문 {{ operationSummary.orderCount }}</span>
-          <span>지연 {{ operationSummary.delayRisk }}</span>
-          <span>요청 {{ operationSummary.requestRisk }}</span>
+          <span>대기 {{ operationSummary.waitingCount }}</span>
+          <span>조리 {{ operationSummary.cookingCount }}</span>
+          <span>픽업 {{ operationSummary.readyForPickupCount }}</span>
+          <span>배달 {{ operationSummary.deliveringCount }}</span>
         </div>
-        <div class="side-load">
-          <span :style="{ width: `${Math.min(operationSummary.loadRate, 100)}%` }"></span>
-        </div>
+        <small class="side-card-help">
+          완료 평균 {{ operationSummary.averageCompletedProcessingMinutes === null ? '-' : formatDuration(operationSummary.averageCompletedProcessingMinutes) }}
+        </small>
       </section>
 
       <section class="side-metric-card side-performance-card">
@@ -200,15 +189,15 @@ onMounted(async () => {
       </section>
 
       <section class="side-action-card">
-        <span>확인 필요</span>
+        <span>바로가기</span>
+        <button type="button" @click="router.push({ path: '/orders', query: { active: 'true' } })">
+          진행 주문 <strong>{{ operationSummary.progressCount }}건</strong>
+        </button>
+        <button type="button" @click="router.push({ path: '/orders', query: { status: 'READY_FOR_PICKUP' } })">
+          픽업 대기 <strong>{{ operationSummary.readyForPickupCount }}건</strong>
+        </button>
         <button type="button" @click="router.push({ path: '/orders', query: { attention: 'REQUEST' } })">
           요청사항 <strong>{{ operationSummary.requestRisk }}건</strong>
-        </button>
-        <button type="button" @click="router.push({ path: '/orders', query: { attention: 'DELAY' } })">
-          지연위험 <strong>{{ operationSummary.delayRisk }}건</strong>
-        </button>
-        <button type="button" @click="router.push({ path: '/orders', query: { attention: 'LOSS' } })">
-          손실위험 <strong>{{ operationSummary.lossRisk }}건</strong>
         </button>
         <button type="button" @click="router.push({ path: '/reports', query: { tab: 'cancel' } })">
           취소 확인 <strong>{{ operationSummary.cancelCount }}건</strong>

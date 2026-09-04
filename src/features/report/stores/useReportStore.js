@@ -1,186 +1,181 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { exportReportOrders, fetchReportOrders } from '../api/reportApi.js';
+import {
+  fetchReportOrders,
+  fetchReportProcessingTimes,
+  fetchReportSummary,
+} from '../api/reportApi.js';
+import {
+  formatKstDate,
+  formatKstDateTime,
+} from '../../../shared/utils/timeFormatters.js';
+
+const createEmptySummary = () => ({
+  totalOrderCount: 0,
+  completedOrderCount: 0,
+  canceledOrderCount: 0,
+  grossOrderAmount: 0,
+  customerPaidAmount: 0,
+  providerChargeAmount: 0,
+  estimatedMenuCost: 0,
+  estimatedPackagingCost: 0,
+  financialDataStatuses: [],
+});
+
+const createEmptyMetric = () => ({
+  sampleCount: 0,
+  averageSeconds: null,
+});
+
+const createEmptyProcessingTimes = () => ({
+  completedOrderCount: 0,
+  totalProcessing: createEmptyMetric(),
+  waiting: createEmptyMetric(),
+  cooking: createEmptyMetric(),
+  pickupWaiting: createEmptyMetric(),
+  delivery: createEmptyMetric(),
+  platforms: [],
+});
+
+const PROVIDER_STATUS_TO_UI_STATUS = {
+  CREATED: 'WAITING',
+  PICKED_UP: 'DELIVERING',
+  DELIVERED: 'COMPLETED',
+  CANCELED: 'CANCELED',
+};
 
 export const useReportStore = defineStore('report', () => {
   const reportOrders = ref([]);
+  const allReportOrders = ref([]);
+  const reportSummary = ref(createEmptySummary());
+  const processingTimes = ref(createEmptyProcessingTimes());
+
   const isLoading = ref(false);
   const isExporting = ref(false);
   const lastSearchParams = ref({});
 
   /*
-   * 화면 필터 이름을 백엔드 query parameter 이름으로 변환한다.
-   *
-   * 화면:
-   * platform, status
-   *
-   * 백엔드:
-   * platformType, orderStatus
+   * Report DB는 UTC LocalDateTime을 저장한다.
+   * 사용자가 선택한 한국 날짜 경계를 UTC LocalDateTime으로 변환해서 보낸다.
    */
-  const buildSearchParams = (filters = {}) => {
+  const toUtcLocalDateTime = (dateText, endOfDay = false) => {
+    if (!dateText) {
+      return null;
+    }
+
+    const localTime = endOfDay
+      ? '23:59:59.999'
+      : '00:00:00.000';
+
+    const date = new Date(`${dateText}T${localTime}+09:00`);
+
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return date.toISOString().slice(0, 19);
+  };
+
+  const buildAnalysisParams = (filters = {}) => {
     const params = {};
 
-    if (filters.startDate) {
-      params.startDate = filters.startDate;
+    const from = toUtcLocalDateTime(filters.startDate);
+    const to = toUtcLocalDateTime(filters.endDate, true);
+
+    if (from) {
+      params.from = from;
     }
 
-    if (filters.endDate) {
-      params.endDate = filters.endDate;
+    if (to) {
+      params.to = to;
     }
 
-    if (filters.platform) {
-      params.platformType = filters.platform;
-    }
+    const platformType = filters.platformType || filters.platform;
 
-    if (filters.platformType) {
-      params.platformType = filters.platformType;
-    }
-
-    if (filters.status) {
-      params.orderStatus = filters.status;
-    }
-
-    if (filters.orderStatus) {
-      params.orderStatus = filters.orderStatus;
-    }
-
-    /*
-     * 주의:
-     * 백엔드 riskType은 order_requests.risk_type 값을 기대한다.
-     * 예: ALLERGY, DISPUTE, EXCESSIVE 등
-     *
-     * 현재 AllReportView의 risk 값은 REQUEST, LOSS, CANCEL 같은
-     * 화면 전용 필터라서 그대로 riskType으로 보내면 검색 결과가 틀어질 수 있다.
-     */
-    if (filters.riskType) {
-      params.riskType = filters.riskType;
-    }
-
-    if (filters.keyword && filters.keyword.trim()) {
-      params.keyword = filters.keyword.trim();
+    if (platformType) {
+      params.platformType = platformType;
     }
 
     return params;
   };
 
-  const formatDate = (dateTime) => {
-    if (!dateTime) {
-      return '';
-    }
+  const buildOrderParams = (filters = {}) => ({
+    ...buildAnalysisParams(filters),
+    page: 0,
+    size: 100,
+    sortBy: 'orderedAt',
+    direction: 'desc',
+  });
 
-    return String(dateTime).slice(0, 10);
-  };
+  const formatDate = (dateTime) => formatKstDate(dateTime, '');
+  const formatDateTime = (dateTime) => formatKstDateTime(dateTime, '');
 
-  const formatDateTime = (dateTime) => {
-    if (!dateTime) {
-      return '';
-    }
-
-    return String(dateTime).replace('T', ' ').slice(0, 16);
-  };
-
-  const createRiskBadges = (order) => {
-    const badges = [];
-
-    if (order.requestRiskType === 'ALLERGY') {
-      badges.push('알러지 주의');
-    }
-
-    if (order.requestRiskType === 'DISPUTE') {
-      badges.push('분쟁 가능');
-    }
-
-    if (order.requestRiskType === 'EXCESSIVE') {
-      badges.push('과도 요청');
-    }
-
-    if (
-      order.requestRiskLevel === 'CAUTION' ||
-      order.requestRiskLevel === 'WARNING' ||
-      order.requestRiskLevel === 'DANGER'
-    ) {
-      badges.push('요청사항 확인');
-    }
-
-    const netProfit = Number(order.netProfit || 0);
-    const isClosedOrder =
-      order.orderStatus === 'CANCELED' ||
-      order.orderStatus === 'REFUNDED';
-
-    if (netProfit <= 0 && !isClosedOrder) {
-      badges.push('손실 위험');
-    }
-
-    return [...new Set(badges)];
-  };
-
-  /*
-   * 백엔드 응답을 기존 AllReportView.vue가 쓰던 필드명에 맞춘다.
-   * 이렇게 하면 화면 수정량이 줄어든다.
-   */
   const normalizeReportOrder = (order = {}) => {
-    const riskBadges = createRiskBadges(order);
+    const orderStatus =
+      PROVIDER_STATUS_TO_UI_STATUS[order.status]
+      || order.status
+      || '';
 
     return {
       ...order,
-
-      // 화면 기존 필드명 보정
+      id: order.orderId,
+      orderNo: order.orderId ? `ORD-${order.orderId}` : '',
+      platformOrderNo: order.platformOrderId || '',
+      platformOrderNumber: order.platformOrderId || '',
+      orderStatus,
+      totalAmount: order.grossOrderAmount == null
+        ? null
+        : Number(order.grossOrderAmount),
+      customerPaidAmount: order.customerPaidAmount,
+      financialDataStatus: order.financialDataStatus || 'UNAVAILABLE',
       orderDate: formatDate(order.orderedAt),
-      platformOrderNo: order.platformOrderNumber || '',
-      deliveryFeeAmount: order.deliveryFee || 0,
-      couponAmount: order.couponCost || 0,
-      menuCostAmount: order.totalMenuCost || 0,
-      packagingAmount: order.totalPackagingFee || 0,
-
-      // 일시 표시용
       orderedAtText: formatDateTime(order.orderedAt),
-      cookingStartedAtText: formatDateTime(order.cookingStartedAt),
-      completedAtText: formatDateTime(order.completedAt),
-      canceledAtText: formatDateTime(order.canceledAt),
-      refundedAtText: formatDateTime(order.refundedAt),
 
-      /*
-       * 기존 화면이 completedAt, canceledAt을 바로 출력하고 있어서
-       * 우선 표시용 문자열로 맞춘다.
-       */
-      completedAt: formatDateTime(order.completedAt),
-      canceledAt: formatDateTime(order.canceledAt),
-      refundedAt: formatDateTime(order.refundedAt),
-
-      // 화면 전용 판정값
-      riskBadges,
-      lossRisk: riskBadges.includes('손실 위험'),
-
-      // null 방어
-      cancelType: order.cancelType || '',
-      cancelReason: order.cancelReason || '',
-      refundType: order.refundType || '',
-      refundReason: order.refundReason || '',
-      requestText: order.requestText || '',
-      requestRiskType: order.requestRiskType || '',
-      requestRiskLevel: order.requestRiskLevel || '',
-      requestAnalysisMessage: order.requestAnalysisMessage || '',
+      // 현재 Report 주문 목록 API가 제공하지 않는 값은 추정하지 않는다.
+      menuSummary: '',
+      menuCostAmount: null,
+      packagingAmount: null,
+      commissionAmount: null,
+      deliveryFeeAmount: null,
+      couponAmount: null,
+      platformSupportAmount: null,
+      netProfit: null,
+      requestText: '',
+      requestRiskType: '',
+      requestRiskLevel: '',
+      riskBadges: [],
+      lossRisk: false,
+      cancelType: '',
+      cancelReason: '',
+      refundType: '',
+      refundReason: '',
+      completedAt: '',
+      canceledAt: '',
+      refundedAt: '',
     };
   };
 
-  /*
-   * 화면 전용 risk 필터.
-   *
-   * REQUEST, LOSS, CANCEL, REFUND는 백엔드 riskType과 의미가 다르다.
-   * 그래서 서버 조회 후 프론트에서 한 번 더 거른다.
-   */
   const applyClientReportFilter = (orders, filters = {}) => {
-    if (!filters.risk) {
-      return orders;
-    }
+    const keyword = String(filters.keyword || '').trim().toLowerCase();
 
     return orders.filter((order) => {
-      if (filters.risk === 'REQUEST') {
-        return order.riskBadges.length > 0;
+      if (filters.status && order.orderStatus !== filters.status) {
+        return false;
       }
 
-      if (filters.risk === 'LOSS') {
-        return order.lossRisk;
+      if (keyword) {
+        const target = [
+          order.orderNo,
+          order.platformOrderNo,
+          order.platformType,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        if (!target.includes(keyword)) {
+          return false;
+        }
       }
 
       if (filters.risk === 'CANCEL') {
@@ -191,29 +186,78 @@ export const useReportStore = defineStore('report', () => {
         return order.orderStatus === 'REFUNDED';
       }
 
+      // REQUEST / LOSS는 현재 Report Read API가 근거 데이터를 제공하지 않는다.
+      if (filters.risk === 'REQUEST' || filters.risk === 'LOSS') {
+        return false;
+      }
+
       return true;
     });
   };
 
   const findOrders = async (filters = {}) => {
+    const params = buildOrderParams(filters);
+    const result = await fetchReportOrders(params);
+    const payload = result.data || {};
+    const content = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload.content)
+        ? payload.content
+        : [];
+
+    const normalizedOrders = content.map(normalizeReportOrder);
+
+    allReportOrders.value = normalizedOrders;
+
+    reportOrders.value = applyClientReportFilter(
+      allReportOrders.value,
+      filters
+    );
+
+    return reportOrders.value;
+  };
+
+  const findSummary = async (filters = {}) => {
+    const params = buildAnalysisParams(filters);
+    const result = await fetchReportSummary(params);
+
+    reportSummary.value = {
+      ...createEmptySummary(),
+      ...(result.data || {}),
+      financialDataStatuses:
+        result.data?.financialDataStatuses || [],
+    };
+
+    return reportSummary.value;
+  };
+
+  const findProcessingTimes = async (filters = {}) => {
+    const params = buildAnalysisParams(filters);
+    const result = await fetchReportProcessingTimes(params);
+
+    processingTimes.value = {
+      ...createEmptyProcessingTimes(),
+      ...(result.data || {}),
+      platforms: result.data?.platforms || [],
+    };
+
+    return processingTimes.value;
+  };
+
+  const findReports = async (filters = {}) => {
     try {
       isLoading.value = true;
 
-      const params = buildSearchParams(filters);
+      const params = buildAnalysisParams(filters);
       lastSearchParams.value = { ...params };
 
-      const result = await fetchReportOrders(params);
+      const [orders] = await Promise.all([
+        findOrders(filters),
+        findSummary(filters),
+        findProcessingTimes(filters),
+      ]);
 
-      const data = result.data.data || [];
-
-      const normalizedOrders = data.map(normalizeReportOrder);
-
-      reportOrders.value = applyClientReportFilter(
-        normalizedOrders,
-        filters
-      );
-
-      return reportOrders.value;
+      return orders;
     } catch (error) {
       console.error(error);
       alert('운영 리포트 조회에 실패했습니다.');
@@ -223,15 +267,54 @@ export const useReportStore = defineStore('report', () => {
     }
   };
 
+  const csvEscape = (value) => {
+    const text = value === null || value === undefined
+      ? ''
+      : String(value);
+
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  /*
+   * Report Backend에는 현재 CSV export endpoint가 없다.
+   * 존재하지 않는 API를 호출하지 않고, 화면에 조회된 실제 데이터만 CSV로 저장한다.
+   */
   const downloadOrdersCsv = async (filters = {}) => {
     try {
       isExporting.value = true;
 
-      const params = buildSearchParams(filters);
+      const rows = applyClientReportFilter(
+        allReportOrders.value,
+        filters
+      );
 
-      const result = await exportReportOrders(params);
+      const headers = [
+        '내부 주문번호',
+        '플랫폼 주문번호',
+        '플랫폼',
+        '상태',
+        '주문금액',
+        '고객 실결제액',
+        '정산정보 상태',
+        '주문일시',
+      ];
 
-      const blob = new Blob([result.data], {
+      const bodyRows = rows.map((order) => [
+        order.orderNo,
+        order.platformOrderNo,
+        order.platformType,
+        order.orderStatus,
+        order.totalAmount ?? '',
+        order.customerPaidAmount ?? '',
+        order.financialDataStatus,
+        order.orderedAtText,
+      ]);
+
+      const csv = '\uFEFF' + [headers, ...bodyRows]
+        .map((row) => row.map(csvEscape).join(','))
+        .join('\n');
+
+      const blob = new Blob([csv], {
         type: 'text/csv;charset=utf-8;',
       });
 
@@ -259,6 +342,9 @@ export const useReportStore = defineStore('report', () => {
 
   const clearReports = () => {
     reportOrders.value = [];
+    allReportOrders.value = [];
+    reportSummary.value = createEmptySummary();
+    processingTimes.value = createEmptyProcessingTimes();
     isLoading.value = false;
     isExporting.value = false;
     lastSearchParams.value = {};
@@ -266,11 +352,16 @@ export const useReportStore = defineStore('report', () => {
 
   return {
     reportOrders,
+    reportSummary,
+    processingTimes,
     isLoading,
     isExporting,
     lastSearchParams,
 
     findOrders,
+    findSummary,
+    findProcessingTimes,
+    findReports,
     downloadOrdersCsv,
     clearReports,
   };

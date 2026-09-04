@@ -6,16 +6,22 @@ import {
 import { useAuthStore } from '../../features/auth/stores/useAuthStore.js';
 import { useStoreStore } from '../../features/store/stores/useStoreStore.js';
 
+import {
+  isStoreNotFoundError,
+} from '../../features/onboarding/utils/storeOnboarding.js';
+
+import BillingView from '../../features/billing/views/BillingView.vue';
 import LandingView from '../../features/landing/views/LandingView.vue';
 import Login from '../../features/auth/views/LoginView.vue';
 import Register from '../../features/auth/views/RegisterView.vue';
+import StoreOnboardingView from '../../features/onboarding/views/StoreOnboardingView.vue';
 
 import DashboardView from '../../features/dashboard/views/DashboardView.vue';
 import MenusView from '../../features/menu/views/MenusView.vue';
 import StoreView from '../../features/store/views/StoreView.vue';
 import MockDataView from '../../features/mock/views/MockDataView.vue';
 import AllReportView from '../../features/report/views/AllReportView.vue';
-import ProfileView from '../../features/profile/views/ProfileView.vue'; // 내 정보 뷰 임포트 추가
+import ProfileView from '../../features/profile/views/ProfileView.vue';
 import OrdersView from '../../features/order/views/OrdersView.vue';
 import NotFoundView from '../error/NotFoundView.vue';
 import ServerErrorView from '../error/ServerErrorView.vue';
@@ -46,7 +52,7 @@ const routes = [
   {
     path: '/',
     name: 'landing',
-    component: LandingView, // 주소가 '/' 일 때 랜딩 페이지를 띄웁니다.
+    component: LandingView,
     meta: { isGuestOnly: true, hideLayout: true }
   },
 
@@ -68,6 +74,23 @@ const routes = [
     name: 'register',
     component: Register,
     meta: { isGuestOnly: true, hideLayout: true }
+  },
+
+  /*
+   * 신규 사용자 Store Onboarding
+   *
+   * 로그인은 필요하지만 Store가 없어도 접근할 수 있어야 한다.
+   */
+  {
+    path: '/onboarding/store',
+    name: 'store-onboarding',
+    component: StoreOnboardingView,
+    meta: {
+      isAuthenticated: true,
+      allowWithoutStore: true,
+      hideLayout: true,
+      title: '매장 등록',
+    },
   },
 
   /*
@@ -101,7 +124,10 @@ const routes = [
   },
 
   /*
-   * 매장 관리 (기본정보, 플랫폼 수수료, 운영 설정 통합)
+   * 매장 관리
+   *
+   * 기존 Store 관리 화면은 A 작업 범위이므로
+   * 신규 사용자 Onboarding과 분리한다.
    */
   {
     path: '/store',
@@ -111,13 +137,23 @@ const routes = [
   },
 
   /*
-   * 운영 리포트 (매출, 취소, 정산, 손실 분석 등)
+   * 운영 리포트
    */
   {
     path: '/reports',
     name: 'reports',
     component: AllReportView,
     meta: { isAuthenticated: true, title: '운영 리포트' },
+  },
+
+  {
+    path: '/billing',
+    name: 'billing',
+    component: BillingView,
+    meta: {
+      isAuthenticated: true,
+      title: '구독 관리',
+    },
   },
 
   /*
@@ -131,7 +167,7 @@ const routes = [
   },
 
   /*
-   * 내 정보 화면 (프로필)
+   * 내 정보 화면
    */
   {
     path: '/profile',
@@ -142,7 +178,6 @@ const routes = [
 
   /*
    * 서버 오류 화면
-   * 500 이상 서버 오류나 백엔드 연결 실패 시 이동한다.
    */
   {
     path: '/error',
@@ -153,7 +188,6 @@ const routes = [
 
   /*
    * 404 화면
-   * 등록되지 않은 주소 접근 시 표시한다.
    */
   {
     path: '/not-found',
@@ -181,9 +215,8 @@ router.beforeEach(async (to) => {
   const authStore = useAuthStore();
 
   /*
-   * 로그인이 필요한 화면인데 Access Token이 없다면
-   * Refresh Token 쿠키로 로그인 상태 복구를 먼저 시도한다.
-   * reissue 시도
+   * 보호 화면인데 Access Token이 없다면
+   * Refresh Token으로 로그인 상태를 먼저 복구한다.
    */
   if (
     to.meta.isAuthenticated &&
@@ -199,7 +232,7 @@ router.beforeEach(async (to) => {
   }
 
   /*
-   * 복구 후에도 로그인 상태가 아니면 로그인 화면으로 보낸다.
+   * 복구 후에도 로그인 상태가 아니면 로그인으로 이동한다.
    */
   if (
     to.meta.isAuthenticated &&
@@ -211,11 +244,10 @@ router.beforeEach(async (to) => {
   }
 
   /*
-   * 게스트 화면에서는 Refresh Token 재발급을 시도하지 않는다.
-   * 로그인 화면 첫 진입 시 불필요한 401 reissue 요청이 보이는 문제를 막기 위함이다.
+   * 이미 로그인한 사용자가 Guest 화면에 접근하면
+   * 우선 Dashboard 진입을 시도한다.
+   * Store가 없으면 아래 Store Guard에서 Onboarding으로 전환된다.
    */
-  
-  // 이미 로그인 상태면 게스트 페이지 접근 차단
   if (
     to.meta.isGuestOnly &&
     authStore.isLoggedIn
@@ -224,29 +256,54 @@ router.beforeEach(async (to) => {
       name: 'dashboard',
     };
   }
+
   /*
- * 로그인은 되어 있지만 매장이 없는 경우,
- * 매장 관리 화면으로 보낸다.
- *
- * dashboard / orders / menus / reports / mockdata는
- * storeId가 있어야 정상 동작한다.
- */
-if (
-  to.meta.isAuthenticated &&
-  authStore.isLoggedIn &&
-  !to.meta.allowWithoutStore
-) {
-  const storeStore = useStoreStore();
+   * Store가 필요한 보호 화면.
+   *
+   * 신규 사용자의 GET /api/stores/me → 404 STORE-001 은
+   * 장애가 아니라 정상 Onboarding 상태다.
+   */
+  if (
+    to.meta.isAuthenticated &&
+    authStore.isLoggedIn &&
+    !to.meta.allowWithoutStore
+  ) {
+    const storeStore = useStoreStore();
 
-  const myStore = await storeStore.checkMyStore();
+    try {
+      const myStore = await storeStore.checkMyStore();
 
-  if (!myStore) {
-    alert('매장 등록을 먼저 해야 합니다. 매장 정보를 등록한 뒤 서비스를 이용해주세요.');
-    return {
-      name: 'store',
-    };
+      if (!myStore) {
+        return {
+          name: 'store-onboarding',
+        };
+      }
+    } catch (error) {
+      if (isStoreNotFoundError(error)) {
+        return {
+          name: 'store-onboarding',
+        };
+      }
+
+      if (
+        error?.code === 'AUTH_REQUIRED' ||
+        error?.response?.status === 401
+      ) {
+        return {
+          name: 'login',
+        };
+      }
+
+      console.error(
+        '매장 상태 확인 실패:',
+        error
+      );
+
+      return {
+        name: 'server-error',
+      };
+    }
   }
-}
 
   return true;
 });

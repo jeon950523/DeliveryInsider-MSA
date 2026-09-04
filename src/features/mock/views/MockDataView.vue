@@ -6,9 +6,6 @@ import { createMockOrders, deleteMockOrders as deleteMockOrdersRequest } from '.
 const generalCnt = ref(1); 
 const requestScenario = ref('ALLERGY'); // 요청사항 확인 시나리오 값
 
-// [지연 테스트 주문 생성] 상태 (캡처 이미지 시안에서는 제거되었으므로 내부 로직에서만 기본값 1 유지)
-const delayCnt = ref(1);
-
 // ----------------------
 // 백엔드 연동 로직
 // ----------------------
@@ -91,28 +88,7 @@ const createScenario = async (scenarioType, title) => {
   }
 };
 
-// 3. 지연 테스트 전용
-const createDelayOrder = async () => {
-  try {
-    const response = await createMockOrders({
-      scenario: 'DELAY_TEST',
-      count: delayCnt.value
-    });
-
-    const data = response.data.data;
-
-    const msg =
-      `조리 지연 테스트 주문 ${data.createdCount}건이 생성되었습니다. ` +
-      `주문번호: ${data.orderNos.join(', ')}`;
-
-    refreshHeaderNotifications();
-    alert(msg);
-  } catch (error) {
-    handleError(error);
-  }
-};
-
-// 4. 발표 피크타임 세트 (여러 종류 일괄 생성)
+// 3. 발표 피크타임 세트 (여러 종류 일괄 생성)
 const createPeakMock = async () => {
   try {
     const response = await createMockOrders({
@@ -133,7 +109,7 @@ const createPeakMock = async () => {
   }
 };
 
-// 5. Mock 주문 일괄 삭제
+// 4. Mock 주문 일괄 삭제
 const deleteMockOrders = async () => {
   if (!confirm('정말 로그인한 매장의 모든 Mock 주문을 삭제하시겠습니까?')) {
     return;
@@ -220,32 +196,6 @@ const deleteMockOrders = async () => {
           >
             요청사항 확인 주문 생성
           </button>
-        </div>
-      </section>
-
-      <section class="mock-card">
-        <div class="card-header">
-          <h2>지연 테스트 주문</h2>
-          <p>조리중 '주의' 상태로 생성합니다.</p>
-          </div>
-           <div class="card-body">
-              <div class="input-group">
-                <label>생성 내용</label>
-                <select
-                v-model.number="delayCnt"
-                class="input-field select-field"
-                title="생성할 지연 테스트 주문 수를 선택합니다."
-              >
-                <option :value="1">1건</option>
-                <option :value="3">3건</option>
-                <option :value="5">5건</option>
-                <option :value="10">10건</option>
-                </select>
-          </div>
-        </div>
-        <div class="card-body empty-body"></div>
-        <div class="card-footer">
-          <button type="button" class="primary-button full-width-btn" @click="createDelayOrder">지연 테스트 생성</button>
         </div>
       </section>
 
