@@ -4,7 +4,6 @@ import com.deliveryinsider.scg.global.error.GatewayErrorResponse;
 import com.deliveryinsider.scg.global.security.jwt.InvalidAccessTokenException;
 import com.deliveryinsider.scg.global.security.jwt.JwtAccessTokenVerifier;
 import com.deliveryinsider.scg.global.security.jwt.JwtProperties;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -40,7 +39,8 @@ public class JwtAuthenticationWebFilter implements WebFilter {
     private static final Set<String> PUBLIC_AUTH_PATHS = Set.of(
         "/api/auth/login",
         "/api/auth/reissue-token",
-        "/api/auth/logout"
+        "/api/auth/logout",
+        "/api/auth/register"
     );
 
     private final JwtAccessTokenVerifier jwtAccessTokenVerifier;
