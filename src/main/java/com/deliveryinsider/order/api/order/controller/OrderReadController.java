@@ -1,7 +1,6 @@
 package com.deliveryinsider.order.api.order.controller;
 
 import com.deliveryinsider.order.application.order.read.OrderReadService;
-import com.deliveryinsider.order.application.order.read.response.OrderDelayRiskResponse;
 import com.deliveryinsider.order.application.order.read.response.OrderDetailResponse;
 import com.deliveryinsider.order.application.order.read.response.OrderOperationSummaryResponse;
 import com.deliveryinsider.order.application.order.read.response.TodayOrderResponse;
@@ -47,21 +46,6 @@ public class OrderReadController {
             "실시간 운영 요약을 조회했습니다.",
             orderReadService
                 .findOperationSummary(
-                    userId
-                )
-        );
-    }
-
-    @GetMapping("/delay-risks")
-    public GlobalResponse<List<OrderDelayRiskResponse>>
-    findDelayRisks(
-        @RequestHeader("X-User-Id")
-        Long userId
-    ) {
-        return GlobalResponse.success(
-            "지연 위험 주문을 조회했습니다.",
-            orderReadService
-                .findDelayRisks(
                     userId
                 )
         );

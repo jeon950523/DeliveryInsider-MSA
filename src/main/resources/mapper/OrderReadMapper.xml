@@ -75,6 +75,26 @@
         />
 
         <result
+                property="readyForPickupAt"
+                column="ready_for_pickup_at"
+        />
+
+        <result
+                property="pickedUpAt"
+                column="picked_up_at"
+        />
+
+        <result
+                property="completedAt"
+                column="completed_at"
+        />
+
+        <result
+                property="canceledAt"
+                column="canceled_at"
+        />
+
+        <result
                 property="deliveryAddress"
                 column="delivery_address"
         />
@@ -137,6 +157,14 @@
             o.ordered_at,
 
             o.cooking_started_at,
+
+            o.ready_for_pickup_at,
+
+            o.picked_up_at,
+
+            o.completed_at,
+
+            o.canceled_at,
 
             o.delivery_address,
 
@@ -214,8 +242,20 @@
                  )
 
         ORDER BY
-            o.ordered_at DESC,
-            o.id DESC
+
+            CASE
+                WHEN o.operation_status
+                    IN (
+                        'COMPLETED',
+                        'CANCELED'
+                         )
+                    THEN 1
+                ELSE 0
+                END ASC,
+
+            o.ordered_at ASC,
+
+            o.id ASC
 
     </select>
 

@@ -1,5 +1,6 @@
 package com.deliveryinsider.order.messaging.order.dto;
 
+import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
 import com.deliveryinsider.order.domain.order.model.PlatformType;
 import com.deliveryinsider.order.domain.order.model.ProviderChargeType;
@@ -18,6 +19,8 @@ public record OrderCreatedEventData(
     String externalStoreId,
 
     OrderStatus status,
+    OrderOperationStatus operationStatus,
+
     Long sourceSequence,
 
     Instant orderedAt,
@@ -32,6 +35,7 @@ public record OrderCreatedEventData(
 
     List<Item> items,
     List<Charge> providerCharges
+
 ) {
 
     public record Item(

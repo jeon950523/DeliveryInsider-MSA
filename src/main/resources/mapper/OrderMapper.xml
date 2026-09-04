@@ -351,15 +351,36 @@
         DELIVERING / COMPLETED / CANCELED은
         updateProviderStatus가 Platform Event 기준으로 변경한다.
     -->
+    <!--
+     매장 내부 운영 Lifecycle 변경.
+
+     점주:
+     WAITING
+     → COOKING
+     → READY_FOR_PICKUP
+
+     operation_version
+     → 운영상태 변경 버전
+
+     event_version
+     → order.events 전체 Domain Event 순서
+
+     DELIVERING / COMPLETED / CANCELED은
+     updateProviderStatus가 Platform Event 기준으로 변경한다.
+ -->
     <update id="updateOperationStatus">
 
         UPDATE orders
+
         SET
         operation_status =
         #{operationStatus},
 
         operation_version =
         #{operationVersion},
+
+        event_version =
+        #{eventVersion},
 
         cooking_started_at =
         COALESCE(

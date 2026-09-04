@@ -26,17 +26,15 @@ public record OrderOperationSummaryResponse(
 
     int canceledCount,
 
-    int delayRiskCount,
-
     int requestRiskCount,
 
     int lossRiskCount,
 
     int cancelRate,
 
-    int loadRate,
+    int oldestActiveOrderElapsedMinutes,
 
-    String kitchenLoadLevel,
+    Integer averageCompletedProcessingMinutes,
 
     String message
 

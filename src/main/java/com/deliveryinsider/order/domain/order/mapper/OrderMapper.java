@@ -84,6 +84,9 @@ public interface OrderMapper {
         @Param("operationVersion")
         long operationVersion,
 
+        @Param("eventVersion")
+        long eventVersion,
+
         @Param("cookingStartedAt")
         LocalDateTime cookingStartedAt,
 

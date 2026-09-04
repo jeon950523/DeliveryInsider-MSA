@@ -24,11 +24,15 @@ public record TodayOrderResponse(
 
     long netProfit,
 
-    int totalCookingTime,
-
     LocalDateTime orderedAt,
 
     LocalDateTime cookingStartedAt,
+
+    LocalDateTime currentStageStartedAt,
+
+    int totalElapsedMinutes,
+
+    Integer currentStageElapsedMinutes,
 
     String deliveryAddress,
 

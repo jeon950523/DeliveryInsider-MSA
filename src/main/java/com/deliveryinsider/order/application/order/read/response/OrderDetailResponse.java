@@ -35,7 +35,6 @@ public record OrderDetailResponse(
 
     String financialDataStatus,
 
-    int totalCookingTime,
 
     String deliveryAddress,
 
@@ -43,11 +42,17 @@ public record OrderDetailResponse(
 
     LocalDateTime cookingStartedAt,
 
+    LocalDateTime readyForPickupAt,
+
+    LocalDateTime pickedUpAt,
+
     LocalDateTime completedAt,
 
     LocalDateTime canceledAt,
 
     LocalDateTime refundedAt,
+
+    ProcessingTimeInfo processingTime,
 
     RequestInfo request,
 
@@ -58,6 +63,23 @@ public record OrderDetailResponse(
     List<Item> items
 
 ) {
+
+    public record ProcessingTimeInfo(
+
+        int totalElapsedMinutes,
+
+        Integer waitingMinutes,
+
+        Integer cookingMinutes,
+
+        Integer pickupWaitingMinutes,
+
+        Integer deliveryMinutes,
+
+        Integer totalProcessingMinutes
+
+    ) {
+    }
 
     public record Item(
 

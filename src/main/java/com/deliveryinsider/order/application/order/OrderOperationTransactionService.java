@@ -2,23 +2,34 @@ package com.deliveryinsider.order.application.order;
 
 import com.deliveryinsider.order.api.order.response.OrderOperationStatusResponse;
 import com.deliveryinsider.order.domain.order.entity.OrderEntity;
+import com.deliveryinsider.order.domain.order.entity.OutboxEventEntity;
 import com.deliveryinsider.order.domain.order.mapper.OrderMapper;
+import com.deliveryinsider.order.domain.order.mapper.OutboxEventMapper;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatusTransitionPolicy;
 import com.deliveryinsider.order.global.error.BusinessException;
 import com.deliveryinsider.order.global.error.OrderErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class OrderOperationTransactionService {
 
     private final OrderMapper orderMapper;
+
+    private final OutboxEventMapper outboxEventMapper;
+
+    private final OrderOutboxEventFactory outboxFactory;
 
     private final OrderOperationStatusTransitionPolicy
         transitionPolicy;
@@ -85,35 +96,61 @@ public class OrderOperationTransactionService {
             );
         }
 
-        LocalDateTime now =
-            LocalDateTime.now(
-                clock
+        OrderOperationStatus previousOperationStatus =
+            order.getOperationStatus();
+
+        /*
+         * DB Timestamp와 Domain Event Timestamp가
+         * 동일한 실제 변경 시각을 가리키도록
+         * Clock에서 Instant를 한 번만 얻는다.
+         */
+        Instant operationOccurredAt =
+            clock.instant();
+
+        LocalDateTime operationOccurredAtLocal =
+            LocalDateTime.ofInstant(
+                operationOccurredAt,
+                ZoneOffset.UTC
             );
 
         LocalDateTime cookingStartedAt =
             targetStatus
                 == OrderOperationStatus.COOKING
-                ? now
+                ? operationOccurredAtLocal
                 : null;
 
         LocalDateTime readyForPickupAt =
             targetStatus
                 == OrderOperationStatus.READY_FOR_PICKUP
-                ? now
+                ? operationOccurredAtLocal
                 : null;
 
         long nextOperationVersion =
             order.getOperationVersion()
                 + 1;
 
+        /*
+         * order.events 전체의 순서를 유지한다.
+         */
+        long nextEventVersion =
+            order.getEventVersion()
+                + 1;
+
         int updated =
             orderMapper
                 .updateOperationStatus(
                     order.getId(),
+
                     targetStatus,
+
                     nextOperationVersion,
+
+                    nextEventVersion,
+
                     cookingStartedAt,
+
                     readyForPickupAt,
+
                     null,
                     null,
                     null
@@ -134,6 +171,10 @@ public class OrderOperationTransactionService {
             nextOperationVersion
         );
 
+        order.setEventVersion(
+            nextEventVersion
+        );
+
         if (cookingStartedAt != null) {
             order.setCookingStartedAt(
                 cookingStartedAt
@@ -146,6 +187,25 @@ public class OrderOperationTransactionService {
             );
         }
 
+        /*
+         * 상태 UPDATE와 Outbox INSERT가
+         * 동일 Transaction에 포함된다.
+         *
+         * Outbox 저장이 실패하면 상태 변경도 Rollback된다.
+         */
+        OutboxEventEntity outboxEvent =
+            outboxFactory
+                .createOrderOperationStatusChanged(
+                    order,
+                    previousOperationStatus,
+                    operationOccurredAt,
+                    resolveTraceId()
+                );
+
+        outboxEventMapper.insert(
+            outboxEvent
+        );
+
         return new OrderOperationStatusResponse(
             order.getId(),
             order.getStatus(),
@@ -157,5 +217,21 @@ public class OrderOperationTransactionService {
             order.getCompletedAt(),
             order.getCanceledAt()
         );
+    }
+
+    private String resolveTraceId() {
+        return Optional
+            .ofNullable(
+                MDC.get(
+                    "traceId"
+                )
+            )
+            .filter(traceId ->
+                !traceId.isBlank()
+            )
+            .orElseGet(() ->
+                UUID.randomUUID()
+                    .toString()
+            );
     }
 }

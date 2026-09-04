@@ -1,12 +1,11 @@
 package com.deliveryinsider.order.messaging.order.dto;
 
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
-import com.deliveryinsider.order.domain.order.model.OrderStatus;
 import com.deliveryinsider.order.domain.order.model.PlatformType;
 
 import java.time.Instant;
 
-public record OrderStatusChangedEventData(
+public record OrderOperationStatusChangedEventData(
 
     Long orderId,
 
@@ -14,16 +13,12 @@ public record OrderStatusChangedEventData(
     String platformOrderId,
     String externalStoreId,
 
-    OrderStatus previousStatus,
-    OrderStatus status,
-
+    OrderOperationStatus previousOperationStatus,
     OrderOperationStatus operationStatus,
 
-    Long sourceSequence,
-    Instant providerOccurredAt,
+    long operationVersion,
 
-    String providerCancelCode,
-    String providerCancelReason
+    Instant operationOccurredAt
 
 ) {
 }

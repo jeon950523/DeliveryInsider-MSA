@@ -1,6 +1,5 @@
 package com.deliveryinsider.order.application.order.read;
 
-import com.deliveryinsider.order.application.order.read.response.OrderDelayRiskResponse;
 import com.deliveryinsider.order.application.order.read.response.OrderDetailResponse;
 import com.deliveryinsider.order.application.order.read.response.OrderOperationSummaryResponse;
 import com.deliveryinsider.order.application.order.read.response.TodayOrderResponse;
@@ -21,6 +20,9 @@ import com.deliveryinsider.order.integration.store.CurrentStoreClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -37,6 +39,8 @@ public class OrderReadService {
 
     private final OrderProviderChargeMapper
         orderProviderChargeMapper;
+
+    private final Clock clock;
 
     public List<TodayOrderResponse> findToday(
         Long userId
@@ -180,26 +184,36 @@ public class OrderReadService {
                 ? 0
                 : (int) Math.round(
                 canceledCount
-                * 100.0
-                / todayOrderCount
+                    * 100.0
+                    / todayOrderCount
             );
-
-        /*
-         * 주방 부하율은 P0-D Delay Risk 작업에서
-         * 조리시간/Batch Snapshot과 함께 계산한다.
-         */
-        int loadRate =
-            0;
-
-        /*
-         * Snapshot 기반 데이터는 현재 존재한다.
-         * 실제 Delay Risk 계산식 연결은 다음 작업에서 수행한다.
-         */
-        int delayRiskCount =
-            0;
 
         String financialDataStatus =
             aggregateFinancialDataStatus(
+                orders
+            );
+
+        LocalDateTime now =
+            LocalDateTime.now(
+                clock
+            );
+
+        int oldestActiveOrderElapsedMinutes =
+            orders.stream()
+                .filter(
+                    this::isActiveOperationStatus
+                )
+                .mapToInt(order ->
+                    totalElapsedMinutes(
+                        order,
+                        now
+                    )
+                )
+                .max()
+                .orElse(0);
+
+        Integer averageCompletedProcessingMinutes =
+            calculateAverageCompletedProcessingMinutes(
                 orders
             );
 
@@ -219,35 +233,16 @@ public class OrderReadService {
             deliveringCount,
             canceledCount,
 
-            delayRiskCount,
             requestRiskCount,
             lossRiskCount,
 
             cancelRate,
-            loadRate,
 
-            "NORMAL",
+            oldestActiveOrderElapsedMinutes,
+            averageCompletedProcessingMinutes,
 
-            "매장 운영 상태 기준 운영 요약입니다."
+            "실제 주문 경과시간 기준 운영 요약입니다."
         );
-    }
-
-    public List<OrderDelayRiskResponse>
-    findDelayRisks(
-        Long userId
-    ) {
-        /*
-         * 사용자-매장 소유권 확인은 수행한다.
-         */
-        resolveStoreId(
-            userId
-        );
-
-        /*
-         * 현재 데이터 계약으로 정확한 Delay Risk를
-         * 계산할 수 없기 때문에 임의값을 만들지 않는다.
-         */
-        return List.of();
     }
 
     public OrderDetailResponse findOne(
@@ -427,22 +422,25 @@ public class OrderReadService {
                 order
             ),
 
-            /*
-             * 아직 조리시간 Snapshot 없음.
-             */
-            0,
-
             order.getDeliveryAddress(),
 
             order.getOrderedAt(),
 
             order.getCookingStartedAt(),
 
+            order.getReadyForPickupAt(),
+
+            order.getPickedUpAt(),
+
             order.getCompletedAt(),
 
             order.getCanceledAt(),
 
             null,
+
+            toProcessingTimeInfo(
+                order
+            ),
 
             new OrderDetailResponse.RequestInfo(
                 order.getCustomerRequestText(),
@@ -481,6 +479,85 @@ public class OrderReadService {
             item.getOrderedUnitPrice()
                 * item.getQuantity()
         );
+    }
+
+    private OrderDetailResponse.ProcessingTimeInfo
+    toProcessingTimeInfo(
+        OrderEntity order
+    ) {
+        LocalDateTime now =
+            LocalDateTime.now(
+                clock
+            );
+
+        OrderOperationStatus status =
+            order.getOperationStatus();
+
+        Integer waitingMinutes =
+            resolveStageMinutes(
+                order.getOrderedAt(),
+                order.getCookingStartedAt(),
+                status == OrderOperationStatus.WAITING,
+                now
+            );
+
+        Integer cookingMinutes =
+            resolveStageMinutes(
+                order.getCookingStartedAt(),
+                order.getReadyForPickupAt(),
+                status == OrderOperationStatus.COOKING,
+                now
+            );
+
+        Integer pickupWaitingMinutes =
+            resolveStageMinutes(
+                order.getReadyForPickupAt(),
+                order.getPickedUpAt(),
+                status == OrderOperationStatus.READY_FOR_PICKUP,
+                now
+            );
+
+        Integer deliveryMinutes =
+            resolveStageMinutes(
+                order.getPickedUpAt(),
+                order.getCompletedAt(),
+                status == OrderOperationStatus.DELIVERING,
+                now
+            );
+
+        Integer totalProcessingMinutes =
+            status == OrderOperationStatus.COMPLETED
+                ? nullableMinutesBetween(
+                    order.getOrderedAt(),
+                    order.getCompletedAt()
+                )
+                : null;
+
+        LocalDateTime elapsedEndAt =
+            resolveOrderEndAt(
+                status,
+                order.getCompletedAt(),
+                order.getCanceledAt(),
+                now
+            );
+
+        int totalElapsedMinutes =
+            valueOrZero(
+                nullableMinutesBetween(
+                    order.getOrderedAt(),
+                    elapsedEndAt
+                )
+            );
+
+        return new OrderDetailResponse
+            .ProcessingTimeInfo(
+                totalElapsedMinutes,
+                waitingMinutes,
+                cookingMinutes,
+                pickupWaitingMinutes,
+                deliveryMinutes,
+                totalProcessingMinutes
+            );
     }
 
     private boolean isCommissionCharge(
@@ -543,6 +620,11 @@ public class OrderReadService {
     private TodayOrderResponse toTodayResponse(
         OrderTodayReadRow order
     ) {
+        LocalDateTime now =
+            LocalDateTime.now(
+                clock
+            );
+
         return new TodayOrderResponse(
             order.getId(),
 
@@ -570,14 +652,23 @@ public class OrderReadService {
                 order
             ),
 
-            /*
-             * 실제 조리시간 계산은 다음 P0-D에서 연결한다.
-             */
-            0,
-
             order.getOrderedAt(),
 
             order.getCookingStartedAt(),
+
+            currentStageStartedAt(
+                order
+            ),
+
+            totalElapsedMinutes(
+                order,
+                now
+            ),
+
+            currentStageElapsedMinutes(
+                order,
+                now
+            ),
 
             order.getDeliveryAddress(),
 
@@ -588,6 +679,7 @@ public class OrderReadService {
             null
         );
     }
+
     private String toOperationStatusName(
         OrderOperationStatus status
     ) {
@@ -640,6 +732,178 @@ public class OrderReadService {
 
         return status != null
             && status != OrderOperationStatus.CANCELED;
+    }
+
+    private LocalDateTime currentStageStartedAt(
+        OrderTodayReadRow order
+    ) {
+        OrderOperationStatus status =
+            order.getOperationStatus();
+
+        if (status == null) {
+            return null;
+        }
+
+        return switch (status) {
+            case WAITING ->
+                order.getOrderedAt();
+
+            case COOKING ->
+                order.getCookingStartedAt();
+
+            case READY_FOR_PICKUP ->
+                order.getReadyForPickupAt();
+
+            case DELIVERING ->
+                order.getPickedUpAt();
+
+            case COMPLETED,
+                 CANCELED ->
+                null;
+        };
+    }
+
+    private Integer currentStageElapsedMinutes(
+        OrderTodayReadRow order,
+        LocalDateTime now
+    ) {
+        return nullableMinutesBetween(
+            currentStageStartedAt(
+                order
+            ),
+            now
+        );
+    }
+
+    private int totalElapsedMinutes(
+        OrderTodayReadRow order,
+        LocalDateTime now
+    ) {
+        LocalDateTime endAt =
+            resolveOrderEndAt(
+                order.getOperationStatus(),
+                order.getCompletedAt(),
+                order.getCanceledAt(),
+                now
+            );
+
+        return valueOrZero(
+            nullableMinutesBetween(
+                order.getOrderedAt(),
+                endAt
+            )
+        );
+    }
+
+    private LocalDateTime resolveOrderEndAt(
+        OrderOperationStatus status,
+        LocalDateTime completedAt,
+        LocalDateTime canceledAt,
+        LocalDateTime now
+    ) {
+        if (
+            status == OrderOperationStatus.COMPLETED
+                && completedAt != null
+        ) {
+            return completedAt;
+        }
+
+        if (
+            status == OrderOperationStatus.CANCELED
+                && canceledAt != null
+        ) {
+            return canceledAt;
+        }
+
+        return now;
+    }
+
+    private Integer resolveStageMinutes(
+        LocalDateTime startAt,
+        LocalDateTime completedAt,
+        boolean currentStage,
+        LocalDateTime now
+    ) {
+        if (startAt == null) {
+            return null;
+        }
+
+        if (completedAt != null) {
+            return nullableMinutesBetween(
+                startAt,
+                completedAt
+            );
+        }
+
+        if (currentStage) {
+            return nullableMinutesBetween(
+                startAt,
+                now
+            );
+        }
+
+        return null;
+    }
+
+    private Integer
+    calculateAverageCompletedProcessingMinutes(
+        List<OrderTodayReadRow> orders
+    ) {
+        List<Integer> samples =
+            orders.stream()
+                .filter(order ->
+                    order.getOperationStatus()
+                        == OrderOperationStatus.COMPLETED
+                )
+                .map(order ->
+                    nullableMinutesBetween(
+                        order.getOrderedAt(),
+                        order.getCompletedAt()
+                    )
+                )
+                .filter(minutes ->
+                    minutes != null
+                )
+                .toList();
+
+        if (samples.isEmpty()) {
+            return null;
+        }
+
+        return (int) Math.round(
+            samples.stream()
+                .mapToInt(
+                    Integer::intValue
+                )
+                .average()
+                .orElse(0)
+        );
+    }
+
+    private Integer nullableMinutesBetween(
+        LocalDateTime startAt,
+        LocalDateTime endAt
+    ) {
+        if (
+            startAt == null
+                || endAt == null
+        ) {
+            return null;
+        }
+
+        long minutes =
+            Duration.between(
+                startAt,
+                endAt
+            ).toMinutes();
+
+        if (minutes < 0) {
+            return null;
+        }
+
+        return Math.toIntExact(
+            minutes
+        );
     }
 
     private long totalAmount(

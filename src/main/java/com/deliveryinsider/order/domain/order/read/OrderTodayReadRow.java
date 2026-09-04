@@ -40,6 +40,14 @@ public class OrderTodayReadRow {
 
     private LocalDateTime cookingStartedAt;
 
+    private LocalDateTime readyForPickupAt;
+
+    private LocalDateTime pickedUpAt;
+
+    private LocalDateTime completedAt;
+
+    private LocalDateTime canceledAt;
+
     private String deliveryAddress;
 
     private String requestText;
