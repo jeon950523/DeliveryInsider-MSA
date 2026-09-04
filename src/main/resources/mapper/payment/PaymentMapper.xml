@@ -180,4 +180,14 @@
         )
 
     </select>
+    <select
+            id="findByPaymentOrderIdForUpdate"
+            resultMap="paymentResultMap">
+
+        SELECT *
+        FROM payments
+        WHERE payment_order_id = #{paymentOrderId}
+            FOR UPDATE
+
+    </select>
 </mapper>

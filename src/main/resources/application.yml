@@ -69,6 +69,8 @@ billing:
   scheduler-enabled: ${BILLING_SCHEDULER_ENABLED:true}
   scheduler-fixed-delay-ms: ${BILLING_SCHEDULER_FIXED_DELAY_MS:3000}
   toss-secret-key: ${TOSS_SECRET_KEY:}
+  toss-base-url: ${TOSS_BASE_URL:https://api.tosspayments.com}
+
   subscription:
     expiration:
       fixed-delay-ms: ${BILLING_SUBSCRIPTION_EXPIRATION_DELAY_MS:3000}

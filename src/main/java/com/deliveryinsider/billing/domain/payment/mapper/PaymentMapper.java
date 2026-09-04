@@ -57,4 +57,8 @@ public interface PaymentMapper {
         @Param("subscriptionId")
         Long subscriptionId
     );
+    Optional<PaymentEntity> findByPaymentOrderIdForUpdate(
+        @Param("paymentOrderId")
+        String paymentOrderId
+    );
 }

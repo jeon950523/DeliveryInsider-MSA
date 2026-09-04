@@ -23,29 +23,54 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class InitialPaymentTransactionService {
 
-    private final BillingOutboxWriter billingOutboxWriter;
     private static final String INITIAL_BILLING_CYCLE_KEY = "INITIAL";
 
     private final SubscriptionMapper subscriptionMapper;
     private final PaymentMapper paymentMapper;
+    private final BillingOutboxWriter billingOutboxWriter;
 
     /**
-     * 초기 결제 시도 준비.
-     *
-     * 1. 현재 구독 조회
-     * 2. Subscription row lock
-     * 3. PENDING 상태 확인
-     * 4. 같은 INITIAL 결제 주기의 마지막 Payment 확인
-     * 5. FAILED인 경우에만 재시도 허용
-     * 6. 새로운 REQUESTED Payment 생성
+     * Mock 결제 회귀 테스트용 Payment 준비.
      */
     @Transactional
     public PaymentEntity prepare(
         Long storeId
     ) {
+        return prepareInternal(
+            storeId,
+            "MOCK"
+        );
+    }
+
+    /**
+     * 실제 Toss 일반결제 준비.
+     */
+    @Transactional
+    public PaymentEntity prepareToss(
+        Long storeId
+    ) {
+        return prepareInternal(
+            storeId,
+            "TOSS"
+        );
+    }
+
+    /**
+     * Initial Payment 공통 준비 로직.
+     *
+     * - PENDING 구독만 결제 가능
+     * - REQUESTED / SUCCEEDED / UNKNOWN 존재 시 신규 결제 차단
+     * - FAILED 이후에는 RETRY Payment 생성 가능
+     */
+    private PaymentEntity prepareInternal(
+        Long storeId,
+        String provider
+    ) {
         SubscriptionEntity subscription =
             subscriptionMapper
-                .findCurrentByStoreId(storeId)
+                .findCurrentByStoreId(
+                    storeId
+                )
                 .orElseThrow(() ->
                     new BusinessException(
                         BillingErrorCode.SUBSCRIPTION_NOT_FOUND
@@ -119,8 +144,12 @@ public class InitialPaymentTransactionService {
                 .billingCycleKey(
                     INITIAL_BILLING_CYCLE_KEY
                 )
-                .attemptNo(attemptNo)
-                .paymentType(paymentType)
+                .attemptNo(
+                    attemptNo
+                )
+                .paymentType(
+                    paymentType
+                )
                 .paymentOrderId(
                     "DI-INITIAL-"
                         + subscription.getId()
@@ -132,28 +161,39 @@ public class InitialPaymentTransactionService {
                 .idempotencyKey(
                     UUID.randomUUID().toString()
                 )
-                .provider("MOCK")
+                .provider(
+                    provider
+                )
                 .amount(
                     subscription.getBillingAmount()
                 )
                 .status(
                     PaymentStatus.REQUESTED
                 )
-                .requestedAt(now)
+                .requestedAt(
+                    now
+                )
                 .build();
 
-        paymentMapper.insert(payment);
+        int inserted =
+            paymentMapper.insert(
+                payment
+            );
+
+        if (inserted != 1) {
+            throw new IllegalStateException(
+                "Payment REQUESTED 생성에 실패했습니다."
+            );
+        }
 
         return payment;
     }
 
     /**
-     * PG 성공 결과 확정.
+     * 결제 성공 확정.
      *
-     * Payment REQUESTED -> SUCCEEDED
-     * Subscription PENDING -> ACTIVE
-     *
-     * 두 변경은 같은 DB Transaction으로 처리한다.
+     * REQUESTED 또는 UNKNOWN Payment를 SUCCEEDED로 확정하고
+     * PENDING Subscription을 ACTIVE로 전환한다.
      */
     @Transactional
     public PaymentEntity succeed(
@@ -162,15 +202,17 @@ public class InitialPaymentTransactionService {
     ) {
         PaymentEntity payment =
             paymentMapper
-                .findByIdForUpdate(paymentId)
+                .findByIdForUpdate(
+                    paymentId
+                )
                 .orElseThrow(() ->
                     new BusinessException(
                         BillingErrorCode.PAYMENT_NOT_FOUND
                     )
                 );
 
-        if (payment.getStatus()
-            != PaymentStatus.REQUESTED && payment.getStatus() != PaymentStatus.UNKNOWN) {
+        if (payment.getStatus() != PaymentStatus.REQUESTED
+            && payment.getStatus() != PaymentStatus.UNKNOWN) {
 
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
@@ -243,16 +285,18 @@ public class InitialPaymentTransactionService {
                 "Subscription ACTIVE 전환에 실패했습니다."
             );
         }
-        billingOutboxWriter.appendSubscriptionActivated(
-            subscription.getId(),
-            subscription.getStoreId(),
-            subscription.getPlanId(),
-            payment.getId(),
-            payment.getAmount(),
-            periodStart,
-            periodEnd,
-            nextVersion
-        );
+
+        billingOutboxWriter
+            .appendSubscriptionActivated(
+                subscription.getId(),
+                subscription.getStoreId(),
+                subscription.getPlanId(),
+                payment.getId(),
+                payment.getAmount(),
+                periodStart,
+                periodEnd,
+                nextVersion
+            );
 
         return paymentMapper
             .findByIdForUpdate(
@@ -262,12 +306,9 @@ public class InitialPaymentTransactionService {
     }
 
     /**
-     * PG가 명확한 결제 실패를 반환한 경우.
+     * 결제 실패 확정.
      *
-     * Payment만 FAILED로 변경하고
-     * Subscription은 PENDING으로 유지한다.
-     *
-     * FAILED는 이후 재시도가 가능하다.
+     * FAILED는 이후 새로운 RETRY Payment를 생성할 수 있다.
      */
     @Transactional
     public PaymentEntity fail(
@@ -276,15 +317,17 @@ public class InitialPaymentTransactionService {
     ) {
         PaymentEntity payment =
             paymentMapper
-                .findByIdForUpdate(paymentId)
+                .findByIdForUpdate(
+                    paymentId
+                )
                 .orElseThrow(() ->
                     new BusinessException(
                         BillingErrorCode.PAYMENT_NOT_FOUND
                     )
                 );
 
-        if (payment.getStatus()
-            != PaymentStatus.REQUESTED && payment.getStatus() != PaymentStatus.UNKNOWN) {
+        if (payment.getStatus() != PaymentStatus.REQUESTED
+            && payment.getStatus() != PaymentStatus.UNKNOWN) {
 
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
@@ -301,6 +344,7 @@ public class InitialPaymentTransactionService {
                         BillingErrorCode.SUBSCRIPTION_NOT_FOUND
                     )
                 );
+
         if (subscription.getStatus()
             != SubscriptionStatus.PENDING) {
 
@@ -325,29 +369,32 @@ public class InitialPaymentTransactionService {
             );
         }
 
-        billingOutboxWriter.appendPaymentFailed(
-            payment.getId(),
-            payment.getSubscriptionId(),
-            subscription.getStoreId(),
-            payment.getAttemptNo(),
-            payment.getPaymentType().name(),
-            payment.getAmount(),
-            result.failureCode(),
-            result.failureMessage()
-        );
+        billingOutboxWriter
+            .appendPaymentFailed(
+                payment.getId(),
+                payment.getSubscriptionId(),
+                subscription.getStoreId(),
+                payment.getAttemptNo(),
+                payment.getPaymentType().name(),
+                payment.getAmount(),
+                result.failureCode(),
+                result.failureMessage()
+            );
 
         return paymentMapper
-            .findByIdForUpdate(paymentId)
+            .findByIdForUpdate(
+                paymentId
+            )
             .orElseThrow();
     }
 
     /**
-     * Timeout 등으로 PG 결제 결과를 알 수 없는 경우.
+     * 결제 결과를 확정할 수 없는 경우.
      *
-     * 실제 결제가 성공했을 가능성이 있기 때문에
-     * FAILED가 아니라 UNKNOWN으로 기록한다.
+     * REQUESTED -> UNKNOWN
      *
-     * UNKNOWN 상태에서는 자동 재결제를 허용하지 않는다.
+     * 실제 결제가 성공했을 가능성이 있으므로
+     * FAILED로 단정하지 않고 Reconciliation 대상으로 남긴다.
      */
     @Transactional
     public PaymentEntity unknown(
@@ -356,7 +403,9 @@ public class InitialPaymentTransactionService {
     ) {
         PaymentEntity payment =
             paymentMapper
-                .findByIdForUpdate(paymentId)
+                .findByIdForUpdate(
+                    paymentId
+                )
                 .orElseThrow(() ->
                     new BusinessException(
                         BillingErrorCode.PAYMENT_NOT_FOUND
@@ -385,7 +434,9 @@ public class InitialPaymentTransactionService {
         }
 
         return paymentMapper
-            .findByIdForUpdate(paymentId)
+            .findByIdForUpdate(
+                paymentId
+            )
             .orElseThrow();
     }
 }
