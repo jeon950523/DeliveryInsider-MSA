@@ -3,10 +3,7 @@ package com.deliveryinsider.report.domain.report.controller;
 import com.deliveryinsider.report.domain.report.request.ReportDailyTrendRequest;
 import com.deliveryinsider.report.domain.report.request.ReportOrderSearchRequest;
 import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
-import com.deliveryinsider.report.domain.report.response.ReportDailyTrendResponse;
-import com.deliveryinsider.report.domain.report.response.ReportMenuPerformanceResponse;
-import com.deliveryinsider.report.domain.report.response.ReportOrderPageResponse;
-import com.deliveryinsider.report.domain.report.response.ReportSummaryResponse;
+import com.deliveryinsider.report.domain.report.response.*;
 import com.deliveryinsider.report.domain.report.service.ReportReadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -157,6 +154,35 @@ public class ReportReadController {
         return reportReadService.getDailyTrend(
             userId,
             new ReportDailyTrendRequest(
+                from,
+                to,
+                platformType
+            )
+        );
+    }
+    @GetMapping("/processing-times")
+    public ReportProcessingTimeResponse getProcessingTimes(
+        @RequestHeader("X-User-Id")
+        Long userId,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime from,
+
+        @RequestParam(required = false)
+        @DateTimeFormat(
+            iso = DateTimeFormat.ISO.DATE_TIME
+        )
+        LocalDateTime to,
+
+        @RequestParam(required = false)
+        String platformType
+    ) {
+        return reportReadService.getProcessingTimes(
+            userId,
+            new ReportSummaryRequest(
                 from,
                 to,
                 platformType

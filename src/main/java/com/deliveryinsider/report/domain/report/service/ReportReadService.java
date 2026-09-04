@@ -17,7 +17,9 @@ import com.deliveryinsider.report.integration.store.CurrentStoreResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.deliveryinsider.report.domain.report.projection.ReportPlatformProcessingTimeProjection;
+import com.deliveryinsider.report.domain.report.projection.ReportProcessingTimeProjection;
+import com.deliveryinsider.report.domain.report.response.ReportProcessingTimeResponse;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -274,6 +276,46 @@ public class ReportReadService {
     private BusinessException invalidQuery() {
         return new BusinessException(
             ReportErrorCode.REPORT_QUERY_INVALID
+        );
+    }
+    @Transactional(readOnly = true)
+    public ReportProcessingTimeResponse getProcessingTimes(
+        Long userId,
+        ReportSummaryRequest request
+    ) {
+        validateRangeAndPlatform(
+            request.from(),
+            request.to(),
+            request.platformType()
+        );
+
+        CurrentStoreResponse store =
+            currentStoreClient.findByUserId(
+                userId
+            );
+
+        ReportProcessingTimeProjection summary =
+            reportReadMapper
+                .findProcessingTimeSummary(
+                    store.storeId(),
+                    request.from(),
+                    request.to(),
+                    request.platformType()
+                );
+
+        List<ReportPlatformProcessingTimeProjection>
+            platformSummaries =
+            reportReadMapper
+                .findProcessingTimeByPlatform(
+                    store.storeId(),
+                    request.from(),
+                    request.to(),
+                    request.platformType()
+                );
+
+        return ReportProcessingTimeResponse.from(
+            summary,
+            platformSummaries
         );
     }
 }

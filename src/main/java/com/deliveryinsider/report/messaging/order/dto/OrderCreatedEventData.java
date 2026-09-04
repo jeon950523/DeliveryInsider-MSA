@@ -8,12 +8,18 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record OrderCreatedEventData(
+
     Long orderId,
+
     String platformType,
     String platformOrderId,
     String externalStoreId,
+
     String status,
+    String operationStatus,
+
     Long sourceSequence,
+
     Instant orderedAt,
 
     List<Item> items,
@@ -25,28 +31,41 @@ public record OrderCreatedEventData(
     Long providerFundedDiscount,
 
     String providerFinancialDataStatus
+
 ) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Item(
+
         Long menuId,
         String menuName,
+
         Long menuPrice,
         Long menuCost,
         Long packagingCost,
+
         Long orderedUnitPrice,
+
         int quantity
+
     ) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ProviderCharge(
+
         String chargeType,
+
         Long amount,
+
         BigDecimal rate,
+
         Long basisAmount,
+
         boolean provisional,
+
         String sourceCode
+
     ) {
     }
 }

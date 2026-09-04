@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.Instant;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record OrderStatusChangedEventData(
+public record OrderOperationStatusChangedEventData(
 
     Long orderId,
 
@@ -13,17 +13,12 @@ public record OrderStatusChangedEventData(
     String platformOrderId,
     String externalStoreId,
 
-    String previousStatus,
-    String status,
-
+    String previousOperationStatus,
     String operationStatus,
 
-    Long sourceSequence,
+    long operationVersion,
 
-    Instant providerOccurredAt,
-
-    String providerCancelCode,
-    String providerCancelReason
+    Instant operationOccurredAt
 
 ) {
 }

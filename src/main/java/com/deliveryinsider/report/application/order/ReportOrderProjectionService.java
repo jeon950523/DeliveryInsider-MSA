@@ -10,20 +10,22 @@ import com.deliveryinsider.report.domain.order.mapper.ReportOrderItemMapper;
 import com.deliveryinsider.report.domain.order.mapper.ReportOrderMapper;
 import com.deliveryinsider.report.messaging.order.dto.OrderCreatedEventData;
 import com.deliveryinsider.report.messaging.order.dto.OrderEventEnvelope;
+import com.deliveryinsider.report.messaging.order.dto.OrderOperationStatusChangedEventData;
 import com.deliveryinsider.report.messaging.order.dto.OrderStatusChangedEventData;
 import com.deliveryinsider.report.messaging.order.exception.NonRetryableReportEventException;
 import com.deliveryinsider.report.messaging.order.exception.RetryableReportEventException;
-import tools.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
-import tools.jackson.databind.json.JsonMapper;
+
 @Service
 @RequiredArgsConstructor
 public class ReportOrderProjectionService {
@@ -31,10 +33,19 @@ public class ReportOrderProjectionService {
     private static final int SUPPORTED_SCHEMA_VERSION = 1;
 
     private final ReportOrderMapper reportOrderMapper;
-    private final ReportOrderItemMapper reportOrderItemMapper;
-    private final ReportOrderChargeMapper reportOrderChargeMapper;
-    private final ReportCancellationMapper reportCancellationMapper;
+
+    private final ReportOrderItemMapper
+        reportOrderItemMapper;
+
+    private final ReportOrderChargeMapper
+        reportOrderChargeMapper;
+
+    private final ReportCancellationMapper
+        reportCancellationMapper;
+
     private final JsonMapper jsonMapper;
+
+
     @Transactional
     public ReportProjectionResult handle(
         OrderEventEnvelope event
@@ -42,12 +53,22 @@ public class ReportOrderProjectionService {
         validateEnvelope(event);
 
         return switch (event.eventType()) {
+
             case "ORDER_CREATED" ->
-                handleOrderCreated(event);
+                handleOrderCreated(
+                    event
+                );
 
             case "ORDER_STATUS_CHANGED",
                  "ORDER_CANCELED" ->
-                handleStatusChanged(event);
+                handleProviderStatusChanged(
+                    event
+                );
+
+            case "ORDER_OPERATION_STATUS_CHANGED" ->
+                handleOperationStatusChanged(
+                    event
+                );
 
             default ->
                 throw new NonRetryableReportEventException(
@@ -57,7 +78,9 @@ public class ReportOrderProjectionService {
         };
     }
 
-    private ReportProjectionResult handleOrderCreated(
+
+    private ReportProjectionResult
+    handleOrderCreated(
         OrderEventEnvelope event
     ) {
         OrderCreatedEventData data =
@@ -66,73 +89,117 @@ public class ReportOrderProjectionService {
                 OrderCreatedEventData.class
             );
 
-        validateCreatedData(data);
+        validateCreatedData(
+            data
+        );
 
         Optional<ReportOrderEntity> existingOrder =
-            reportOrderMapper.findByOrderIdForUpdate(
-                data.orderId()
-            );
+            reportOrderMapper
+                .findByOrderIdForUpdate(
+                    data.orderId()
+                );
 
         if (existingOrder.isPresent()) {
-            if (event.eventVersion()
-                <= existingOrder.get()
-                .getLastEventVersion()) {
 
+            if (
+                event.eventVersion()
+                    <= existingOrder
+                    .get()
+                    .getLastEventVersion()
+            ) {
                 return ReportProjectionResult
                     .STALE_IGNORED;
             }
 
             throw new NonRetryableReportEventException(
                 "이미 존재하는 Report 주문에 더 높은 버전의 ORDER_CREATED가 도착했습니다. "
-                    + "orderId=" + data.orderId()
+                    + "orderId="
+                    + data.orderId()
             );
         }
 
         ReportOrderEntity order =
             ReportOrderEntity.builder()
-                .orderId(data.orderId())
-                .storeId(event.storeId())
+
+                .orderId(
+                    data.orderId()
+                )
+
+                .storeId(
+                    event.storeId()
+                )
+
                 .platformType(
                     data.platformType()
                 )
+
                 .platformOrderId(
                     data.platformOrderId()
                 )
+
                 .externalStoreId(
                     data.externalStoreId()
                 )
-                .status(data.status())
+
+                .status(
+                    data.status()
+                )
+
+                .operationStatus(
+                    Optional
+                        .ofNullable(
+                            data.operationStatus()
+                        )
+                        .orElse(
+                            "WAITING"
+                        )
+                )
+
                 .sourceSequence(
                     data.sourceSequence()
                 )
+
                 .lastEventVersion(
                     event.eventVersion()
                 )
+
                 .orderedAt(
                     toUtcLocalDateTime(
                         data.orderedAt()
                     )
                 )
+
                 .grossOrderAmount(
                     data.grossOrderAmount()
                 )
+
                 .customerPaidAmount(
                     data.customerPaidAmount()
                 )
+
                 .merchantFundedDiscount(
                     data.merchantFundedDiscount()
                 )
+
                 .providerFundedDiscount(
                     data.providerFundedDiscount()
                 )
+
                 .providerFinancialDataStatus(
-                    Optional.ofNullable(
-                        data.providerFinancialDataStatus()
-                    ).orElse("UNAVAILABLE")
+                    Optional
+                        .ofNullable(
+                            data.providerFinancialDataStatus()
+                        )
+                        .orElse(
+                            "UNAVAILABLE"
+                        )
                 )
+
                 .build();
 
-        reportOrderMapper.insert(order);
+        reportOrderMapper.insert(
+            order
+        );
 
         insertItems(
             data.orderId(),
@@ -147,7 +214,9 @@ public class ReportOrderProjectionService {
         return ReportProjectionResult.APPLIED;
     }
 
-    private ReportProjectionResult handleStatusChanged(
+
+    private ReportProjectionResult
+    handleProviderStatusChanged(
         OrderEventEnvelope event
     ) {
         OrderStatusChangedEventData data =
@@ -156,39 +225,74 @@ public class ReportOrderProjectionService {
                 OrderStatusChangedEventData.class
             );
 
-        if (data.orderId() == null
-            || data.status() == null) {
+        if (
+            data.orderId() == null
+                || data.status() == null
+        ) {
             throw new NonRetryableReportEventException(
                 "Order 상태 이벤트 필수 값이 없습니다."
             );
         }
 
         ReportOrderEntity order =
-            reportOrderMapper
-                .findByOrderIdForUpdate(
-                    data.orderId()
-                )
-                .orElseThrow(() ->
-                    new RetryableReportEventException(
-                        "상태 변경 대상 Report 주문이 없습니다. orderId="
-                            + data.orderId()
-                    )
-                );
+            findOrderForUpdate(
+                data.orderId()
+            );
 
-        if (event.eventVersion()
-            <= order.getLastEventVersion()) {
-
+        if (
+            event.eventVersion()
+                <= order.getLastEventVersion()
+        ) {
             return ReportProjectionResult
                 .STALE_IGNORED;
         }
 
-        int updated =
-            reportOrderMapper.updateStatus(
-                data.orderId(),
-                data.status(),
-                data.sourceSequence(),
-                event.eventVersion()
+        String operationStatus =
+            resolveProviderOperationStatus(
+                data
             );
+
+        LocalDateTime occurredAt =
+            toUtcLocalDateTime(
+                resolveOccurredAt(
+                    data.providerOccurredAt(),
+                    event.occurredAt()
+                )
+            );
+
+        LocalDateTime pickedUpAt =
+            "PICKED_UP".equals(
+                data.status()
+            )
+                ? occurredAt
+                : null;
+
+        LocalDateTime completedAt =
+            "DELIVERED".equals(
+                data.status()
+            )
+                ? occurredAt
+                : null;
+
+        LocalDateTime canceledAt =
+            "CANCELED".equals(
+                data.status()
+            )
+                ? occurredAt
+                : null;
+
+        int updated =
+            reportOrderMapper
+                .updateProviderStatus(
+                    data.orderId(),
+                    data.status(),
+                    operationStatus,
+                    data.sourceSequence(),
+                    event.eventVersion(),
+                    pickedUpAt,
+                    completedAt,
+                    canceledAt
+                );
 
         if (updated != 1) {
             throw new RetryableReportEventException(
@@ -197,9 +301,11 @@ public class ReportOrderProjectionService {
             );
         }
 
-        if ("ORDER_CANCELED".equals(
-            event.eventType()
-        )) {
+        if (
+            "ORDER_CANCELED".equals(
+                event.eventType()
+            )
+        ) {
             insertCancellation(
                 event,
                 data
@@ -209,11 +315,145 @@ public class ReportOrderProjectionService {
         return ReportProjectionResult.APPLIED;
     }
 
+
+    private ReportProjectionResult
+    handleOperationStatusChanged(
+        OrderEventEnvelope event
+    ) {
+        OrderOperationStatusChangedEventData data =
+            convertData(
+                event.data(),
+                OrderOperationStatusChangedEventData.class
+            );
+
+        if (
+            data.orderId() == null
+                || data.operationStatus() == null
+                || data.operationVersion() < 1
+        ) {
+            throw new NonRetryableReportEventException(
+                "Order 운영 상태 이벤트 필수 값이 없습니다."
+            );
+        }
+
+        if (
+            !"COOKING".equals(
+                data.operationStatus()
+            )
+                && !"READY_FOR_PICKUP".equals(
+                data.operationStatus()
+            )
+        ) {
+            throw new NonRetryableReportEventException(
+                "점주 운영 상태 이벤트에서 지원하지 않는 상태입니다. operationStatus="
+                    + data.operationStatus()
+            );
+        }
+
+        ReportOrderEntity order =
+            findOrderForUpdate(
+                data.orderId()
+            );
+
+        if (
+            event.eventVersion()
+                <= order.getLastEventVersion()
+        ) {
+            return ReportProjectionResult
+                .STALE_IGNORED;
+        }
+
+        LocalDateTime occurredAt =
+            toUtcLocalDateTime(
+                resolveOccurredAt(
+                    data.operationOccurredAt(),
+                    event.occurredAt()
+                )
+            );
+
+        LocalDateTime cookingStartedAt =
+            "COOKING".equals(
+                data.operationStatus()
+            )
+                ? occurredAt
+                : null;
+
+        LocalDateTime readyForPickupAt =
+            "READY_FOR_PICKUP".equals(
+                data.operationStatus()
+            )
+                ? occurredAt
+                : null;
+
+        int updated =
+            reportOrderMapper
+                .updateOperationStatus(
+                    data.orderId(),
+                    data.operationStatus(),
+                    event.eventVersion(),
+                    cookingStartedAt,
+                    readyForPickupAt
+                );
+
+        if (updated != 1) {
+            throw new RetryableReportEventException(
+                "Report 주문 운영 상태 Projection 갱신에 실패했습니다. orderId="
+                    + data.orderId()
+            );
+        }
+
+        return ReportProjectionResult.APPLIED;
+    }
+
+
+    private ReportOrderEntity findOrderForUpdate(
+        Long orderId
+    ) {
+        return reportOrderMapper
+            .findByOrderIdForUpdate(
+                orderId
+            )
+            .orElseThrow(() ->
+                new RetryableReportEventException(
+                    "상태 변경 대상 Report 주문이 없습니다. orderId="
+                        + orderId
+                )
+            );
+    }
+
+
+    private String resolveProviderOperationStatus(
+        OrderStatusChangedEventData data
+    ) {
+        if (data.operationStatus() != null) {
+            return data.operationStatus();
+        }
+
+        return switch (data.status()) {
+
+            case "PICKED_UP" ->
+                "DELIVERING";
+
+            case "DELIVERED" ->
+                "COMPLETED";
+
+            case "CANCELED" ->
+                "CANCELED";
+
+            default ->
+                null;
+        };
+    }
+
+
     private void insertItems(
         Long orderId,
         List<OrderCreatedEventData.Item> items
     ) {
-        if (items == null || items.isEmpty()) {
+        if (
+            items == null
+                || items.isEmpty()
+        ) {
             return;
         }
 
@@ -221,26 +461,39 @@ public class ReportOrderProjectionService {
             items.stream()
                 .map(item ->
                     ReportOrderItemEntity.builder()
-                        .orderId(orderId)
-                        .menuId(item.menuId())
+
+                        .orderId(
+                            orderId
+                        )
+
+                        .menuId(
+                            item.menuId()
+                        )
+
                         .menuName(
                             item.menuName()
                         )
+
                         .menuPrice(
                             item.menuPrice()
                         )
+
                         .menuCost(
                             item.menuCost()
                         )
+
                         .packagingCost(
                             item.packagingCost()
                         )
+
                         .orderedUnitPrice(
                             item.orderedUnitPrice()
                         )
+
                         .quantity(
                             item.quantity()
                         )
+
                         .build()
                 )
                 .toList();
@@ -250,11 +503,15 @@ public class ReportOrderProjectionService {
         );
     }
 
+
     private void insertCharges(
         Long orderId,
         List<OrderCreatedEventData.ProviderCharge> charges
     ) {
-        if (charges == null || charges.isEmpty()) {
+        if (
+            charges == null
+                || charges.isEmpty()
+        ) {
             return;
         }
 
@@ -262,25 +519,35 @@ public class ReportOrderProjectionService {
             charges.stream()
                 .map(charge ->
                     ReportOrderChargeEntity.builder()
-                        .orderId(orderId)
+
+                        .orderId(
+                            orderId
+                        )
+
                         .chargeType(
                             charge.chargeType()
                         )
+
                         .amount(
                             charge.amount()
                         )
+
                         .rate(
                             charge.rate()
                         )
+
                         .basisAmount(
                             charge.basisAmount()
                         )
+
                         .provisional(
                             charge.provisional()
                         )
+
                         .sourceCode(
                             charge.sourceCode()
                         )
+
                         .build()
                 )
                 .toList();
@@ -290,56 +557,68 @@ public class ReportOrderProjectionService {
         );
     }
 
+
     private void insertCancellation(
         OrderEventEnvelope event,
         OrderStatusChangedEventData data
     ) {
         Instant canceledAt =
-            Optional.ofNullable(
-                data.providerOccurredAt()
-            ).orElse(
+            resolveOccurredAt(
+                data.providerOccurredAt(),
                 event.occurredAt()
             );
 
         reportCancellationMapper.insert(
             ReportCancellationEntity.builder()
-                .orderId(data.orderId())
+
+                .orderId(
+                    data.orderId()
+                )
+
                 .providerCancelCode(
                     data.providerCancelCode()
                 )
+
                 .providerCancelReason(
                     data.providerCancelReason()
                 )
+
                 .canceledAt(
                     toUtcLocalDateTime(
                         canceledAt
                     )
                 )
+
                 .eventVersion(
                     event.eventVersion()
                 )
+
                 .build()
         );
     }
 
+
     private void validateEnvelope(
         OrderEventEnvelope event
     ) {
-        if (event == null
-            || event.eventId() == null
-            || event.eventType() == null
-            || event.aggregateId() == null
-            || event.eventVersion() < 1
-            || event.data() == null) {
-
+        if (
+            event == null
+                || event.eventId() == null
+                || event.eventType() == null
+                || event.aggregateId() == null
+                || event.eventVersion() < 1
+                || event.occurredAt() == null
+                || event.data() == null
+        ) {
             throw new NonRetryableReportEventException(
                 "Order Event Envelope가 올바르지 않습니다."
             );
         }
 
-        if (event.schemaVersion()
-            != SUPPORTED_SCHEMA_VERSION) {
-
+        if (
+            event.schemaVersion()
+                != SUPPORTED_SCHEMA_VERSION
+        ) {
             throw new NonRetryableReportEventException(
                 "지원하지 않는 Order Event Schema입니다. schemaVersion="
                     + event.schemaVersion()
@@ -347,20 +626,37 @@ public class ReportOrderProjectionService {
         }
     }
 
+
     private void validateCreatedData(
         OrderCreatedEventData data
     ) {
-        if (data.orderId() == null
-            || data.platformType() == null
-            || data.platformOrderId() == null
-            || data.status() == null
-            || data.orderedAt() == null) {
-
+        if (
+            data.orderId() == null
+                || data.platformType() == null
+                || data.platformOrderId() == null
+                || data.status() == null
+                || data.orderedAt() == null
+        ) {
             throw new NonRetryableReportEventException(
                 "ORDER_CREATED 필수 값이 없습니다."
             );
         }
     }
+
+
+    private Instant resolveOccurredAt(
+        Instant domainOccurredAt,
+        Instant envelopeOccurredAt
+    ) {
+        return Optional
+            .ofNullable(
+                domainOccurredAt
+            )
+            .orElse(
+                envelopeOccurredAt
+            );
+    }
+
 
     private <T> T convertData(
         JsonNode data,
@@ -379,6 +675,7 @@ public class ReportOrderProjectionService {
             );
         }
     }
+
 
     private LocalDateTime toUtcLocalDateTime(
         Instant instant
