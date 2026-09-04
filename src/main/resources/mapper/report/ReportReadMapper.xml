@@ -392,15 +392,39 @@
             id="findDailyTrend"
             resultType="com.deliveryinsider.report.domain.report.projection.ReportDailyTrendProjection">
 
+        WITH filtered_orders AS (
         SELECT
-        DATE(ro.ordered_at) AS reportDate,
+        ro.order_id,
+        ro.ordered_at,
+        ro.status,
+        ro.gross_order_amount,
+        ro.customer_paid_amount,
+        ro.provider_financial_data_status
+        FROM report_orders ro
+        WHERE ro.store_id = #{storeId}
+
+        <if test="from != null">
+            AND ro.ordered_at <![CDATA[ >= ]]> #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at <![CDATA[ <= ]]> #{to}
+        </if>
+
+        <if test="platformType != null">
+            AND ro.platform_type = #{platformType}
+        </if>
+        ),
+        daily_orders AS (
+        SELECT
+        DATE(ordered_at) AS reportDate,
 
         COUNT(*) AS totalOrderCount,
 
         COALESCE(
         SUM(
         CASE
-        WHEN ro.status = 'DELIVERED'
+        WHEN status = 'DELIVERED'
         THEN 1
         ELSE 0
         END
@@ -411,7 +435,7 @@
         COALESCE(
         SUM(
         CASE
-        WHEN ro.status = 'CANCELED'
+        WHEN status = 'CANCELED'
         THEN 1
         ELSE 0
         END
@@ -422,8 +446,8 @@
         COALESCE(
         SUM(
         CASE
-        WHEN ro.status = 'DELIVERED'
-        THEN ro.gross_order_amount
+        WHEN status = 'DELIVERED'
+        THEN gross_order_amount
         ELSE 0
         END
         ),
@@ -433,143 +457,103 @@
         COALESCE(
         SUM(
         CASE
-        WHEN ro.status = 'DELIVERED'
-        THEN ro.customer_paid_amount
+        WHEN status = 'DELIVERED'
+        THEN customer_paid_amount
         ELSE 0
         END
         ),
         0
         ) AS customerPaidAmount,
 
-        COALESCE(
-        (
-        SELECT SUM(rc.amount)
-        FROM report_order_charges rc
-        INNER JOIN report_orders charge_order
-        ON charge_order.order_id = rc.order_id
-        WHERE charge_order.store_id = #{storeId}
-        AND charge_order.status = 'DELIVERED'
-        AND DATE(charge_order.ordered_at)
-            = DATE(ro.ordered_at)
+        GROUP_CONCAT(
+        DISTINCT
+        CASE
+        WHEN status = 'DELIVERED'
+        THEN provider_financial_data_status
+        ELSE NULL
+        END
+        ORDER BY provider_financial_data_status
+        SEPARATOR ','
+        ) AS financialDataStatusesCsv
 
-        <if test="from != null">
-            AND charge_order.ordered_at
-            <![CDATA[ >= ]]>
-            #{from}
-        </if>
-
-        <if test="to != null">
-            AND charge_order.ordered_at
-            <![CDATA[ <= ]]>
-            #{to}
-        </if>
-
-        <if test="platformType != null and platformType != ''">
-            AND charge_order.platform_type = #{platformType}
-        </if>
+        FROM filtered_orders
+        GROUP BY DATE(ordered_at)
         ),
-        0
-        ) AS providerChargeAmount,
+        daily_charges AS (
+        SELECT
+        DATE(fo.ordered_at) AS reportDate,
 
         COALESCE(
-        (
+        SUM(rc.amount),
+        0
+        ) AS providerChargeAmount
+
+        FROM filtered_orders fo
+        INNER JOIN report_order_charges rc
+        ON rc.order_id = fo.order_id
+
+        WHERE fo.status = 'DELIVERED'
+
+        GROUP BY DATE(fo.ordered_at)
+        ),
+        daily_items AS (
         SELECT
+        DATE(fo.ordered_at) AS reportDate,
+
+        COALESCE(
         SUM(
         ri.menu_cost * ri.quantity
-        )
-        FROM report_order_items ri
-        INNER JOIN report_orders item_order
-        ON item_order.order_id = ri.order_id
-        WHERE item_order.store_id = #{storeId}
-        AND item_order.status = 'DELIVERED'
-        AND DATE(item_order.ordered_at)
-            = DATE(ro.ordered_at)
-
-        <if test="from != null">
-            AND item_order.ordered_at
-            <![CDATA[ >= ]]>
-            #{from}
-        </if>
-
-        <if test="to != null">
-            AND item_order.ordered_at
-            <![CDATA[ <= ]]>
-            #{to}
-        </if>
-
-        <if test="platformType != null and platformType != ''">
-            AND item_order.platform_type = #{platformType}
-        </if>
         ),
         0
         ) AS estimatedMenuCost,
 
         COALESCE(
-        (
-        SELECT
         SUM(
         ri.packaging_cost * ri.quantity
-        )
-        FROM report_order_items ri
-        INNER JOIN report_orders item_order
-        ON item_order.order_id = ri.order_id
-        WHERE item_order.store_id = #{storeId}
-        AND item_order.status = 'DELIVERED'
-        AND DATE(item_order.ordered_at)
-            = DATE(ro.ordered_at)
-
-        <if test="from != null">
-            AND item_order.ordered_at
-            <![CDATA[ >= ]]>
-            #{from}
-        </if>
-
-        <if test="to != null">
-            AND item_order.ordered_at
-            <![CDATA[ <= ]]>
-            #{to}
-        </if>
-
-        <if test="platformType != null and platformType != ''">
-            AND item_order.platform_type = #{platformType}
-        </if>
         ),
+        0
+        ) AS estimatedPackagingCost
+
+        FROM filtered_orders fo
+        INNER JOIN report_order_items ri
+        ON ri.order_id = fo.order_id
+
+        WHERE fo.status = 'DELIVERED'
+
+        GROUP BY DATE(fo.ordered_at)
+        )
+        SELECT
+        d.reportDate,
+        d.totalOrderCount,
+        d.completedOrderCount,
+        d.canceledOrderCount,
+        d.grossSales,
+        d.customerPaidAmount,
+
+        COALESCE(
+        c.providerChargeAmount,
+        0
+        ) AS providerChargeAmount,
+
+        COALESCE(
+        i.estimatedMenuCost,
+        0
+        ) AS estimatedMenuCost,
+
+        COALESCE(
+        i.estimatedPackagingCost,
         0
         ) AS estimatedPackagingCost,
 
-        GROUP_CONCAT(
-        DISTINCT
-        CASE
-        WHEN ro.status = 'DELIVERED'
-        THEN ro.provider_financial_data_status
-        END
-        ORDER BY ro.provider_financial_data_status
-        SEPARATOR ','
-        ) AS financialDataStatusesCsv
+        d.financialDataStatusesCsv
 
-        FROM report_orders ro
+        FROM daily_orders d
+        LEFT JOIN daily_charges c
+        ON c.reportDate = d.reportDate
+        LEFT JOIN daily_items i
+        ON i.reportDate = d.reportDate
 
-        WHERE ro.store_id = #{storeId}
-
-        <if test="from != null">
-            AND ro.ordered_at
-            <![CDATA[ >= ]]>
-            #{from}
-        </if>
-
-        <if test="to != null">
-            AND ro.ordered_at
-            <![CDATA[ <= ]]>
-            #{to}
-        </if>
-
-        <if test="platformType != null and platformType != ''">
-            AND ro.platform_type = #{platformType}
-        </if>
-
-        GROUP BY DATE(ro.ordered_at)
-
-        ORDER BY reportDate ASC
+        ORDER BY d.reportDate ASC
 
     </select>
 
