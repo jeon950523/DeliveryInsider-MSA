@@ -28,6 +28,19 @@ public class OrderItemEntity {
 
     private long packagingCostSnapshot;
 
+    /*
+     * 주문 당시 Store 메뉴 기준 조리시간.
+     *
+     * Menu가 나중에 변경돼도
+     * 과거 주문 지연 계산은 이 Snapshot을 사용한다.
+     */
+    private Integer expectedCookingTimeSnapshot;
+
+    /*
+     * 주문 당시 메뉴 동시 처리 가능 수.
+     */
+    private Integer batchCapacitySnapshot;
+
     private long orderedUnitPrice;
 
     private int quantity;
@@ -43,6 +56,8 @@ public class OrderItemEntity {
         long menuPriceSnapshot,
         long menuCostSnapshot,
         long packagingCostSnapshot,
+        Integer expectedCookingTimeSnapshot,
+        Integer batchCapacitySnapshot,
         long orderedUnitPrice,
         int quantity
     ) {
@@ -53,6 +68,10 @@ public class OrderItemEntity {
         this.menuPriceSnapshot = menuPriceSnapshot;
         this.menuCostSnapshot = menuCostSnapshot;
         this.packagingCostSnapshot = packagingCostSnapshot;
+        this.expectedCookingTimeSnapshot =
+            expectedCookingTimeSnapshot;
+        this.batchCapacitySnapshot =
+            batchCapacitySnapshot;
         this.orderedUnitPrice = orderedUnitPrice;
         this.quantity = quantity;
     }

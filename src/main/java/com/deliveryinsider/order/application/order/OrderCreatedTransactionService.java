@@ -10,6 +10,7 @@ import com.deliveryinsider.order.domain.order.mapper.OrderMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderProviderChargeMapper;
 import com.deliveryinsider.order.domain.order.mapper.OutboxEventMapper;
 import com.deliveryinsider.order.domain.order.mapper.ProcessedPlatformEventMapper;
+import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
 import com.deliveryinsider.order.domain.order.model.ProcessedPlatformEventResult;
 import com.deliveryinsider.order.integration.store.dto.StoreOrderSnapshotResponse;
@@ -123,19 +124,40 @@ public class OrderCreatedTransactionService {
             message.data();
 
         return OrderEntity.builder()
-            .platformType(data.platformType())
+            .platformType(
+                data.platformType()
+            )
             .platformOrderId(
                 data.platformOrderId()
             )
-            .storeId(message.storeId())
+            .storeId(
+                message.storeId()
+            )
             .externalStoreId(
                 data.externalStoreId()
             )
-            .status(OrderStatus.CREATED)
+
+            /*
+             * 외부 플랫폼 상태.
+             */
+            .status(
+                OrderStatus.CREATED
+            )
+
+            /*
+             * 신규 주문은 점주 입장에서
+             * 아직 조리를 시작하지 않은 WAITING.
+             */
+            .operationStatus(
+                OrderOperationStatus.WAITING
+            )
+
             .lastSourceSequence(
                 data.sourceSequence()
             )
-            .eventVersion(1L)
+            .eventVersion(
+                1L
+            )
             .orderedAt(
                 toUtcLocalDateTime(
                     data.orderedAt()
@@ -237,8 +259,12 @@ public class OrderCreatedTransactionService {
                 );
 
         return OrderItemEntity.builder()
-            .orderId(orderId)
-            .menuId(item.menuId())
+            .orderId(
+                orderId
+            )
+            .menuId(
+                item.menuId()
+            )
             .externalMenuId(
                 item.externalMenuId()
             )
@@ -254,10 +280,18 @@ public class OrderCreatedTransactionService {
             .packagingCostSnapshot(
                 snapshot.packagingCost()
             )
+            .expectedCookingTimeSnapshot(
+                snapshot.expectedCookingTime()
+            )
+            .batchCapacitySnapshot(
+                snapshot.batchCapacity()
+            )
             .orderedUnitPrice(
                 item.orderedUnitPrice()
             )
-            .quantity(item.quantity())
+            .quantity(
+                item.quantity()
+            )
             .build();
     }
 
@@ -270,12 +304,18 @@ public class OrderCreatedTransactionService {
             .stream()
             .map(charge ->
                 OrderProviderChargeEntity.builder()
-                    .orderId(order.getId())
+                    .orderId(
+                        order.getId()
+                    )
                     .chargeType(
                         charge.chargeType()
                     )
-                    .amount(charge.amount())
-                    .rate(charge.rate())
+                    .amount(
+                        charge.amount()
+                    )
+                    .rate(
+                        charge.rate()
+                    )
                     .basisAmount(
                         charge.basisAmount()
                     )

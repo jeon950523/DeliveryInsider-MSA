@@ -7,6 +7,7 @@ import com.deliveryinsider.order.domain.order.entity.ProcessedPlatformEvent;
 import com.deliveryinsider.order.domain.order.mapper.OrderMapper;
 import com.deliveryinsider.order.domain.order.mapper.OutboxEventMapper;
 import com.deliveryinsider.order.domain.order.mapper.ProcessedPlatformEventMapper;
+import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatusTransitionPolicy;
 import com.deliveryinsider.order.domain.order.model.ProcessedPlatformEventResult;
@@ -17,6 +18,11 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+
 @Service
 @RequiredArgsConstructor
 public class PlatformOrderStatusTransactionService {
@@ -26,6 +32,7 @@ public class PlatformOrderStatusTransactionService {
     private final OutboxEventMapper outboxEventMapper;
     private final OrderOutboxEventFactory outboxFactory;
     private final OrderStatusTransitionPolicy transitionPolicy;
+    private final Clock clock;
 
     @Transactional
     public OrderEventHandlingResult apply(
@@ -58,25 +65,55 @@ public class PlatformOrderStatusTransactionService {
             toProcessingResult(result)
         );
 
-        if (
-            result
-                != OrderEventHandlingResult.APPLIED
-        ) {
+        if (result != OrderEventHandlingResult.APPLIED) {
             return result;
         }
 
         OrderStatus previousStatus =
             order.getStatus();
 
+        OrderOperationStatus targetOperationStatus =
+            resolveTargetOperationStatus(
+                targetStatus
+            );
+
         long nextEventVersion =
             order.getEventVersion() + 1;
 
+        long nextOperationVersion =
+            order.getOperationVersion() + 1;
+
+        LocalDateTime providerOccurredAt =
+            resolveProviderOccurredAt(
+                message.data().providerOccurredAt()
+            );
+
+        LocalDateTime pickedUpAt =
+            targetStatus == OrderStatus.PICKED_UP
+                ? providerOccurredAt
+                : null;
+
+        LocalDateTime completedAt =
+            targetStatus == OrderStatus.DELIVERED
+                ? providerOccurredAt
+                : null;
+
+        LocalDateTime canceledAt =
+            targetStatus == OrderStatus.CANCELED
+                ? providerOccurredAt
+                : null;
+
         int updated =
-            orderMapper.updateStatus(
+            orderMapper.updateProviderStatus(
                 order.getId(),
                 targetStatus,
+                targetOperationStatus,
                 message.data().sourceSequence(),
-                nextEventVersion
+                nextEventVersion,
+                nextOperationVersion,
+                pickedUpAt,
+                completedAt,
+                canceledAt
             );
 
         if (updated != 1) {
@@ -86,19 +123,17 @@ public class PlatformOrderStatusTransactionService {
             );
         }
 
-        order.setStatus(targetStatus);
-        order.setEventVersion(
-            nextEventVersion
+        applyUpdatedState(
+            order,
+            targetStatus,
+            targetOperationStatus,
+            message.data().sourceSequence(),
+            nextEventVersion,
+            nextOperationVersion,
+            pickedUpAt,
+            completedAt,
+            canceledAt
         );
-
-        if (
-            message.data().sourceSequence()
-                != null
-        ) {
-            order.setLastSourceSequence(
-                message.data().sourceSequence()
-            );
-        }
 
         OutboxEventEntity outboxEvent =
             outboxFactory
@@ -146,11 +181,96 @@ public class PlatformOrderStatusTransactionService {
         return OrderEventHandlingResult.APPLIED;
     }
 
+    private OrderOperationStatus resolveTargetOperationStatus(
+        OrderStatus targetStatus
+    ) {
+        return switch (targetStatus) {
+            case PICKED_UP ->
+                OrderOperationStatus.DELIVERING;
+
+            case DELIVERED ->
+                OrderOperationStatus.COMPLETED;
+
+            case CANCELED ->
+                OrderOperationStatus.CANCELED;
+
+            case CREATED ->
+                throw new IllegalArgumentException(
+                    "CREATED는 Platform 상태변경 대상이 아닙니다."
+                );
+        };
+    }
+
+    private LocalDateTime resolveProviderOccurredAt(
+        Instant providerOccurredAt
+    ) {
+        Instant occurredAt =
+            providerOccurredAt != null
+                ? providerOccurredAt
+                : clock.instant();
+
+        return LocalDateTime.ofInstant(
+            occurredAt,
+            ZoneOffset.UTC
+        );
+    }
+
+    private void applyUpdatedState(
+        OrderEntity order,
+        OrderStatus targetStatus,
+        OrderOperationStatus targetOperationStatus,
+        Long sourceSequence,
+        long eventVersion,
+        long operationVersion,
+        LocalDateTime pickedUpAt,
+        LocalDateTime completedAt,
+        LocalDateTime canceledAt
+    ) {
+        order.setStatus(
+            targetStatus
+        );
+
+        order.setOperationStatus(
+            targetOperationStatus
+        );
+
+        order.setEventVersion(
+            eventVersion
+        );
+
+        order.setOperationVersion(
+            operationVersion
+        );
+
+        if (sourceSequence != null) {
+            order.setLastSourceSequence(
+                sourceSequence
+            );
+        }
+
+        if (pickedUpAt != null) {
+            order.setPickedUpAt(
+                pickedUpAt
+            );
+        }
+
+        if (completedAt != null) {
+            order.setCompletedAt(
+                completedAt
+            );
+        }
+
+        if (canceledAt != null) {
+            order.setCanceledAt(
+                canceledAt
+            );
+        }
+    }
+
     private ProcessedPlatformEventResult
     toProcessingResult(
         OrderEventHandlingResult result
     ) {
-
         return switch (result) {
             case APPLIED ->
                 ProcessedPlatformEventResult.APPLIED;

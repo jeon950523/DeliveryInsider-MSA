@@ -14,29 +14,25 @@
         <result property="orderId" column="order_id"/>
         <result property="menuId" column="menu_id"/>
 
-        <result
-                property="externalMenuId"
-                column="external_menu_id"/>
+        <result property="externalMenuId" column="external_menu_id"/>
+
+        <result property="menuNameSnapshot" column="menu_name_snapshot"/>
+
+        <result property="menuPriceSnapshot" column="menu_price_snapshot"/>
+
+        <result property="menuCostSnapshot" column="menu_cost_snapshot"/>
+
+        <result property="packagingCostSnapshot" column="packaging_cost_snapshot"/>
 
         <result
-                property="menuNameSnapshot"
-                column="menu_name_snapshot"/>
+                property="expectedCookingTimeSnapshot"
+                column="expected_cooking_time_snapshot"/>
 
         <result
-                property="menuPriceSnapshot"
-                column="menu_price_snapshot"/>
+                property="batchCapacitySnapshot"
+                column="batch_capacity_snapshot"/>
 
-        <result
-                property="menuCostSnapshot"
-                column="menu_cost_snapshot"/>
-
-        <result
-                property="packagingCostSnapshot"
-                column="packaging_cost_snapshot"/>
-
-        <result
-                property="orderedUnitPrice"
-                column="ordered_unit_price"/>
+        <result property="orderedUnitPrice" column="ordered_unit_price"/>
 
         <result property="quantity" column="quantity"/>
 
@@ -57,6 +53,8 @@
             menu_price_snapshot,
             menu_cost_snapshot,
             packaging_cost_snapshot,
+            expected_cooking_time_snapshot,
+            batch_capacity_snapshot,
             ordered_unit_price,
             quantity
         )
@@ -68,6 +66,8 @@
                    #{menuPriceSnapshot},
                    #{menuCostSnapshot},
                    #{packagingCostSnapshot},
+                   #{expectedCookingTimeSnapshot},
+                   #{batchCapacitySnapshot},
                    #{orderedUnitPrice},
                    #{quantity}
                )
@@ -87,6 +87,8 @@
             menu_price_snapshot,
             menu_cost_snapshot,
             packaging_cost_snapshot,
+            expected_cooking_time_snapshot,
+            batch_capacity_snapshot,
             ordered_unit_price,
             quantity,
             created_at
