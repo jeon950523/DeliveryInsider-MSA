@@ -21,7 +21,8 @@ const formData = reactive({
   address: '',
   detailAddress: '',
   industryType: '한식',
-  kitchenCapacity: '',
+  // TODO: Store Backend 계약에서 kitchenCapacity 제거 후 이 호환 필드도 삭제한다.
+  kitchenCapacity: 1,
   minimumOrderAmount: '',
   openTime: '',
   closeTime: '',
@@ -167,7 +168,7 @@ onBeforeMount(async () => {
       formData.address = store.currentData.address || '';
       formData.detailAddress = store.currentData.addressDetail || '';
       formData.industryType = store.currentData.industryType || '';
-      formData.kitchenCapacity = store.currentData.kitchenCapacity || '';
+      formData.kitchenCapacity = store.currentData.kitchenCapacity || 1;
       formData.minimumOrderAmount = store.currentData.minimumOrderAmount ?? '';
       formData.openTime = store.currentData.openTime?.slice(0, 5) || '';
       formData.closeTime = store.currentData.closeTime?.slice(0, 5)  || '';
@@ -291,12 +292,6 @@ if (phoneValue.length > 11) {
 
   if (!currentBizNum || currentBizNum.length !== 10) {
     alert('사업자번호 10자리를 입력해주세요.');
-    activeTab.value = 'basic';
-    return false;
-  }
-
-  if (!formData.kitchenCapacity || Number(formData.kitchenCapacity) < 1) {
-    alert('주방 처리량은 1 이상으로 입력해주세요.');
     activeTab.value = 'basic';
     return false;
   }
@@ -510,11 +505,6 @@ const handlePlatformSubmit = async (platform) => {
 // ==========================================
 // 3. [운영 설정 탭] 상태 및 로직
 // ==========================================
-const operationData = reactive({
-  peakLoadRate: 100,
-  warningKeywords: '알러지, 환불, 별점, 서비스 많이',
-  cancelRateWarning: 8
-});
 
 const handleOperationSubmit = async () => {
   await handleBasicSubmit(); // 기본정보 저장 후 운영 설정 저장
@@ -666,22 +656,6 @@ const handleOperationSubmit = async () => {
         </div>
 
         <div class="input-group">
-          <label title="동시에 조리 처리 가능한 주문 수입니다. &#10 지연 위험과 주방 부하율 계산에 사용됩니다.&#10 예: 3이면 동시에 3건 정도 처리 가능하다는 의미입니다.">
-          주방 처리량 <span>*</span>
-          </label>
-          <input
-            type="number"
-            v-model="formData.kitchenCapacity"
-            required
-            min="1"
-            placeholder="예: 3"
-            title="예: 3이면 동시에 주문 3건 정도를 처리할 수 있다는 의미입니다."
-            @invalid="setInvalidMessage($event, '주방 처리량을 입력해주세요. 예: 3이면 동시에 주문 3건 정도 처리 가능하다는 의미입니다.')"
-            @input="clearInvalidMessage($event)"
-          />
-        </div>
-
-        <div class="input-group">
           <label title="Mock 주문 생성과 배달 주문 기준에 사용할 매장 최소주문금액입니다.">
           최소주문금액 <span>*</span>
           </label>
@@ -804,7 +778,7 @@ const handleOperationSubmit = async () => {
       <div class="card-header">
         <div class="title-area">
           <h3>운영 설정</h3>
-          <p class="required-note">운영 상태와 피크타임 판단 기준을 관리합니다.</p>
+          <p class="required-note">매장의 현재 운영 상태를 관리합니다.</p>
         </div>
       </div>
       <form class="grid-form" @submit.prevent="handleOperationSubmit">
@@ -823,40 +797,11 @@ const handleOperationSubmit = async () => {
             <option value="CLOSE">폐업</option>
           </select>
         </div>
-        <div class="input-group">
-          <label>피크타임 부하율 기준</label>
-          <input
-            type="number"
-            v-model="operationData.peakLoadRate"
-            min="1"
-            placeholder="예: 100"
-            title="예: 100이면 부하율이 100% 이상일 때 피크타임으로 판단합니다."
-          />
-        </div>
-        <div class="input-group">
-          <label>요청사항 경고 기준</label>
-          <input
-            v-model="operationData.warningKeywords"
-            placeholder="예: 알러지, 환불, 별점, 서비스 많이"
-            title="쉼표로 구분해서 입력합니다. 예: 알러지, 환불, 별점, 서비스 많이"
-          />
-        </div>
-        <div class="input-group">
-          <label>취소율 주의 기준</label>
-          <input
-            type="number"
-            v-model="operationData.cancelRateWarning"
-            min="0"
-            max="100"
-            placeholder="예: 8"
-            title="예: 8이면 취소율이 8% 이상일 때 주의 상태로 볼 수 있습니다."
-          />
-        </div>
-        
+
         <div class="info-banner full-width">
-          현재 설정은 사이드바 현재 운영 카드와 대시보드 운영 브리핑에 반영됩니다.
+          주문 운영 분석은 추정 지표가 아니라 실제 주문 접수·조리·픽업·배달 시각을 기준으로 제공합니다.
         </div>
-        
+
         <div class="form-actions full-width">
           <button type="button" class="btn-cancel" @click="handleCancel">취소</button>
           <button type="submit" class="btn-submit">저장</button>

@@ -2,6 +2,16 @@
 import { computed, nextTick, onMounted, ref, watch, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useOrderStore } from '../stores/useOrderStore';
+import {
+  diffMinutes,
+  diffSeconds,
+  formatDurationMinutes,
+  formatDurationSeconds,
+  formatKstDateTime,
+  formatKstTime,
+  getCurrentStageLabel,
+  parseServerDateTime,
+} from '../../../shared/utils/timeFormatters.js';
 
 // 필터 상태 관리
 const selectedPlatform = ref('');
@@ -14,7 +24,6 @@ const showDetailTopButton = ref(false);
 
 const detailActionsRef = ref(null);
 
-let detailScrollContainer = null;
 
 const route = useRoute();
 const router = useRouter();
@@ -29,22 +38,11 @@ const pageSize = 10;
 const selectedOrder = ref(null);
 const detailPanelRef = ref(null);
 
-// 요약 카드 모달 상태
-const isStatusModalOpen = ref(false);
-const selectedSummaryType = ref('');
-
-// 취소/환불 사유 공통 모달 상태
-const isReasonModalOpen = ref(false);
-const reasonMode = ref('CANCEL'); // CANCEL | REFUND
-const reasonTargetOrder = ref(null);
-const reasonCategory = ref('');
-const reasonInput = ref('');
-
 // 1. 화면 구조 확인용 임시 주문 데이터 (HTML 시안과 동일한 데이터 속성 반영)
 const orders = ref([]);
 
 // 오늘 주문 관리에서 실제로 점주가 처리해야 하는 진행 상태
-const activeOrderStatuses = ['WAITING', 'COOKING', 'DELIVERING'];
+const activeOrderStatuses = ['WAITING', 'COOKING', 'READY_FOR_PICKUP', 'DELIVERING'];
 const requestAttentionStatuses = ['WAITING'];
 
 const isActiveOrder = (order) => {
@@ -74,7 +72,7 @@ const filteredOrders = computed(() => {
 
     const activeMatched =
       !selectedActiveOnly.value ||
-      ['WAITING', 'COOKING', 'DELIVERING'].includes(order.orderStatus);
+      activeOrderStatuses.includes(order.orderStatus);
 
     let attentionMatched = true;
 
@@ -82,9 +80,6 @@ const filteredOrders = computed(() => {
       attentionMatched = isRequestAttentionOrder(order) && riskBadges.length > 0;
     }
 
-    if (selectedAttention.value === 'DELAY') {
-      attentionMatched = isActiveOrder(order) && order.delayRiskLevel !== 'SAFE';
-    }
 
     if (selectedAttention.value === 'LOSS') {
       attentionMatched = isActiveOrder(order) && order.lossRisk;
@@ -94,9 +89,6 @@ const filteredOrders = computed(() => {
       attentionMatched = order.orderStatus === 'CANCELED';
     }
 
-    if (selectedAttention.value === 'REFUND') {
-      attentionMatched = order.orderStatus === 'REFUNDED';
-    }
 
     const keyword = searchKeyword.value.trim().toLowerCase();
 
@@ -177,55 +169,193 @@ const operationSummary = computed(() => {
   return {
     waitingCount: orders.value.filter((o) => o.orderStatus === 'WAITING').length,
     cookingCount: orders.value.filter((o) => o.orderStatus === 'COOKING').length,
+    readyForPickupCount: orders.value.filter((o) => o.orderStatus === 'READY_FOR_PICKUP').length,
     deliveringCount: orders.value.filter((o) => o.orderStatus === 'DELIVERING').length,
     requestRiskCount: requestAttentionOrders.value.length,
   };
 });
 
-const latestWaitingOrder = computed(() => {
+const nextWaitingOrder = computed(() => {
   return orders.value.find((order) => order.orderStatus === 'WAITING');
-});
-
-const statusModalTitle = computed(() => {
-  const titles = {
-    WAITING: '접수대기 주문',
-    COOKING: '조리중 주문',
-    DELIVERING: '배달중 주문',
-    REQUEST_RISK: '요청사항 확인 필요',
-  };
-  return titles[selectedSummaryType.value] || '주문 목록';
-});
-
-const statusModalOrders = computed(() => {
-  if (selectedSummaryType.value === 'REQUEST_RISK') {
-    return requestAttentionOrders.value;
-  }
-  return orders.value.filter((order) => order.orderStatus === selectedSummaryType.value);
 });
 
 // 유틸리티 함수들
 const getPlatformName = (type) => ({ BAEMIN: '배민', COUPANG_EATS: '쿠팡이츠', YOGIYO: '요기요', DDANGYO: '땡겨요' }[type] || type);
 const getPlatformClass = (type) => ({ BAEMIN: 'baemin', COUPANG_EATS: 'coupang', YOGIYO: 'yogiyo', DDANGYO: 'ddangyo' }[type] || 'default');
-const getOrderStatusName = (status) => ({ WAITING: '접수대기', COOKING: '조리중', DELIVERING: '배달중', COMPLETED: '완료', CANCELED: '취소', REFUNDED: '환불' }[status] || status);
-const getDelayRiskName = (level) => ({ SAFE: '정상', WARNING: '주의', DELAYED: '지연' }[level] || level);
+const getOrderStatusName = (status) => ({ WAITING: '접수대기', COOKING: '조리중', READY_FOR_PICKUP: '픽업대기', DELIVERING: '배달중', COMPLETED: '완료', CANCELED: '취소' }[status] || status);
 const formatMoney = (amount) => `${Number(amount || 0).toLocaleString('ko-KR')} 원`;
-const formatTime = (dateTime) => {
-  if (!dateTime) {
+const formatTime = (dateTime) => formatKstTime(dateTime, '');
+const formatDateTime = (dateTime) => formatKstDateTime(dateTime, '');
+const formatDuration = (minutes) => formatDurationMinutes(minutes, {
+  zeroAsLessThanMinute: true,
+});
+
+const formatPlatformOrderNumber = (value) => {
+  const text = String(value || '');
+  const match = text.match(/^([A-Z]+-ORDER-)([0-9a-f]{8})/i);
+
+  if (match) {
+    return `${match[1]}${match[2]}…`;
+  }
+
+  return text.length > 24
+    ? `${text.slice(0, 23)}…`
+    : text;
+};
+
+const getElapsedPrimaryText = (order) => {
+  const elapsed = formatDuration(getTotalElapsedMinutes(order));
+
+  if (isActiveOrder(order)) {
+    return `주문 후 ${elapsed}`;
+  }
+
+  if (order?.orderStatus === 'CANCELED') {
+    return `취소까지 ${elapsed}`;
+  }
+
+  if (order?.orderStatus === 'COMPLETED') {
+    return `완료까지 ${elapsed}`;
+  }
+
+  return elapsed;
+};
+
+const getElapsedSecondaryText = (order) => {
+  if (!isActiveOrder(order)) {
     return '';
   }
 
-  const date = new Date(dateTime);
+  return `${getCurrentStageLabel(order.orderStatus)} ${formatDuration(getCurrentStageElapsedMinutes(order))}째`;
+};
 
-  if (Number.isNaN(date.getTime())) {
-    return String(dateTime).slice(11, 16);
+const getDetailTotalElapsedLabel = (order) => {
+  if (!order) {
+    return '-';
   }
 
-  return date.toLocaleTimeString('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
+  let endAt = nowTick.value;
+
+  if (order.orderStatus === 'COMPLETED') {
+    endAt = order.completedAtRaw;
+  } else if (order.orderStatus === 'CANCELED') {
+    endAt = order.canceledAtRaw;
+  }
+
+  const seconds = diffSeconds(order.orderedAtRaw, endAt);
+
+  return seconds === null
+    ? formatDuration(getTotalElapsedMinutes(order))
+    : formatDurationSeconds(seconds, { zeroAsLessThanSecond: true });
 };
+
+const getDetailElapsedLabel = (order) => {
+  if (isActiveOrder(order)) {
+    return '주문 후 경과';
+  }
+
+  if (order?.orderStatus === 'CANCELED') {
+    return '취소까지';
+  }
+
+  return '전체 처리';
+};
+
+const getCurrentStageDurationLabel = (order) => {
+  if (!order || !isActiveOrder(order)) {
+    return '-';
+  }
+
+  const seconds = diffSeconds(order.currentStageStartedAtRaw, nowTick.value);
+
+  return seconds === null
+    ? formatDuration(getCurrentStageElapsedMinutes(order))
+    : formatDurationSeconds(seconds, { zeroAsLessThanSecond: true });
+};
+
+const getStageHistoryText = (order, stageStatus) => {
+  if (!order) {
+    return '-';
+  }
+
+  if (order.orderStatus === stageStatus && isActiveOrder(order)) {
+    return '진행 중';
+  }
+
+  const stageMap = {
+    WAITING: {
+      start: order.orderedAtRaw,
+      end: order.cookingStartedAtRaw,
+      fallback: order.processingTime?.waitingMinutes,
+    },
+    COOKING: {
+      start: order.cookingStartedAtRaw,
+      end: order.readyForPickupAtRaw,
+      fallback: order.processingTime?.cookingMinutes,
+    },
+    READY_FOR_PICKUP: {
+      start: order.readyForPickupAtRaw,
+      end: order.pickedUpAtRaw,
+      fallback: order.processingTime?.pickupWaitingMinutes,
+    },
+    DELIVERING: {
+      start: order.pickedUpAtRaw,
+      end: order.completedAtRaw,
+      fallback: order.processingTime?.deliveryMinutes,
+    },
+  };
+
+  const stage = stageMap[stageStatus];
+
+  if (!stage) {
+    return '-';
+  }
+
+  const seconds = diffSeconds(stage.start, stage.end);
+
+  if (seconds !== null && stage.start && stage.end) {
+    return formatDurationSeconds(seconds, { zeroAsLessThanSecond: true });
+  }
+
+  return formatDuration(stage.fallback);
+};
+
+const nowTick = ref(new Date());
+let elapsedTimer = null;
+
+const getTotalElapsedMinutes = (order) => {
+  if (!order) {
+    return null;
+  }
+
+  if (isActiveOrder(order)) {
+    return diffMinutes(order.orderedAtRaw, nowTick.value)
+      ?? order.totalElapsedMinutes
+      ?? null;
+  }
+
+  return order.processingTime?.totalProcessingMinutes
+    ?? order.processingTime?.totalElapsedMinutes
+    ?? order.totalElapsedMinutes
+    ?? null;
+};
+
+const getCurrentStageElapsedMinutes = (order) => {
+  if (!order || !isActiveOrder(order)) {
+    return null;
+  }
+
+  return diffMinutes(order.currentStageStartedAtRaw, nowTick.value)
+    ?? order.currentStageElapsedMinutes
+    ?? null;
+};
+
+const getStateActionHint = (status) => ({
+  READY_FOR_PICKUP: '픽업 대기 중',
+  DELIVERING: '배달 진행 중',
+  COMPLETED: '처리 완료',
+  CANCELED: '취소 완료',
+}[status] || '상태 변경 불가');
 
 const getOrderItemName = (item) => {
   return item.orderedMenuName || item.menuName || '-';
@@ -240,25 +370,30 @@ const getOrderItemTotalAmount = (item) => {
 
   return Number(item.orderedMenuPrice || 0) * Number(item.quantity || 0);
 };
-// 최신 주문 정렬 기준값
 const getOrderSortValue = (order) => {
-  const rawDateTime =
-    order.orderedAtRaw ||
-    order.orderedAt ||
-    '';
+  const parsed = parseServerDateTime(order?.orderedAtRaw);
 
-  const time = new Date(rawDateTime).getTime();
-
-  if (!Number.isNaN(time)) {
-    return time;
+  if (parsed) {
+    return parsed.getTime();
   }
 
-  return Number(order.id || 0);
+  return Number(order?.id || 0);
 };
 
-// 최신 주문이 앞쪽 페이지, 이전 주문이 뒤쪽 페이지로 가게 정렬
+// 진행 주문은 먼저 들어온 순서, 종료 주문은 그 뒤에 배치한다.
 const sortFifoOrders = (orderList) => {
   return [...orderList].sort((a, b) => {
+    const aActive = isActiveOrder(a);
+    const bActive = isActiveOrder(b);
+
+    if (aActive !== bActive) {
+      return aActive ? -1 : 1;
+    }
+
+    if (aActive) {
+      return getOrderSortValue(a) - getOrderSortValue(b);
+    }
+
     return getOrderSortValue(b) - getOrderSortValue(a);
   });
 };
@@ -322,23 +457,21 @@ const toOrderViewData = (order) => {
     menuSummary: order.menuSummary,
     totalQuantity: order.totalQuantity,
     orderStatus: order.orderStatus,
-    totalAmount: order.totalAmount,
-    netProfit: order.netProfit,
-    totalCookingTime: order.totalCookingTime,
-
-    /*
-     * 지연 위험은 별도 API /api/orders/delay-risks에서 정확히 계산한다.
-     * 목록 최초 연결 단계에서는 기본 SAFE로 둔다.
-     */
-    delayRiskLevel: 'SAFE',
-
-    orderedAtRaw : order.orderedAt,
+    totalAmount: Number(order.totalAmount || 0),
+    netProfit: Number(order.netProfit || 0),
+    orderedAtRaw: order.orderedAt,
+    cookingStartedAtRaw: order.cookingStartedAt,
+    currentStageStartedAtRaw: order.currentStageStartedAt,
     orderedAt: formatTime(order.orderedAt),
     cookingStartedAt: formatTime(order.cookingStartedAt),
-    completedAt: '',
+    currentStageStartedAt: formatTime(order.currentStageStartedAt),
+    totalElapsedMinutes: order.totalElapsedMinutes,
+    currentStageElapsedMinutes: order.currentStageElapsedMinutes,
     deliveryAddress: order.deliveryAddress,
 
     requestText: order.requestText || '',
+    requestRiskType: order.requestRiskType || '',
+    requestRiskLevel: order.requestRiskLevel || '',
     riskBadges: getRiskBadges(order),
     lossRisk: Number(order.netProfit || 0) < 0,
 
@@ -350,10 +483,6 @@ const toOrderViewData = (order) => {
     refundReason: order.refundReason || '',
     refundedAt: formatTime(order.refundedAt),
 
-    /*
-     * 목록 API에는 상세 비용 항목이 없음.
-     * 주문 상세 조회 API에서 실제 값으로 채운다.
-     */
     items: [],
     commissionAmount: 0,
     deliveryFeeAmount: 0,
@@ -386,12 +515,22 @@ const toOrderDetailViewData = (detail, baseOrder = {}) => {
     packagingAmount: Number(detail.totalPackagingFee || 0),
     netProfit: Number(detail.netProfit || 0),
 
-    totalCookingTime: detail.totalCookingTime,
     deliveryAddress: detail.deliveryAddress,
-    
+    financialDataStatus: detail.financialDataStatus || baseOrder.financialDataStatus || '',
+    processingTime: detail.processingTime || baseOrder.processingTime || null,
+
     orderedAtRaw: detail.orderedAt || baseOrder.orderedAtRaw || '',
+    cookingStartedAtRaw: detail.cookingStartedAt || baseOrder.cookingStartedAtRaw || '',
+    readyForPickupAtRaw: detail.readyForPickupAt || baseOrder.readyForPickupAtRaw || '',
+    pickedUpAtRaw: detail.pickedUpAt || baseOrder.pickedUpAtRaw || '',
+    completedAtRaw: detail.completedAt || baseOrder.completedAtRaw || '',
+    canceledAtRaw: detail.canceledAt || baseOrder.canceledAtRaw || '',
+    currentStageStartedAtRaw: baseOrder.currentStageStartedAtRaw || '',
+
     orderedAt: formatTime(detail.orderedAt),
     cookingStartedAt: formatTime(detail.cookingStartedAt),
+    readyForPickupAt: formatTime(detail.readyForPickupAt),
+    pickedUpAt: formatTime(detail.pickedUpAt),
     completedAt: formatTime(detail.completedAt),
     canceledAt: formatTime(detail.canceledAt),
     refundedAt: formatTime(detail.refundedAt || refund.refundedAt),
@@ -468,7 +607,11 @@ const applyRouteQueryFilters = () => {
 
   selectedPlatform.value = String(query.platform || '');
   selectedStatus.value = String(query.status || '');
-  selectedAttention.value = String(query.attention || query.filter || '');
+  const attention = String(query.attention || query.filter || '');
+  const allowedAttentionFilters = ['REQUEST', 'LOSS', 'CANCEL'];
+  selectedAttention.value = allowedAttentionFilters.includes(attention)
+    ? attention
+    : '';
   selectedActiveOnly.value = query.active === 'true';
 
   if (query.keyword) {
@@ -478,41 +621,10 @@ const applyRouteQueryFilters = () => {
 // 주문목록조회
 const loadTodayOrders = async () => {
   try {
-    const [
-      todayResult,
-      delayRiskResult,
-    ] = await Promise.all([
-      orderStore.findToday(),
-      orderStore.findDelayRisks(),
-    ]);
-
-    const delayRiskMap = new Map(
-      delayRiskResult.map((delayOrder) => {
-        return [delayOrder.id, delayOrder];
-      })
-    );
+    const todayResult = await orderStore.findToday();
 
     orders.value = sortFifoOrders(
-      todayResult.map((order) => {
-        const viewOrder = toOrderViewData(order);
-        const delayInfo = delayRiskMap.get(order.id);
-
-        return {
-          ...viewOrder,
-          delayRiskLevel:
-            delayInfo?.delayRiskLevel ||
-            viewOrder.delayRiskLevel ||
-            'SAFE',
-
-          elapsedMinutes:
-            delayInfo?.elapsedMinutes ||
-            0,
-
-          progressRate:
-            delayInfo?.progressRate ||
-            0,
-        };
-      })
+      todayResult.map(toOrderViewData)
     );
 
     const routeOrderId = Number(route.query.id || 0);
@@ -533,11 +645,19 @@ const loadTodayOrders = async () => {
 };
 
 onMounted(async () => {
+  elapsedTimer = window.setInterval(() => {
+    nowTick.value = new Date();
+  }, 30_000);
+
   applyRouteQueryFilters();
   await loadTodayOrders();
   await bindDetailScrollContainer();
 });
 onBeforeUnmount(() => {
+  if (elapsedTimer) {
+    window.clearInterval(elapsedTimer);
+  }
+
   const pageArea = getPageScrollContainer();
 
   if (pageArea) {
@@ -735,110 +855,9 @@ const bindDetailScrollContainer = async () => {
   updateDetailTopButtonVisible();
 };
 
-const openStatusModal = (summaryType) => {
-  selectedSummaryType.value = summaryType;
-  isStatusModalOpen.value = true;
-};
-
-const closeStatusModal = () => {
-  isStatusModalOpen.value = false;
-  selectedSummaryType.value = '';
-};
-
-const openDetailFromModal = async (order) => {
-  await selectOrderAndScroll(order);
-  closeStatusModal();
-};
-
 // 상태 변경 로직
-const getNextStatus = (status) => ({ WAITING: 'COOKING', COOKING: 'DELIVERING', DELIVERING: 'COMPLETED' }[status] || null);
-const getNextActionName = (status) => ({ WAITING: '조리 시작', COOKING: '배달 시작', DELIVERING: '완료 처리' }[status] || '');
-
-const cancelPresets = [
-  '고객 요청',
-  '재료 소진',
-  '조리 지연',
-  '요청사항 처리 불가',
-  '배달 문제',
-  '기타',
-];
-
-const refundPresets = [
-  '고객 요청',
-  '음식 문제',
-  '배달 문제',
-  '매장 실수',
-  '플랫폼 정책',
-  '기타',
-];
-
-const reasonPresets = computed(() => {
-  return reasonMode.value === 'REFUND'
-    ? refundPresets
-    : cancelPresets;
-});
-
-const reasonModalText = computed(() => {
-  if (reasonMode.value === 'REFUND') {
-    return {
-      category: 'REFUND REASON',
-      titleSuffix: '환불 처리',
-      description: '빠른 유형 선택 후 사장이 직접 입력한 상세 사유는 주문 환불 이력으로 남습니다.',
-      typeLabel: '환불사유 유형',
-      placeholder: '예: 음식 누락으로 고객 요청에 따라 환불 처리',
-      helpText: '유형은 환불 분석에, 상세 사유는 주문 이력 확인에 사용됩니다.',
-      saveButton: '환불사유 저장',
-      savingButton: '환불 저장 중...',
-      missingTypeMessage: '환불사유 유형을 선택해 주세요.',
-      missingReasonMessage: '환불 상세 사유를 입력해야 이력이 남습니다.',
-      missingOrderMessage: '환불할 주문을 찾을 수 없습니다.',
-    };
-  }
-
-  return {
-    category: 'CANCEL REASON',
-    titleSuffix: '취소 처리',
-    description: '빠른 유형 선택 후 사장이 직접 입력한 상세 사유는 주문 취소 이력으로 남습니다.',
-    typeLabel: '취소사유 유형',
-    placeholder: '예: 알러지 요청을 매장에서 안전하게 처리할 수 없어 점주 취소 처리',
-    helpText: '유형은 취소율 분석에, 상세 사유는 주문 이력 확인에 사용됩니다.',
-    saveButton: '취소사유 저장',
-    savingButton: '저장 중...',
-    missingTypeMessage: '취소사유 유형을 선택해 주세요.',
-    missingReasonMessage: '상세 사유를 입력해야 이력이 남습니다.',
-    missingOrderMessage: '취소할 주문을 찾을 수 없습니다.',
-  };
-});
-
-const getCancelTypeValue = (label) => {
-  return {
-    '고객 요청': 'CUSTOMER_REQUEST',
-    '재료 소진': 'OUT_OF_STOCK',
-    '조리 지연': 'COOKING_DELAY',
-    '요청사항 처리 불가': 'REQUEST_UNAVAILABLE',
-    '배달 문제': 'DELIVERY_ISSUE',
-    '기타': 'ETC',
-  }[label] || 'ETC';
-};
-
-const getRefundTypeValue = (label) => {
-  return {
-    '고객 요청': 'CUSTOMER_REQUEST',
-    '음식 문제': 'FOOD_ISSUE',
-    '배달 문제': 'DELIVERY_ISSUE',
-    '매장 실수': 'STORE_MISTAKE',
-    '플랫폼 정책': 'PLATFORM_POLICY',
-    '기타': 'ETC',
-  }[label] || 'ETC';
-};
-
-const canCancelOrder = (status) => {
-  return ['WAITING', 'COOKING'].includes(status);
-};
-
-const canRefundOrder = (status) => {
-  return status === 'COMPLETED';
-};
+const getNextStatus = (status) => ({ WAITING: 'COOKING', COOKING: 'READY_FOR_PICKUP' }[status] || null);
+const getNextActionName = (status) => ({ WAITING: '조리 시작', COOKING: '조리 완료' }[status] || '');
 
 const applyUpdatedOrder = (updatedDetail, baseOrder = {}) => {
   const updatedOrder =
@@ -857,6 +876,25 @@ const applyUpdatedOrder = (updatedDetail, baseOrder = {}) => {
   return updatedOrder;
 };
 
+const refreshOrderAfterWrite = async (orderId) => {
+  const todayResult = await orderStore.findToday();
+
+  orders.value = sortFifoOrders(
+    todayResult.map(toOrderViewData)
+  );
+
+  const baseOrder = orders.value.find((item) => item.id === orderId);
+
+  if (!baseOrder) {
+    selectedOrder.value = null;
+    return null;
+  }
+
+  const detail = await orderStore.findOne(orderId);
+
+  return applyUpdatedOrder(detail, baseOrder);
+};
+
 const changeOrderStatus = async (order) => {
   const nextStatus = getNextStatus(order.orderStatus);
 
@@ -865,112 +903,18 @@ const changeOrderStatus = async (order) => {
   }
 
   try {
-    const updatedDetail =
-      await orderStore.updateStatus(
-        order.id,
-        {
-          orderStatus: nextStatus,
-        }
-      );
+    await orderStore.updateStatus(
+      order.id,
+      { orderStatus: nextStatus }
+    );
 
-    applyUpdatedOrder(updatedDetail, order);
+    await refreshOrderAfterWrite(order.id);
     refreshHeaderNotifications();
   } catch (error) {
     console.error('주문 상태 변경 실패:', error);
   }
 };
 
-// 취소/환불 사유 공통 모달 로직
-const openReasonModal = (mode, order) => {
-  if (mode === 'CANCEL' && !canCancelOrder(order.orderStatus)) {
-    alert('접수대기 또는 조리중 주문만 취소할 수 있습니다.');
-    return;
-  }
-
-  if (mode === 'REFUND' && !canRefundOrder(order.orderStatus)) {
-    alert('완료 주문만 환불 처리할 수 있습니다.');
-    return;
-  }
-
-  reasonMode.value = mode;
-  reasonTargetOrder.value = order;
-  reasonCategory.value = '';
-  reasonInput.value = '';
-  isReasonModalOpen.value = true;
-};
-
-const closeReasonModal = () => {
-  isReasonModalOpen.value = false;
-  reasonTargetOrder.value = null;
-  reasonCategory.value = '';
-  reasonInput.value = '';
-};
-
-const setReasonPreset = (preset) => {
-  reasonCategory.value = preset;
-
-  if (reasonInput.value.trim()) {
-    return;
-  }
-
-  if (reasonMode.value === 'REFUND') {
-    reasonInput.value = `${preset}으로 인해 주문을 환불 처리했습니다.`;
-    return;
-  }
-
-  reasonInput.value = `${preset}으로 인해 점주가 주문을 취소 처리했습니다.`;
-};
-
-const saveReason = async () => {
-  if (!reasonCategory.value) {
-    alert(reasonModalText.value.missingTypeMessage);
-    return;
-  }
-
-  if (!reasonInput.value.trim()) {
-    alert(reasonModalText.value.missingReasonMessage);
-    return;
-  }
-
-  const order = reasonTargetOrder.value;
-
-  if (!order) {
-    alert(reasonModalText.value.missingOrderMessage);
-    return;
-  }
-
-  const payload =
-    reasonMode.value === 'REFUND'
-      ? {
-          orderStatus: 'REFUNDED',
-          refundType: getRefundTypeValue(reasonCategory.value),
-          refundReason: reasonInput.value.trim(),
-        }
-      : {
-          orderStatus: 'CANCELED',
-          cancelType: getCancelTypeValue(reasonCategory.value),
-          cancelReason: reasonInput.value.trim(),
-        };
-
-  try {
-    const updatedDetail =
-      await orderStore.updateStatus(
-        order.id,
-        payload
-      );
-
-    applyUpdatedOrder(updatedDetail, order);
-    closeReasonModal();
-    refreshHeaderNotifications();
-  } catch (error) {
-    console.error(
-      reasonMode.value === 'REFUND'
-        ? '주문 환불 처리 실패:'
-        : '주문 취소 처리 실패:',
-      error
-    );
-  }
-};
 </script>
 
 <template>
@@ -1000,36 +944,36 @@ const saveReason = async () => {
       </div>
     </header>
 
-    <section v-if="latestWaitingOrder" class="new-order-section">
+    <section v-if="nextWaitingOrder" class="new-order-section">
       <div class="new-order-head">
         <div>
           <span class="new-label">다음 접수 주문</span>
-          <strong>{{ getPlatformName(latestWaitingOrder.platformType) }} {{ latestWaitingOrder.platformOrderNo }}</strong>
+          <strong>{{ getPlatformName(nextWaitingOrder.platformType) }} {{ nextWaitingOrder.platformOrderNo }}</strong>
         </div>
         <span class="queue-badge">접수대기 {{ operationSummary.waitingCount }}건</span>
       </div>
 
       <div class="new-order-body new-order-split">
         <div class="new-order-main">
-          <h2>{{ latestWaitingOrder.menuSummary }}</h2>
+          <h2>{{ nextWaitingOrder.menuSummary }}</h2>
           <p>
-            총 {{ latestWaitingOrder.totalQuantity }}개 ·
-            {{ formatMoney(latestWaitingOrder.totalAmount) }} ·
-            예상 조리 {{ latestWaitingOrder.totalCookingTime }}분
+            총 {{ nextWaitingOrder.totalQuantity }}개 ·
+            {{ formatMoney(nextWaitingOrder.totalAmount) }} ·
+            주문 후 {{ formatDuration(getTotalElapsedMinutes(nextWaitingOrder)) }}
           </p>
         </div>
 
         <div
           class="new-order-request-box"
-          :class="{ attention: (latestWaitingOrder.riskBadges || []).length > 0 }"
+          :class="{ attention: (nextWaitingOrder.riskBadges || []).length > 0 }"
         >
           <span>요청사항</span>
           <strong>
-            {{ latestWaitingOrder.requestText || '요청사항 없음' }}
+            {{ nextWaitingOrder.requestText || '요청사항 없음' }}
           </strong>
 
-          <small v-if="(latestWaitingOrder.riskBadges || []).length">
-            {{ latestWaitingOrder.riskBadges.join(' · ') }}
+          <small v-if="(nextWaitingOrder.riskBadges || []).length">
+            {{ nextWaitingOrder.riskBadges.join(' · ') }}
           </small>
         </div>
 
@@ -1037,27 +981,18 @@ const saveReason = async () => {
           <button
             type="button"
             class="sub-button"
-            @click="selectOrderAndScroll(latestWaitingOrder)"
+            @click="selectOrderAndScroll(nextWaitingOrder)"
           >
             주문 상세
           </button>
 
           <button
             type="button"
-            class="sub-button danger-outline"
-            :disabled="orderStore.changingOrderId === latestWaitingOrder.id"
-            @click="openReasonModal('CANCEL', latestWaitingOrder)"
-          >
-            주문 취소
-          </button>
-
-          <button
-            type="button"
             class="primary-button"
-            :disabled="orderStore.changingOrderId === latestWaitingOrder.id"
-            @click="changeOrderStatus(latestWaitingOrder)"
+            :disabled="orderStore.changingOrderId === nextWaitingOrder.id"
+            @click="changeOrderStatus(nextWaitingOrder)"
           >
-            {{ orderStore.changingOrderId === latestWaitingOrder.id ? '변경 중...' : '조리 시작' }}
+            {{ orderStore.changingOrderId === nextWaitingOrder.id ? '변경 중...' : '조리 시작' }}
           </button>
         </div>
       </div>
@@ -1065,35 +1000,27 @@ const saveReason = async () => {
 
     <section class="summary-grid">
       <article class="summary-card waiting clickable" @click="setOrderFilter('status', 'WAITING')">
-        <div class="summary-card-head">
-          <span>접수대기</span>
-        </div>
+        <div class="summary-card-head"><span>접수대기</span></div>
         <strong>{{ operationSummary.waitingCount }}건</strong>
-        <p>클릭하면 접수대기 주문만 확인</p>
+        <p>접수 후 경과시간을 확인</p>
       </article>
 
       <article class="summary-card cooking clickable" @click="setOrderFilter('status', 'COOKING')">
-        <div class="summary-card-head">
-          <span>조리중</span>
-        </div>
+        <div class="summary-card-head"><span>조리중</span></div>
         <strong>{{ operationSummary.cookingCount }}건</strong>
-        <p>조리 진행 중인 주문</p>
+        <p>조리 시작 후 경과시간 확인</p>
+      </article>
+
+      <article class="summary-card ready clickable" @click="setOrderFilter('status', 'READY_FOR_PICKUP')">
+        <div class="summary-card-head"><span>픽업대기</span></div>
+        <strong>{{ operationSummary.readyForPickupCount }}건</strong>
+        <p>조리 완료 후 픽업 대기</p>
       </article>
 
       <article class="summary-card delivering clickable" @click="setOrderFilter('status', 'DELIVERING')">
-        <div class="summary-card-head">
-          <span>배달중</span>
-        </div>
+        <div class="summary-card-head"><span>배달중</span></div>
         <strong>{{ operationSummary.deliveringCount }}건</strong>
-        <p>배달 완료 대기 주문</p>
-      </article>
-
-      <article class="summary-card risk clickable" @click="setOrderFilter('attention', 'REQUEST')">
-        <div class="summary-card-head">
-          <span>요청사항 확인</span>
-        </div>
-        <strong>{{ operationSummary.requestRiskCount }}건</strong>
-        <p>확인이 필요한 요청사항</p>
+        <p>플랫폼 배달 진행 상태</p>
       </article>
     </section>
 
@@ -1115,10 +1042,10 @@ const saveReason = async () => {
           <option value="">전체 상태</option>
           <option value="WAITING">접수대기</option>
           <option value="COOKING">조리중</option>
+          <option value="READY_FOR_PICKUP">픽업대기</option>
           <option value="DELIVERING">배달중</option>
           <option value="COMPLETED">완료</option>
           <option value="CANCELED">취소</option>
-          <option value="REFUNDED">환불</option>
         </select>
       </div>
 
@@ -1127,10 +1054,8 @@ const saveReason = async () => {
         <select v-model="selectedAttention" @change="selectedStatus = ''">
           <option value="">전체</option>
           <option value="REQUEST">요청사항 확인</option>
-          <option value="DELAY">지연 위험</option>
           <option value="LOSS">손실 위험</option>
           <option value="CANCEL">취소 이력</option>
-          <option value="REFUND">환불 이력</option>
         </select>
       </div>
 
@@ -1164,7 +1089,7 @@ const saveReason = async () => {
                 <th>메뉴</th>
                 <th>배달주소</th>
                 <th>요청사항</th>
-                <th>위험</th>
+                <th>경과시간</th>
                 <th>액션</th>
               </tr>
             </thead>
@@ -1181,7 +1106,7 @@ const saveReason = async () => {
                     class="order-number-button platform-order-number"
                     @click.stop="selectOrderAndScroll(order)"
                   >
-                    {{ order.platformOrderNo }}
+                    <span :title="order.platformOrderNo">{{ formatPlatformOrderNumber(order.platformOrderNo) }}</span>
                   </button>
                   <small>{{ order.orderedAt }}</small>
                 </td>
@@ -1219,10 +1144,7 @@ const saveReason = async () => {
                   <small class="request-text-preview">
                     {{ order.requestText || '요청사항 없음' }}
                   </small>
-                </td>
-
-                <td>
-                  <template v-if="(order.riskBadges || []).length">
+                  <div v-if="(order.riskBadges || []).length" class="request-badge-line">
                     <span
                       v-for="badge in order.riskBadges"
                       :key="badge"
@@ -1230,15 +1152,12 @@ const saveReason = async () => {
                     >
                       {{ badge }}
                     </span>
-                  </template>
+                  </div>
+                </td>
 
-                  <span
-                    v-else
-                    class="delay-badge"
-                    :class="`delay-${String(order.delayRiskLevel || 'SAFE').toLowerCase()}`"
-                  >
-                    {{ getDelayRiskName(order.delayRiskLevel || 'SAFE') }}
-                  </span>
+                <td class="elapsed-cell">
+                  <strong>{{ getElapsedPrimaryText(order) }}</strong>
+                  <small v-if="isActiveOrder(order)">{{ getElapsedSecondaryText(order) }}</small>
                 </td>
 
                 <td>
@@ -1251,7 +1170,7 @@ const saveReason = async () => {
                   >
                     {{ orderStore.changingOrderId === order.id ? '변경 중...' : getNextActionName(order.orderStatus) }}
                   </button>
-                  <span v-else class="done-text">완료</span>
+                  <span v-else class="done-text">{{ getStateActionHint(order.orderStatus) }}</span>
                 </td>
               </tr>
               <tr v-if="filteredOrders.length === 0">
@@ -1352,6 +1271,56 @@ const saveReason = async () => {
           <div class="detail-row request-row"><span>요청사항</span><strong>{{ selectedOrder.requestText || '없음' }}</strong></div>
         </div>
 
+        <div class="detail-section processing-time-section">
+          <h3>처리시간</h3>
+
+          <div class="processing-summary">
+            <div>
+              <span>주문 접수</span>
+              <strong>{{ formatDateTime(selectedOrder.orderedAtRaw) }}</strong>
+            </div>
+            <div>
+              <span>{{ getDetailElapsedLabel(selectedOrder) }}</span>
+              <strong>{{ getDetailTotalElapsedLabel(selectedOrder) }}</strong>
+            </div>
+          </div>
+
+          <div v-if="isActiveOrder(selectedOrder)" class="current-stage-time">
+            <span>현재 단계</span>
+            <strong>
+              {{ getCurrentStageLabel(selectedOrder.orderStatus) }} ·
+              {{ getCurrentStageDurationLabel(selectedOrder) }}째
+            </strong>
+          </div>
+
+          <div v-if="selectedOrder.processingTime" class="processing-stage-list">
+            <div>
+              <span>접수 대기</span>
+              <strong>{{ getStageHistoryText(selectedOrder, 'WAITING') }}</strong>
+            </div>
+            <div>
+              <span>조리</span>
+              <strong>{{ getStageHistoryText(selectedOrder, 'COOKING') }}</strong>
+            </div>
+            <div>
+              <span>픽업 대기</span>
+              <strong>{{ getStageHistoryText(selectedOrder, 'READY_FOR_PICKUP') }}</strong>
+            </div>
+            <div>
+              <span>배달</span>
+              <strong>{{ getStageHistoryText(selectedOrder, 'DELIVERING') }}</strong>
+            </div>
+          </div>
+
+          <div class="processing-timeline">
+            <span>접수 {{ selectedOrder.orderedAt || '-' }}</span>
+            <span>조리시작 {{ selectedOrder.cookingStartedAt || '-' }}</span>
+            <span>조리완료 {{ selectedOrder.readyForPickupAt || '-' }}</span>
+            <span>픽업 {{ selectedOrder.pickedUpAt || '-' }}</span>
+            <span>완료 {{ selectedOrder.completedAt || '-' }}</span>
+          </div>
+        </div>
+
         <div class="detail-section request-guide" :class="(selectedOrder.riskBadges||[]).length ? 'attention' : 'plain'">
           <h3>고객 요청사항</h3>
           <p class="request-text-large">{{ selectedOrder.requestText || '요청사항이 없습니다.' }}</p>
@@ -1424,44 +1393,6 @@ const saveReason = async () => {
 
         <div class="detail-actions" ref="detailActionsRef">
           <button
-            v-if="canCancelOrder(selectedOrder.orderStatus)"
-            type="button"
-            class="sub-button danger-outline"
-            :disabled="orderStore.changingOrderId === selectedOrder.id"
-            @click="openReasonModal('CANCEL', selectedOrder)"
-          >
-            주문 취소
-          </button>
-
-          <button
-            v-else-if="canRefundOrder(selectedOrder.orderStatus)"
-            type="button"
-            class="sub-button danger-outline"
-            :disabled="orderStore.changingOrderId === selectedOrder.id"
-            @click="openReasonModal('REFUND', selectedOrder)"
-          >
-            환불 처리
-          </button>
-
-          <button
-            v-else-if="selectedOrder.orderStatus === 'CANCELED'"
-            type="button"
-            class="sub-button"
-            disabled
-          >
-            취소 완료
-          </button>
-
-          <button
-            v-else-if="selectedOrder.orderStatus === 'REFUNDED'"
-            type="button"
-            class="sub-button"
-            disabled
-          >
-            환불 완료
-          </button>
-
-          <button
             v-if="getNextStatus(selectedOrder.orderStatus)"
             type="button"
             class="primary-button state-action-button"
@@ -1470,7 +1401,9 @@ const saveReason = async () => {
           >
             {{ orderStore.changingOrderId === selectedOrder.id ? '변경 중...' : getNextActionName(selectedOrder.orderStatus) }}
           </button>
-          <button v-else type="button" class="sub-button state-action-button" disabled>상태 변경 불가</button>
+          <button v-else type="button" class="sub-button state-action-button" disabled>
+            {{ getStateActionHint(selectedOrder.orderStatus) }}
+          </button>
         </div>
         <div ref="detailBottomRef" class="detail-bottom-anchor"></div>
       </aside>
@@ -1487,78 +1420,6 @@ const saveReason = async () => {
        </button>
 
 
-    <div v-if="isReasonModalOpen && reasonTargetOrder" class="modal-backdrop" @click.self="closeReasonModal">
-      <div class="status-modal cancel-modal">
-        <div class="status-modal-header">
-          <div>
-            <span class="category-text">{{ reasonModalText.category }}</span>
-            <h2>{{ reasonTargetOrder.platformOrderNo }} {{ reasonModalText.titleSuffix }}</h2>
-            <p class="modal-sub-id">{{ getPlatformName(reasonTargetOrder.platformType) }} 주문</p>
-            <p>{{ reasonModalText.description }}</p>
-          </div>
-          <button class="modal-close-button" @click="closeReasonModal">×</button>
-        </div>
-        
-        <div class="status-modal-body">
-          <div class="modal-order-card">
-            <div class="modal-order-main">
-              <div>
-                <strong>{{ reasonTargetOrder.menuSummary }}</strong>
-                <p>{{ getPlatformName(reasonTargetOrder.platformType) }} · {{ formatMoney(reasonTargetOrder.totalAmount) }}</p>
-              </div>
-              <span
-                class="status-badge"
-                :class="`status-${String(reasonTargetOrder.orderStatus || '').toLowerCase()}`"
-              >
-                {{ getOrderStatusName(reasonTargetOrder.orderStatus) }}
-              </span>
-            </div>
-            
-            <div class="cancel-preset-grid">
-              <button
-                v-for="preset in reasonPresets" 
-                :key="preset"
-                type="button"
-                @click="setReasonPreset(preset)"
-              >
-                {{ preset }}
-              </button>
-            </div>
-            
-            <div class="cancel-reason-area">
-              <label>{{ reasonModalText.typeLabel }} <span>*</span></label>
-              <select v-model="reasonCategory">
-                <option value="">유형 선택</option>
-                <option
-                  v-for="preset in reasonPresets"
-                  :key="preset"
-                >
-                  {{ preset }}
-                </option>
-              </select>
-              
-              <label>상세 사유 직접 입력 <span>*</span></label>
-              <textarea
-                v-model="reasonInput"
-                :placeholder="reasonModalText.placeholder"
-              ></textarea>
-              <small>{{ reasonModalText.helpText }}</small>
-            </div>
-            
-            <div class="modal-order-actions">
-              <button class="sub-button" @click="closeReasonModal">닫기</button>
-              <button
-                class="primary-button"
-                :disabled="reasonTargetOrder && orderStore.changingOrderId === reasonTargetOrder.id"
-                @click="saveReason"
-              >
-                {{ reasonTargetOrder && orderStore.changingOrderId === reasonTargetOrder.id ? reasonModalText.savingButton : reasonModalText.saveButton }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -1996,7 +1857,7 @@ const saveReason = async () => {
 }
 
 /* 뱃지 통일 (플랫폼 중립화 포함) */
-.platform-badge, .status-badge, .delay-badge, .risk-badge { 
+.platform-badge, .status-badge, .risk-badge { 
   display: inline-flex; align-items: center; justify-content: center; min-height: 30px; 
   padding: 0 12px; margin: 2px 2px 2px 0; border-radius: 999px; font-size: 14px; font-weight: 900; white-space: nowrap; 
 }
@@ -2007,9 +1868,6 @@ const saveReason = async () => {
 .status-badge.status-completed { color: #334155; background-color: #f1f5f9; }
 .status-badge.status-canceled { color: #991b1b; background-color: #fee2e2; }
 .status-badge.status-refunded { color: #92400e; background-color: #fef3c7; }
-.delay-badge.delay-safe { color: #166534; background-color: #dcfce7; }
-.delay-badge.delay-warning { color: #9a3412; background-color: #ffedd5; }
-.delay-badge.delay-delayed { color: #991b1b; background-color: #fee2e2; }
 .risk-badge { color: #9a3412; background-color: #ffedd5; }
 
 .table-button { min-height: 36px; padding: 0 10px; border: 0; background-color: #eaf8fd; color: #1f1f20; font-size: 14px; font-weight: 900; transition: all 0.2s; }
@@ -2097,38 +1955,6 @@ const saveReason = async () => {
 .cancel-history p, .refund-history p { margin: 0; color: #475569; font-size: 16px; line-height: 1.6; font-weight: 700; }
 
 .detail-actions { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-top: 24px; }
-
-/* ============================================================
-   취소 사유 모달
-   ============================================================ */
-.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 28px; background-color: rgba(15, 23, 42, 0.45); }
-.status-modal { background-color: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28); }
-.cancel-modal { width: min(720px, 100%); }
-.status-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 26px 28px; border-bottom: 1px solid #e5e7eb; background-color: #f8fafc; }
-.status-modal-header h2 { margin: 6px 0; color: #111827; font-size: 30px; font-weight: 900; }
-.status-modal-header p { margin: 0; color: #64748b; font-size: 16px; }
-.modal-sub-id { margin-bottom: 6px !important; font-weight: 750; }
-.modal-close-button { width: 44px; height: 44px; font-size: 30px; background-color: #ffffff; color: #475569; display: grid; place-items: center; border: 0; }
-.modal-close-button:hover { background-color: #eaf8fd; color: #164e68; }
-
-.status-modal-body { padding: 24px 28px 28px; max-height: calc(82vh - 120px); overflow-y: auto; }
-.modal-order-card { padding: 20px; border: 1px solid #e5e7eb; border-radius: 16px; background-color: #ffffff; }
-.modal-order-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.modal-order-main strong { color: #111827; font-size: 18px; font-weight: 800; }
-.modal-order-main p { margin: 6px 0 0; color: #64748b; font-size: 16px; }
-
-.cancel-preset-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
-.cancel-preset-grid button { min-height: 48px; border: 1px solid #dbe3ee; border-radius: 12px; color: #334155; background: #f8fafc; font-size: 16px; font-weight: 800; cursor: pointer; transition: all 0.2s; }
-.cancel-preset-grid button:hover { color: #164E68; border-color: #87CEEB; background: #EAF8FD; }
-
-.cancel-reason-area { display: grid; gap: 10px; margin-top: 18px; }
-.cancel-reason-area label { color: #374151; font-size: 16px; font-weight: 800; }
-.cancel-reason-area label span { color: #ef4444; }
-.cancel-reason-area select, .cancel-reason-area textarea { width: 100%; border: 1px solid #d1d5db; border-radius: 12px; font-size: 17px; background: #fff; padding: 0 14px; outline: none; }
-.cancel-reason-area select { height: 48px; }
-.cancel-reason-area textarea { min-height: 120px; padding: 16px; resize: vertical; line-height: 1.5; }
-.cancel-reason-area select:focus, .cancel-reason-area textarea:focus { border-color: #87ceeb; box-shadow: 0 0 0 3px rgba(135, 206, 235, 0.24); }
-.cancel-reason-area small { color: #64748b; font-size: 15px; margin-top: 4px; }
 
 /* ============================================================
    반응형
@@ -2497,9 +2323,6 @@ const saveReason = async () => {
 .status-badge,
 .platform-badge,
 .risk-badge,
-.delay-badge {
-  font-weight: 500;
-}
 
 .menu-cell small,
 .request-text-preview,
@@ -2509,76 +2332,13 @@ const saveReason = async () => {
 }
 
 .detail-actions {
-  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr);
+  grid-template-columns: 1fr;
 }
 
 .detail-actions .state-action-button {
-  grid-column: 2;
+  grid-column: 1;
 }
 
-.modal-order-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 18px;
-}
-
-.modal-order-actions .sub-button,
-.modal-order-actions .primary-button {
-  min-width: 132px;
-  font-weight: 700;
-}
-
-.status-modal-header h2,
-.modal-order-main strong,
-.cancel-reason-area label,
-.cancel-preset-grid button {
-  font-weight: 700;
-}
-
-.cancel-reason-area select,
-.cancel-reason-area textarea {
-  font-weight: 500;
-}
-
-
-/* ============================================================
-   2026-06-27 01:39 취소/환불 사유 모달 입력창 넘침 보정
-   ============================================================ */
-.cancel-modal,
-.status-modal-body,
-.modal-order-card,
-.cancel-reason-area,
-.cancel-reason-area select,
-.cancel-reason-area textarea {
-  box-sizing: border-box;
-}
-
-.cancel-modal {
-  max-width: calc(100vw - 56px);
-  overflow: hidden;
-}
-
-.status-modal-body {
-  overflow-x: hidden;
-}
-
-.modal-order-card,
-.cancel-reason-area {
-  min-width: 0;
-  width: 100%;
-}
-
-.cancel-reason-area select,
-.cancel-reason-area textarea {
-  width: 100%;
-  max-width: 100%;
-}
-
-.modal-order-actions {
-  width: 100%;
-}
 .detail-floating-top-button {
   position: fixed;
   right: 28px;
@@ -2616,5 +2376,128 @@ const saveReason = async () => {
   }
 }
 
+
+
+
+
+.platform-order-number span {
+  display: inline-block;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* 2026-09-04 실제 주문 경과시간 UI */
+.summary-card.ready {
+  border-color: #fde68a;
+  background-color: #fffbeb;
+}
+
+.status-badge.status-ready_for_pickup {
+  color: #92400e;
+  background-color: #fef3c7;
+}
+
+.request-badge-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.elapsed-cell strong {
+  color: #164E68;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.elapsed-cell small {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.processing-time-section {
+  background: #f8fafc;
+}
+
+.processing-summary,
+.processing-stage-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.processing-summary > div,
+.processing-stage-list > div,
+.current-stage-time {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.processing-summary span,
+.processing-stage-list span,
+.current-stage-time span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.processing-summary strong,
+.processing-stage-list strong,
+.current-stage-time strong {
+  display: block;
+  margin-top: 5px;
+  color: #111827;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.current-stage-time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  border-color: #87ceeb;
+  background: #eaf8fd;
+}
+
+.current-stage-time strong {
+  margin-top: 0;
+  color: #164E68;
+}
+
+.processing-stage-list {
+  margin-top: 10px;
+}
+
+.processing-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.processing-timeline span {
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .processing-summary,
+  .processing-stage-list {
+    grid-template-columns: 1fr;
+  }
+}
 
 </style>

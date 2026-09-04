@@ -1,13 +1,21 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useDashboardStore } from '../stores/useDashboardStore';
+import {
+  diffMinutes,
+  formatDurationMinutes,
+  formatKstTime,
+  getCurrentStageLabel,
+} from '../../../shared/utils/timeFormatters.js';
 
 const router = useRouter();
 const dashboardStore = useDashboardStore();
 
 const priorityCurrentPage = ref(1);
 const priorityPageSize = 3;
+const nowTick = ref(new Date());
+let elapsedTimer = null;
 
 const platformNames = {
   BAEMIN: '배민',
@@ -16,112 +24,7 @@ const platformNames = {
   DDANGYO: '땡겨요',
 };
 
-const defaultSummary = {
-  sales: 0,
-  profit: 0,
-  completedCount: 0,
-  activeCount: 0,
-  orderCount: 0,
-  waiting: 0,
-  cooking: 0,
-  delivering: 0,
-  delayRisk: 0,
-  requestRisk: 0,
-  lossRisk: 0,
-  cancelRate: 0,
-  loadRate: 0,
-  level: '정상',
-  message: '대시보드 데이터를 불러오는 중입니다.',
-};
-
-const getPlatformName = (platformType) => {
-  return platformNames[platformType] || platformType || '-';
-};
-
-const getOperationLevel = (data = {}) => {
-  const loadRate = Number(data.loadRate || 0);
-  const delayRisk = Number(data.delayRiskCount || 0);
-  const requestRisk = Number(data.requestRiskCount || 0);
-  const lossRisk = Number(data.lossRiskCount || 0);
-  const kitchenLoadLevel = data.kitchenLoadLevel || '';
-
-  if (kitchenLoadLevel === 'OVERLOAD' || loadRate >= 100 || delayRisk >= 3) {
-    return '위험';
-  }
-
-  if (
-    kitchenLoadLevel === 'HIGH' ||
-    loadRate >= 70 ||
-    delayRisk >= 1 ||
-    requestRisk >= 2 ||
-    lossRisk >= 1
-  ) {
-    return '주의';
-  }
-
-  return '정상';
-};
-
-const getBriefTone = (level) => {
-  if (level === '위험') {
-    return 'danger';
-  }
-
-  if (level === '주의') {
-    return 'warning';
-  }
-
-  return 'safe';
-};
-
-const summary = computed(() => {
-  const data = dashboardStore.operationSummary;
-
-  if (!data) {
-    return defaultSummary;
-  }
-
-  const requestRisk =
-    dashboardStore.todayOrders.filter(isRequestRiskOrder).length;
-
-  const level = getOperationLevel({
-    ...data,
-    requestRiskCount: requestRisk,
-  });
-
-  return {
-    sales: data.todaySales || 0,
-    profit: data.todayNetProfit || 0,
-
-    completedCount: data.completedCount || 0,
-    activeCount: data.progressOrderCount || 0,
-    orderCount: data.todayOrderCount || 0,
-
-    waiting: data.waitingCount || 0,
-    cooking: data.cookingCount || 0,
-    delivering: data.deliveringCount || 0,
-
-    delayRisk: data.delayRiskCount || 0,
-    requestRisk,
-    lossRisk: data.lossRiskCount || 0,
-
-    cancelRate: data.cancelRate || 0,
-    loadRate: data.loadRate || 0,
-    level,
-    message: data.message || '',
-  };
-});
-
-/*
- * 오늘 주문 목록에서 id가 같은 주문을 찾는다.
- * delay-risks API에는 platformOrderNumber가 없어서
- * todayOrders와 합쳐서 화면 표시값을 보강한다.
- */
-const findTodayOrderById = (orderId) => {
-  return dashboardStore.todayOrders.find((order) => {
-    return order.id === orderId;
-  });
-};
+const ACTIVE_ORDER_STATUSES = ['WAITING', 'COOKING', 'READY_FOR_PICKUP', 'DELIVERING'];
 
 const REQUEST_ATTENTION_TYPES = [
   'ALLERGY',
@@ -134,11 +37,9 @@ const REQUEST_ATTENTION_TYPES = [
 
 const REQUEST_ATTENTION_LEVELS = ['WARNING', 'DANGER'];
 
-const normalizeRiskValue = (value) => {
-  return String(value || '').trim().toUpperCase();
-};
+const normalizeRiskValue = (value) => String(value || '').trim().toUpperCase();
 
-const isRequestRiskOrder = (order) => {
+const isRequestRiskOrder = (order = {}) => {
   if (order.orderStatus !== 'WAITING') {
     return false;
   }
@@ -152,246 +53,130 @@ const isRequestRiskOrder = (order) => {
   );
 };
 
-const getRequestIssueLabel = (order) => {
-  const riskType = normalizeRiskValue(order.requestRiskType);
+const isActiveOrder = (order = {}) => ACTIVE_ORDER_STATUSES.includes(order.orderStatus);
 
-  if (riskType === 'ALLERGY') {
-    return {
-      issueLevel: 'critical',
-      issueLabel: '알러지 주의',
-      issueReason: '알러지 관련 요청',
-    };
+const getPlatformName = (platformType) => platformNames[platformType] || platformType || '-';
+
+const getStatusLabel = (status) => ({
+  WAITING: '접수대기',
+  COOKING: '조리중',
+  READY_FOR_PICKUP: '픽업대기',
+  DELIVERING: '배달중',
+  COMPLETED: '완료',
+  CANCELED: '취소',
+}[status] || status || '-');
+
+const formatMoney = (value) => `${Number(value || 0).toLocaleString('ko-KR')} 원`;
+
+const formatDuration = (value) => formatDurationMinutes(value, {
+  zeroAsLessThanMinute: true,
+});
+
+const getOrderElapsedMinutes = (order) => {
+  return diffMinutes(order?.orderedAt, nowTick.value) ?? Number(order?.totalElapsedMinutes || 0);
+};
+
+const getStageElapsedMinutes = (order) => {
+  if (!isActiveOrder(order)) {
+    return null;
   }
 
-  if (riskType === 'DISPUTE') {
-    return {
-      issueLevel: 'critical',
-      issueLabel: '분쟁 가능',
-      issueReason: '취소·환불·별점 관련 요청',
-    };
-  }
+  return diffMinutes(order?.currentStageStartedAt, nowTick.value)
+    ?? order?.currentStageElapsedMinutes
+    ?? null;
+};
 
-  if (riskType === 'EXCESSIVE') {
-    return {
-      issueLevel: 'warning',
-      issueLabel: '과도 요청',
-      issueReason: '추가 제공 기준 확인 필요',
-    };
-  }
+const getOrderTimeValue = (order = {}) => {
+  const minutes = getOrderElapsedMinutes(order);
+  return Number.isFinite(minutes) ? minutes : 0;
+};
 
-  if (riskType === 'GROUP') {
-    return {
-      issueLevel: 'warning',
-      issueLabel: '배달사항 확인',
-      issueReason: '배달 전달 요청 확인 필요',
-    };
-  }
+const requestRiskCount = computed(() => {
+  return dashboardStore.todayOrders.filter(isRequestRiskOrder).length;
+});
+
+const oldestActiveElapsedMinutes = computed(() => {
+  return dashboardStore.todayOrders
+    .filter(isActiveOrder)
+    .map(getOrderElapsedMinutes)
+    .reduce((max, minutes) => Math.max(max, Number(minutes || 0)), 0);
+});
+
+const summary = computed(() => {
+  const data = dashboardStore.operationSummary || {};
 
   return {
-    issueLevel: 'warning',
-    issueLabel: '요청 확인',
-    issueReason: '요청사항 확인 필요',
+    sales: data.todaySales || 0,
+    profit: data.todayNetProfit || 0,
+    completedSales: data.completedSales || 0,
+    completedCount: data.completedCount || 0,
+    activeCount: data.progressOrderCount || 0,
+    orderCount: data.todayOrderCount || 0,
+    waiting: data.waitingCount || 0,
+    cooking: data.cookingCount || 0,
+    readyForPickup: data.readyForPickupCount || 0,
+    delivering: data.deliveringCount || 0,
+    requestRisk: requestRiskCount.value,
+    lossRisk: data.lossRiskCount || 0,
+    cancelRate: data.cancelRate || 0,
+    oldestActiveOrderElapsedMinutes: oldestActiveElapsedMinutes.value,
+    averageCompletedProcessingMinutes: data.averageCompletedProcessingMinutes ?? null,
+    message: data.message || '',
   };
-};
+});
 
-const toDelayPriorityOrder = (delayOrder) => {
-  const todayOrder =
-    findTodayOrderById(delayOrder.id);
-
-  const isDelayed =
-    delayOrder.delayRiskLevel === 'DELAYED';
-
-  return {
-    id: delayOrder.id,
-    orderNo: delayOrder.orderNo,
-    platformNo:
-      todayOrder?.platformOrderNumber ||
-      delayOrder.orderNo,
-    platform: getPlatformName(delayOrder.platformType),
-    menuSummary: delayOrder.menuSummary || '-',
-    issueLevel: isDelayed ? 'critical' : 'warning',
-    issueLabel: isDelayed ? '지연 발생' : '지연 주의',
-    issueReason:
-      `진행률 ${delayOrder.progressRate || 0}% · ` +
-      `경과 ${delayOrder.elapsedMinutes || 0}분 / ` +
-      `예상 ${delayOrder.adjustedCookingTime || delayOrder.totalCookingTime || 0}분`,
-  };
-};
-
-const toRequestPriorityOrder = (order) => {
-  const issue =
-    getRequestIssueLabel(order);
-
-  return {
-    id: order.id,
-    orderNo: order.orderNo,
-    platformNo: order.platformOrderNumber,
-    platform: getPlatformName(order.platformType),
-    menuSummary: order.menuSummary || '-',
-    ...issue,
-  };
-};
-
-const toLossPriorityOrder = (order) => {
-  return {
-    id: order.id,
-    orderNo: order.orderNo,
-    platformNo: order.platformOrderNumber,
-    platform: getPlatformName(order.platformType),
-    menuSummary: order.menuSummary || '-',
-    orderedAt: order.orderedAt,
-    issueLevel: 'warning',
-    issueLabel: '손실 위험',
-    issueReason: `예상 순수익 ${formatMoney(order.netProfit)}`,
-    hasIssue: true,
-  };
-};
-
-const toNormalPriorityOrder = (order) => {
-  return {
-    id: order.id,
-    orderNo: order.orderNo,
-    platformNo: order.platformOrderNumber,
-    platform: getPlatformName(order.platformType),
-    menuSummary: order.menuSummary || '-',
-    orderedAt: order.orderedAt,
-    issueLevel: 'normal',
-    issueLabel: '일반 주문',
-    issueReason: '접수순 확인',
-    hasIssue: false,
-  };
-};
-
-const getOrderTimeValue = (order) => {
-  const orderedAt = order?.orderedAt;
-
-  if (orderedAt) {
-    const timestamp = new Date(orderedAt).getTime();
-
-    if (!Number.isNaN(timestamp)) {
-      return timestamp;
-    }
-  }
-
-  return Number(order?.id || 0);
-};
-
-const isActiveOrder = (order) => {
-  return ['WAITING', 'COOKING', 'DELIVERING'].includes(order.orderStatus);
-};
-
-/*
- * 우선 확인 주문
- *
- * - 진행 중인 주문은 일반 주문이라도 모두 보여준다.
- * - 요청사항/지연/손실처럼 주의가 필요한 주문을 먼저 보여준다.
- * - 같은 그룹 안에서는 먼저 들어온 주문이 앞에 오도록 FIFO로 정렬한다.
- */
 const priorityOrders = computed(() => {
-  const delayRiskMap = new Map();
+  return dashboardStore.todayOrders
+    .filter(isActiveOrder)
+    .slice()
+    .sort((a, b) => getOrderTimeValue(b) - getOrderTimeValue(a))
+    .map((order) => {
+      const totalElapsed = getOrderElapsedMinutes(order);
+      const stageElapsed = getStageElapsedMinutes(order);
+      const requestAttention = isRequestRiskOrder(order);
+      const lossRisk = Number(order.netProfit || 0) < 0;
 
-  dashboardStore.delayRiskOrders
-    .filter((order) => {
-      return order.delayRiskLevel !== 'SAFE';
-    })
-    .forEach((order) => {
-      delayRiskMap.set(order.id, order);
-    });
-
-  const activeOrders =
-    dashboardStore.todayOrders
-      .filter(isActiveOrder)
-      .map((order) => {
-        const delayOrder = delayRiskMap.get(order.id);
-
-        if (delayOrder) {
-          return {
-            ...toDelayPriorityOrder(delayOrder),
-            orderedAt: order.orderedAt,
-            hasIssue: true,
-          };
-        }
-
-        if (isRequestRiskOrder(order)) {
-          return {
-            ...toRequestPriorityOrder(order),
-            orderedAt: order.orderedAt,
-            hasIssue: true,
-          };
-        }
-
-        if (Number(order.netProfit || 0) <= 0) {
-          return toLossPriorityOrder(order);
-        }
-
-        return toNormalPriorityOrder(order);
-      });
-
-  const knownOrderIds =
-    new Set(activeOrders.map((order) => order.id));
-
-  const delayFallbackOrders =
-    dashboardStore.delayRiskOrders
-      .filter((order) => {
-        return order.delayRiskLevel !== 'SAFE';
-      })
-      .filter((order) => {
-        return !knownOrderIds.has(order.id);
-      })
-      .map((order) => {
-        return {
-          ...toDelayPriorityOrder(order),
-          orderedAt: order.cookingStartedAt,
-          hasIssue: true,
-        };
-      });
-
-  return [...activeOrders, ...delayFallbackOrders]
-    .sort((a, b) => {
-      if (a.hasIssue !== b.hasIssue) {
-        return a.hasIssue ? -1 : 1;
-      }
-
-      return getOrderTimeValue(a) - getOrderTimeValue(b);
+      return {
+        id: order.id,
+        orderNo: order.orderNo,
+        platformNo: order.platformOrderNumber,
+        platform: getPlatformName(order.platformType),
+        menuSummary: order.menuSummary || '-',
+        orderedAt: order.orderedAt,
+        status: order.orderStatus,
+        issueLevel: requestAttention ? 'warning' : lossRisk ? 'warning' : 'normal',
+        issueLabel: getStatusLabel(order.orderStatus),
+        issueReason: `주문 후 ${formatDuration(totalElapsed)} · ${getCurrentStageLabel(order.orderStatus)} ${formatDuration(stageElapsed)}`,
+      };
     });
 });
 
-const priorityTotalPages = computed(() => {
-  return Math.max(
-    1,
-    Math.ceil(priorityOrders.value.length / priorityPageSize)
-  );
-});
+const priorityTotalPages = computed(() => Math.max(
+  1,
+  Math.ceil(priorityOrders.value.length / priorityPageSize)
+));
 
 const pagedPriorityOrders = computed(() => {
-  const startIndex =
-    (priorityCurrentPage.value - 1) * priorityPageSize;
-
-  return priorityOrders.value.slice(
-    startIndex,
-    startIndex + priorityPageSize
-  );
+  const startIndex = (priorityCurrentPage.value - 1) * priorityPageSize;
+  return priorityOrders.value.slice(startIndex, startIndex + priorityPageSize);
 });
 
 const priorityDisplaySlots = computed(() => {
-  const slots =
-    pagedPriorityOrders.value.map((order) => {
-      return {
-        ...order,
-        isPlaceholder: false,
-      };
-    });
+  const slots = pagedPriorityOrders.value.map((order) => ({
+    ...order,
+    isPlaceholder: false,
+  }));
 
   while (slots.length < priorityPageSize) {
     const slotIndex = slots.length + 1;
-
     slots.push({
       id: `priority-empty-${priorityCurrentPage.value}-${slotIndex}`,
       orderNo: '대기 중',
-      platform: '우선 확인',
+      platform: '진행 주문',
       menuSummary: '현재 표시할 주문이 없습니다.',
       issueLevel: 'empty',
       issueLabel: '대기',
+      issueReason: '',
       isPlaceholder: true,
     });
   }
@@ -399,12 +184,10 @@ const priorityDisplaySlots = computed(() => {
   return slots;
 });
 
-const priorityPageNumbers = computed(() => {
-  return Array.from(
-    { length: priorityTotalPages.value },
-    (_, index) => index + 1
-  );
-});
+const priorityPageNumbers = computed(() => Array.from(
+  { length: priorityTotalPages.value },
+  (_, index) => index + 1
+));
 
 const changePriorityPage = (page) => {
   if (page < 1 || page > priorityTotalPages.value) {
@@ -415,32 +198,20 @@ const changePriorityPage = (page) => {
 };
 
 const operationBrief = computed(() => {
-  if (summary.value.level === '위험') {
+  if (summary.value.activeCount === 0) {
     return {
-      title: '지금 먼저 확인할 주문이 있습니다.',
-      desc:
-        summary.value.message ||
-        `부하율 ${summary.value.loadRate}% · 주문 ${summary.value.orderCount}건 · 지연 ${summary.value.delayRisk}건 · 요청확인 ${summary.value.requestRisk}건`,
-      tone: 'danger',
-    };
-  }
-
-  if (summary.value.level === '주의') {
-    return {
-      title: '피크타임 주의 단계입니다.',
-      desc:
-        summary.value.message ||
-        `영업일 주문 ${summary.value.orderCount}건 · 진행 주문 ${summary.value.activeCount}건 · 지연 ${summary.value.delayRisk}건 · 요청확인 ${summary.value.requestRisk}건 · 손실위험 ${summary.value.lossRisk}건`,
-      tone: 'warning',
+      title: '현재 진행 중인 주문이 없습니다.',
+      desc: summary.value.averageCompletedProcessingMinutes === null
+        ? '신규 주문이 들어오면 먼저 접수된 주문부터 경과시간을 확인할 수 있습니다.'
+        : `오늘 완료 주문 평균 처리시간은 ${formatDuration(summary.value.averageCompletedProcessingMinutes)}입니다.`,
+      tone: 'safe',
     };
   }
 
   return {
-    title: '현재 운영은 안정적입니다.',
-    desc:
-      summary.value.message ||
-      `영업일 주문 ${summary.value.orderCount}건 · 지연 위험은 없거나 낮은 수준입니다. 신규 주문과 알러지 요청만 확인하세요.`,
-    tone: 'safe',
+    title: '먼저 들어온 주문부터 확인하세요.',
+    desc: `진행 주문 ${summary.value.activeCount}건 · 가장 오래된 주문 ${formatDuration(summary.value.oldestActiveOrderElapsedMinutes)} · 요청확인 ${summary.value.requestRisk}건`,
+    tone: summary.value.requestRisk > 0 || summary.value.lossRisk > 0 ? 'warning' : 'safe',
   };
 });
 
@@ -460,10 +231,6 @@ const apiStatusText = computed(() => {
   })} 갱신`;
 });
 
-const formatMoney = (value) => {
-  return `${Number(value || 0).toLocaleString('ko-KR')} 원`;
-};
-
 const loadDashboard = async () => {
   try {
     await dashboardStore.loadDashboard();
@@ -475,48 +242,39 @@ const loadDashboard = async () => {
 const goToOrderPage = (order) => {
   router.push({
     path: '/orders',
-    query: {
-      id: order.id,
-    },
-  });
-};
-const goToActiveOrders = () => {
-  router.push({
-    path: '/orders',
-    query: {
-      active: 'true',
-    },
+    query: { id: order.id },
   });
 };
 
-const goToDelayOrders = () => {
+const goToActiveOrders = () => {
   router.push({
     path: '/orders',
-    query: {
-      attention: 'DELAY',
-    },
+    query: { active: 'true' },
   });
 };
 
 const goToSalesReport = () => {
   router.push({
     path: '/reports',
-    query: {
-      tab: 'sales',
-    },
+    query: { tab: 'sales' },
   });
 };
 
-const handleSimulate = () => {
-  router.push('/mockdata');
-};
-
-const handleExport = () => {
-  router.push('/reports');
-};
+const handleSimulate = () => router.push('/mockdata');
+const handleExport = () => router.push('/reports');
 
 onMounted(async () => {
+  elapsedTimer = window.setInterval(() => {
+    nowTick.value = new Date();
+  }, 30_000);
+
   await loadDashboard();
+});
+
+onBeforeUnmount(() => {
+  if (elapsedTimer) {
+    window.clearInterval(elapsedTimer);
+  }
 });
 </script>
 
@@ -527,133 +285,78 @@ onMounted(async () => {
         <div class="api-status">
           <span class="status-dot"></span>
           {{ apiStatusText }}
-         </div>
+        </div>
         <h1>실시간 운영 대시보드</h1>
-        <p>피크타임에 바로 확인해야 할 주문과 핵심 운영 지표만 확인하세요.</p>
+        <p>먼저 들어온 주문과 실제 처리시간을 기준으로 현재 운영 상황을 확인하세요.</p>
       </div>
+
       <div class="header-actions">
-          <button
-          type="button"
-          class="sub-button"
-          @click="router.push('/reports')"
-        >
-          운영 리포트
-        </button>
-
-        <button
-          type="button"
-          class="sub-button"
-          @click="loadDashboard"
-        >
-          새로고침
-        </button>
-
-        <button
-          type="button"
-          class="sub-button"
-          @click="handleSimulate"
-        >
-          Mock 주문 생성
-        </button>
-
-        <button
-          type="button"
-          class="primary-button"
-          @click="handleExport"
-        >
-          리포트/CSV 확인
-        </button>
+        <button type="button" class="sub-button" @click="router.push('/reports')">운영 리포트</button>
+        <button type="button" class="sub-button" @click="loadDashboard">새로고침</button>
+        <button type="button" class="sub-button" @click="handleSimulate">Mock 주문 생성</button>
+        <button type="button" class="primary-button" @click="handleExport">리포트/CSV 확인</button>
       </div>
     </header>
 
     <main class="grid-12">
-      
       <section class="operation-brief-card col-12" :class="operationBrief.tone">
         <div class="brief-main">
           <span>오늘의 운영 브리핑</span>
           <h2>{{ operationBrief.title }}</h2>
           <p>{{ operationBrief.desc }}</p>
         </div>
-        <div class="brief-action-list">
-          <!-- <button 
-            v-for="(order, index) in priorityOrders.slice(0, 3)" 
-            :key="order.orderNo"
-            type="button" 
-            @click="goToOrderPage(order)"
-          >
-            <b>{{ index + 1 }}</b>
-            <span>
-              <strong>{{ order.platformNo }} · {{ order.issueLabel }}</strong>
-              <small>{{ order.platform }} · {{ order.menuSummary }} · {{ order.issueReason }}</small>
-            </span>
-          </button> -->
-          <div v-if="!priorityOrders.length" class="brief-empty">
-            현재 진행 중인 주문이 없습니다.
-          </div>
-        </div>
       </section>
 
-      <div
-        class="kpi-card col-3 border-success clickable-card"
-        @click="goToSalesReport"
-      >
+      <div class="kpi-card col-3 border-success clickable-card" @click="goToSalesReport">
         <div class="card-label">예상 매출</div>
         <div class="card-value">{{ formatMoney(summary.sales) }}</div>
         <div class="card-sub">예상 순수익 {{ formatMoney(summary.profit) }}</div>
       </div>
 
-      <div
-        class="kpi-card col-3 clickable-card"
-        @click="goToSalesReport"
-      >
-        <div class="card-label">완료 주문 합계</div>
+      <div class="kpi-card col-3 clickable-card" @click="goToSalesReport">
+        <div class="card-label">완료 주문</div>
         <div class="card-value">{{ summary.completedCount }}건</div>
-        <div class="card-sub">완료 주문 매출 {{ formatMoney(summary.sales) }}</div>
+        <div class="card-sub">완료 매출 {{ formatMoney(summary.completedSales) }}</div>
       </div>
 
-      <div
-        class="kpi-card col-3 clickable-card"
-        @click="goToActiveOrders"
-      >
+      <div class="kpi-card col-3 clickable-card" @click="goToActiveOrders">
         <div class="card-label">현재 진행 주문</div>
         <div class="card-value">{{ summary.activeCount }}건</div>
-        <div class="card-sub">대기 {{ summary.waiting }} · 조리 {{ summary.cooking }} · 배달 {{ summary.delivering }}</div>
+        <div class="card-sub">대기 {{ summary.waiting }} · 조리 {{ summary.cooking }} · 픽업 {{ summary.readyForPickup }} · 배달 {{ summary.delivering }}</div>
       </div>
 
-      <div
-        class="kpi-card col-3 border-danger clickable-card"
-        @click="goToDelayOrders"
-      >
-        <div class="card-label">지연 위험</div>
-        <div class="card-value text-danger">{{ summary.delayRisk }}건</div>
-        <div class="card-sub">요청확인 {{ summary.requestRisk }} · 손실 {{ summary.lossRisk }}</div>
+      <div class="kpi-card col-3 border-danger clickable-card" @click="goToActiveOrders">
+        <div class="card-label">가장 오래된 진행 주문</div>
+        <div class="card-value">{{ summary.activeCount ? formatDuration(summary.oldestActiveOrderElapsedMinutes) : '-' }}</div>
+        <div class="card-sub">먼저 접수된 주문부터 확인</div>
       </div>
 
       <div class="detail-card col-6">
         <div class="detail-header">
-          <h3>우선 확인 주문</h3>
-          <span class="text-muted">주의 우선 · 접수순 {{ priorityOrders.length }}건</span>
+          <h3>진행 주문</h3>
+          <span class="text-muted">접수순 {{ priorityOrders.length }}건</span>
         </div>
+
         <div class="order-list priority-list">
-          <button 
-            v-for="order in priorityDisplaySlots" 
+          <button
+            v-for="order in priorityDisplaySlots"
             :key="order.id || order.orderNo"
-            type="button" 
-            class="priority-order-item" 
+            type="button"
+            class="priority-order-item"
             :class="[order.issueLevel, { empty: order.isPlaceholder }]"
             :disabled="order.isPlaceholder"
             @click="!order.isPlaceholder && goToOrderPage(order)"
           >
             <strong>{{ order.orderNo }}</strong>
-            <span>{{ order.platform }} · {{ order.menuSummary }}</span>
+            <span>
+              {{ order.platform }} · {{ order.menuSummary }}
+              <small v-if="!order.isPlaceholder">{{ formatKstTime(order.orderedAt) }} 접수 · {{ order.issueReason }}</small>
+            </span>
             <b>{{ order.issueLabel }}</b>
           </button>
         </div>
 
-        <div
-          v-if="priorityOrders.length > priorityPageSize"
-          class="priority-pagination"
-        >
+        <div v-if="priorityOrders.length > priorityPageSize" class="priority-pagination">
           <button
             v-for="page in priorityPageNumbers"
             :key="page"
@@ -668,26 +371,32 @@ onMounted(async () => {
 
       <div class="detail-card col-6 highlight-card">
         <div class="detail-header">
-          <h3>현재 운영 상태</h3>
-          <small class="text-muted">실시간 동기화</small>
+          <h3>실제 처리시간</h3>
+          <small class="text-muted">실제 이벤트 시각 기준</small>
         </div>
-        <div class="status-content">
-          <div class="status-circle">
-            <span class="main-percent">{{ summary.loadRate }}%</span>
-            <span class="sub-text">부하율</span>
+
+        <div class="time-metric-grid">
+          <div>
+            <span>가장 오래된 진행 주문</span>
+            <strong>{{ summary.activeCount ? formatDuration(summary.oldestActiveOrderElapsedMinutes) : '-' }}</strong>
           </div>
-          <div class="status-desc">
-            <p>취소율 {{ summary.cancelRate }}%</p>
-            <p><strong>운영 안정성 {{ summary.level }} 단계</strong></p>
-            <p>주문 {{ summary.orderCount }}건 · 요청확인 {{ summary.requestRisk }}건 · 손실위험 {{ summary.lossRisk }}건</p>
+          <div>
+            <span>오늘 완료 평균 처리시간</span>
+            <strong>{{ summary.averageCompletedProcessingMinutes === null ? '-' : formatDuration(summary.averageCompletedProcessingMinutes) }}</strong>
+          </div>
+          <div>
+            <span>요청사항 확인</span>
+            <strong>{{ summary.requestRisk }}건</strong>
+          </div>
+          <div>
+            <span>취소율</span>
+            <strong>{{ summary.cancelRate }}%</strong>
           </div>
         </div>
       </div>
-      
     </main>
   </div>
 </template>
-
 <style scoped>
 /* ============================================================
    디자인 시스템 변수 & 기본 레이아웃 설정
@@ -1255,6 +964,65 @@ onMounted(async () => {
 
 .highlight-card {
   min-height: 0;
+}
+
+
+
+.time-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.time-metric-grid > div {
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.time-metric-grid span {
+  display: block;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.time-metric-grid strong {
+  display: block;
+  margin-top: 8px;
+  color: #111827;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.priority-order-item span small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .time-metric-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+
+/* 2026-09-04 실제 처리시간 중심 대시보드 보정 */
+.operation-brief-card {
+  grid-template-columns: 1fr;
+}
+
+.border-success {
+  border-left: 5px solid #15bd30;
+}
+
+.border-danger {
+  border-left: 5px solid #2784b8;
 }
 
 </style>

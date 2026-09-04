@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useReportStore } from '../stores/useReportStore.js';
+import { formatDurationSeconds } from '../../../shared/utils/timeFormatters.js';
 
 const router = useRouter();
 const route = useRoute();
@@ -54,6 +55,7 @@ const platformNames = {
 const statusNames = {
   WAITING: '접수대기',
   COOKING: '조리중',
+  READY_FOR_PICKUP: '픽업대기',
   DELIVERING: '배달중',
   COMPLETED: '완료',
   CANCELED: '취소',
@@ -101,6 +103,8 @@ const reasonTypeLabels = [
 // 3. Store 데이터 연결
 // ==========================================
 const orders = computed(() => reportStore.reportOrders);
+const reportSummary = computed(() => reportStore.reportSummary);
+const processingTimes = computed(() => reportStore.processingTimes);
 
 const getReportSortValue = (order) => {
   const rawDateTime =
@@ -200,40 +204,61 @@ const formatMoney = (value) => {
 };
 
 const summaryStats = computed(() => {
-  const completed = salesOrders.value;
-  const canceled = cancelOrders.value;
-  const refunded = refundOrders.value;
+  const summary = reportSummary.value || {};
 
-  const totalSales = completed.reduce((sum, order) => {
-    return sum + Number(order.totalAmount || 0);
-  }, 0);
+  const totalSales = Number(summary.grossOrderAmount || 0);
+  const providerChargeAmount = Number(summary.providerChargeAmount || 0);
+  const menuCost = Number(summary.estimatedMenuCost || 0);
+  const packagingCost = Number(summary.estimatedPackagingCost || 0);
 
-  const totalProfit = completed.reduce((sum, order) => {
-    return sum + Number(order.netProfit || 0);
-  }, 0);
+  const totalProfit =
+    totalSales
+    - providerChargeAmount
+    - menuCost
+    - packagingCost;
 
-  const closedCount = canceled.length + refunded.length;
-
-  const cancelRate = filteredOrders.value.length
-    ? Math.round((canceled.length / filteredOrders.value.length) * 1000) / 10
-    : 0;
-
-  const closedRate = filteredOrders.value.length
-    ? Math.round((closedCount / filteredOrders.value.length) * 1000) / 10
-    : 0;
+  const totalCount = Number(summary.totalOrderCount || 0);
+  const cancelCount = Number(summary.canceledOrderCount || 0);
 
   return {
     totalSales,
     totalProfit,
-    cancelCount: canceled.length,
-    cancelRate,
-    refundCount: refunded.length,
-    closedCount,
-    closedRate,
-    totalCount: filteredOrders.value.length,
-    completedCount: completed.length,
+    cancelCount,
+    cancelRate: totalCount
+      ? Math.round((cancelCount / totalCount) * 1000) / 10
+      : 0,
+    refundCount: 0,
+    closedCount: cancelCount,
+    closedRate: totalCount
+      ? Math.round((cancelCount / totalCount) * 1000) / 10
+      : 0,
+    totalCount,
+    completedCount: Number(summary.completedOrderCount || 0),
   };
 });
+
+const hasUnavailableFinancialData = computed(() => {
+  return (reportSummary.value?.financialDataStatuses || [])
+    .includes('UNAVAILABLE');
+});
+
+const formatProcessingMetric = (metric) => {
+  return formatDurationSeconds(
+    metric?.averageSeconds,
+    {
+      zeroAsLessThanSecond: true,
+      fallback: '-',
+    }
+  );
+};
+
+const processingPlatformRows = computed(() => {
+  return (processingTimes.value?.platforms || []).map((platform) => ({
+    ...platform,
+    name: platformNames[platform.platformType] || platform.platformType,
+  }));
+});
+
 const formatDateOnly = (value) => {
   if (!value) {
     return '-';
@@ -286,20 +311,13 @@ const platformStats = computed(() => {
       return order.orderStatus === 'CANCELED';
     });
 
-    const refunded = platformOrders.filter((order) => {
-      return order.orderStatus === 'REFUNDED';
+
+    const processing = processingPlatformRows.value.find((item) => {
+      return item.platformType === platform;
     });
 
-    const sales = completed.reduce((sum, order) => {
-      return sum + Number(order.totalAmount || 0);
-    }, 0);
-
-    const profit = completed.reduce((sum, order) => {
-      return sum + Number(order.netProfit || 0);
-    }, 0);
-
-    const closedRate = platformOrders.length
-      ? Math.round(((canceled.length + refunded.length) / platformOrders.length) * 1000) / 10
+    const cancelRate = platformOrders.length
+      ? Math.round((canceled.length / platformOrders.length) * 1000) / 10
       : 0;
 
     return {
@@ -308,10 +326,9 @@ const platformStats = computed(() => {
       total: platformOrders.length,
       completed: completed.length,
       canceled: canceled.length,
-      refunded: refunded.length,
-      closedRate,
-      sales,
-      profit,
+      cancelRate,
+      averageProcessing:
+        processing?.totalProcessing || null,
     };
   });
 });
@@ -342,7 +359,7 @@ const applyRouteQueryToReport = () => {
   const query = route.query;
 
   const requestedTab = String(query.tab || '');
-  const availableTabs = ['sales', 'cancel', 'platform', 'export'];
+  const availableTabs = ['sales', 'processing', 'cancel', 'platform', 'export'];
 
   if (availableTabs.includes(requestedTab)) {
     activeTab.value = requestedTab;
@@ -370,7 +387,7 @@ const applyRouteQueryToReport = () => {
 // ==========================================
 const searchReports = async () => {
   salesCurrentPage.value = 1;
-  await reportStore.findOrders(filters.value);
+  await reportStore.findReports(filters.value);
 };
 
 const clearFilters = async () => {
@@ -538,7 +555,7 @@ onMounted(() => {
       <div>
         <span class="category-text">OPERATION REPORT</span>
         <h1>운영 리포트</h1>
-        <p class="header-desc">매출, 취소, 플랫폼 정산을 날짜와 조건별로 확인하고 파일로 내보냅니다.</p>
+        <p class="header-desc">완료 매출과 실제 주문 처리시간, 취소 및 플랫폼 운영 현황을 날짜와 조건별로 확인합니다.</p>
       </div>
       <div class="header-actions">
         <button type="button" class="sub-button" @click="activeTab = 'cancel'">취소/환불 리포트</button>
@@ -548,8 +565,9 @@ onMounted(() => {
 
     <div class="tabs-mock report-tabs report-tabs-under-title">
       <button class="tab" :class="{ active: activeTab === 'sales' }" @click="activeTab = 'sales'">매출 리포트</button>
+      <button class="tab" :class="{ active: activeTab === 'processing' }" @click="activeTab = 'processing'">처리시간 분석</button>
       <button class="tab" :class="{ active: activeTab === 'cancel' }" @click="activeTab = 'cancel'">취소/환불 리포트</button>
-      <button class="tab" :class="{ active: activeTab === 'platform' }" @click="activeTab = 'platform'">플랫폼별 정산 요약</button>
+      <button class="tab" :class="{ active: activeTab === 'platform' }" @click="activeTab = 'platform'">플랫폼별 운영 요약</button>
       <button class="tab" :class="{ active: activeTab === 'export' }" @click="activeTab = 'export'">필터/엑셀 내보내기</button>
     </div>
 
@@ -558,7 +576,7 @@ onMounted(() => {
         <article class="summary-box">
           <span>완료 매출</span>
           <strong>{{ formatMoney(summaryStats.totalSales) }}</strong>
-          <p>영업일 기준 완료 주문 집계</p>
+          <p>Report 완료 주문 기준 실제 집계</p>
         </article>
         <article
           class="summary-box profit-box"
@@ -566,7 +584,8 @@ onMounted(() => {
         >
           <span>예상 순수익</span>
           <strong>{{ formatMoney(summaryStats.totalProfit) }}</strong>
-          <p>수수료·배달비·원가 반영</p>
+          <p v-if="hasUnavailableFinancialData">일부 주문의 플랫폼 비용 미반영</p>
+          <p v-else>확보된 플랫폼 비용·원가·포장비 반영</p>
         </article>
         <article class="summary-box cancel-box">
           <span>취소 주문</span>
@@ -576,7 +595,7 @@ onMounted(() => {
         <article class="summary-box">
           <span>주문 조회</span>
           <strong>{{ summaryStats.totalCount }}건</strong>
-          <p>영업일 기준</p>
+          <p>현재 조회 기간 전체 주문</p>
         </article>
       </section>
 
@@ -584,66 +603,59 @@ onMounted(() => {
         <div class="card-header">
           <div class="title-area">
             <h2>매출 리포트</h2>
-            <p class="required-note">매장 영업일 기준으로 완료 매출과 예상 순수익을 확인합니다. 필터 설정에서 날짜별 조회가 가능합니다.</p>
+            <p class="required-note">Report Projection의 완료 주문 금액과 정산정보 상태를 확인합니다. 플랫폼 정산정보가 없는 주문은 Item 주문금액을 매출로 보완합니다.</p>
           </div>
           <button class="primary-button" @click="exportExcel('매출')">매출 내보내기</button>
         </div>
 
         <div class="table-scroll">
-        <table class="data-table">
-         <thead>
-          <tr>
-            <th>플랫폼 주문번호</th>
-            <th>플랫폼</th>
-            <th>메뉴</th>
-            <th>주문금액</th>
-            <th>메뉴 원가</th>
-            <th>플랫폼 수수료</th>
-            <th>배달비 부담</th>
-            <th>쿠폰 부담</th>
-            <th>포장비</th>
-            <th>플랫폼 지원금</th>
-            <th>예상 순수익</th>
-            <th>완료일시</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="order in pagedSalesOrders" :key="order.orderNo">
-            <td class="cancel-status-cell">
-              <strong class="order-no-main">{{ order.platformOrderNo }}</strong>
-            </td>
-            <td>
-              <span class="platform-badge" :class="getPlatformClass(order.platformType)">
-                {{ platformNames[order.platformType] }}
-              </span>
-            </td>
-            <td class="text-main">{{ order.menuSummary }}</td>
-            <td class="text-muted">{{ formatMoney(order.totalAmount) }}</td>
-            <td class="text-muted">{{ formatMoney(order.menuCostAmount) }}</td>
-            <td class="text-muted">{{ formatMoney(order.commissionAmount) }}</td>
-            <td class="text-muted">{{ formatMoney(order.deliveryFeeAmount) }}</td>
-            <td class="text-muted">{{ formatMoney(order.couponAmount) }}</td>
-            <td class="text-muted">{{ formatMoney(order.packagingAmount) }}</td>
-            <td class="text-muted">{{ formatMoney(order.platformSupportAmount) }}</td>
-            <td>
-              <strong
-                class="profit-strong"
-                :class="{ 'loss-text': Number(order.netProfit || 0) < 0 }"
-              >
-                {{ formatMoney(order.netProfit) }}
-              </strong>
-            </td>
-            <td class="text-muted report-date-cell">
-              <span>{{ formatDateOnly(order.completedAt) }}</span>
-              <span>{{ formatTimeOnly(order.completedAt) }}</span>
-            </td>
-          </tr>
-          <tr v-if="salesOrders.length === 0">
-            <td colspan="12" class="empty-message">
-              조건에 맞는 완료 주문이 없습니다.
-            </td>
-          </tr>
-        </tbody>
+        <table class="data-table report-actual-sales-table">
+          <thead>
+            <tr>
+              <th>플랫폼 주문번호</th>
+              <th>플랫폼</th>
+              <th>상태</th>
+              <th>주문금액</th>
+              <th>고객 실결제액</th>
+              <th>정산정보</th>
+              <th>주문일시</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="order in pagedSalesOrders" :key="order.orderNo">
+              <td>
+                <strong class="order-no-main">{{ order.platformOrderNo }}</strong>
+              </td>
+              <td>
+                <span class="platform-badge" :class="getPlatformClass(order.platformType)">
+                  {{ platformNames[order.platformType] }}
+                </span>
+              </td>
+              <td><span class="status-badge status-completed">완료</span></td>
+              <td><strong>{{ order.totalAmount == null ? '-' : formatMoney(order.totalAmount) }}</strong></td>
+              <td>
+                {{ order.customerPaidAmount == null
+                  ? '-'
+                  : formatMoney(order.customerPaidAmount) }}
+              </td>
+              <td>
+                <span
+                  class="financial-status-badge"
+                  :class="{ unavailable: order.financialDataStatus === 'UNAVAILABLE' }"
+                >
+                  {{ order.financialDataStatus === 'UNAVAILABLE'
+                    ? '플랫폼 비용 미확보'
+                    : order.financialDataStatus }}
+                </span>
+              </td>
+              <td class="text-muted">{{ order.orderedAtText || '-' }}</td>
+            </tr>
+            <tr v-if="salesOrders.length === 0">
+              <td colspan="7" class="empty-message">
+                조건에 맞는 완료 주문이 없습니다.
+              </td>
+            </tr>
+          </tbody>
         </table>
       </div>
 
@@ -679,6 +691,94 @@ onMounted(() => {
         >
           다음
         </button>
+        </div>
+      </article>
+    </section>
+
+    <section v-if="activeTab === 'processing'" class="processing-report-section">
+      <section class="processing-kpi-grid">
+        <article class="summary-box processing-summary-box">
+          <span>평균 전체 처리</span>
+          <strong>{{ formatProcessingMetric(processingTimes.totalProcessing) }}</strong>
+          <p>표본 {{ processingTimes.totalProcessing?.sampleCount || 0 }}건</p>
+        </article>
+        <article class="summary-box processing-summary-box">
+          <span>평균 접수 대기</span>
+          <strong>{{ formatProcessingMetric(processingTimes.waiting) }}</strong>
+          <p>표본 {{ processingTimes.waiting?.sampleCount || 0 }}건</p>
+        </article>
+        <article class="summary-box processing-summary-box">
+          <span>평균 조리</span>
+          <strong>{{ formatProcessingMetric(processingTimes.cooking) }}</strong>
+          <p>표본 {{ processingTimes.cooking?.sampleCount || 0 }}건</p>
+        </article>
+        <article class="summary-box processing-summary-box">
+          <span>평균 픽업 대기</span>
+          <strong>{{ formatProcessingMetric(processingTimes.pickupWaiting) }}</strong>
+          <p>표본 {{ processingTimes.pickupWaiting?.sampleCount || 0 }}건</p>
+        </article>
+        <article class="summary-box processing-summary-box">
+          <span>평균 배달</span>
+          <strong>{{ formatProcessingMetric(processingTimes.delivery) }}</strong>
+          <p>표본 {{ processingTimes.delivery?.sampleCount || 0 }}건</p>
+        </article>
+      </section>
+
+      <article class="card report-card processing-analysis-card">
+        <div class="card-header">
+          <div class="title-area">
+            <h2>실제 주문 처리시간</h2>
+            <p class="required-note">
+              완료 주문의 실제 이벤트 시각을 기준으로 계산합니다. 표본이 적은 기간의 평균은 참고용으로 확인하세요.
+            </p>
+          </div>
+          <span class="processing-sample-badge">
+            완료 표본 {{ processingTimes.completedOrderCount || 0 }}건
+          </span>
+        </div>
+
+        <div
+          v-if="processingTimes.completedOrderCount > 0 && processingTimes.completedOrderCount < 5"
+          class="processing-sample-warning"
+        >
+          현재 완료 표본이 {{ processingTimes.completedOrderCount }}건으로 적습니다. 데이터가 누적될수록 평균 처리시간의 신뢰도가 높아집니다.
+        </div>
+
+        <div class="table-scroll">
+          <table class="data-table processing-platform-table">
+            <thead>
+              <tr>
+                <th>플랫폼</th>
+                <th>완료 표본</th>
+                <th>전체 처리</th>
+                <th>접수 대기</th>
+                <th>조리</th>
+                <th>픽업 대기</th>
+                <th>배달</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="platform in processingPlatformRows" :key="platform.platformType">
+                <td>
+                  <span class="platform-badge" :class="getPlatformClass(platform.platformType)">
+                    {{ platform.name }}
+                  </span>
+                </td>
+                <td>{{ platform.completedOrderCount }}건</td>
+                <td>
+                  <strong>{{ formatProcessingMetric(platform.totalProcessing) }}</strong>
+                  <small>표본 {{ platform.totalProcessing?.sampleCount || 0 }}건</small>
+                </td>
+                <td>{{ formatProcessingMetric(platform.waiting) }}</td>
+                <td>{{ formatProcessingMetric(platform.cooking) }}</td>
+                <td>{{ formatProcessingMetric(platform.pickupWaiting) }}</td>
+                <td>{{ formatProcessingMetric(platform.delivery) }}</td>
+              </tr>
+              <tr v-if="processingPlatformRows.length === 0">
+                <td colspan="7" class="empty-message">완료 주문 처리시간 표본이 없습니다.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </article>
     </section>
@@ -802,10 +902,10 @@ onMounted(() => {
     <article v-if="activeTab === 'platform'" class="card report-card">
       <div class="card-header">
         <div class="title-area">
-          <h2>플랫폼별 정산 요약</h2>
-          <p class="required-note">플랫폼별 주문 수, 취소율, 완료 매출, 예상 순수익을 비교합니다.</p>
+          <h2>플랫폼별 운영 요약</h2>
+          <p class="required-note">현재 조회 기간의 주문 건수, 완료 매출과 실제 평균 처리시간을 비교합니다.</p>
         </div>
-        <button class="primary-button" @click="exportExcel('플랫폼 정산')">플랫폼 정산 내보내기</button>
+        <button class="primary-button" @click="exportExcel('플랫폼 정산')">현재 주문 CSV 내보내기</button>
       </div>
       <div class="table-scroll">
         <table class="data-table">
@@ -815,13 +915,11 @@ onMounted(() => {
               <th>전체 주문</th>
               <th>완료 주문</th>
               <th>취소 주문</th>
-              <th>환불 주문</th>
-              <th>취소/환불률</th>
-              <th>완료 매출</th>
-              <th>예상 순수익</th>
+              <th>취소율</th>
+              <th>평균 전체 처리</th>
             </tr>
-            </thead>
-            <tbody>
+          </thead>
+          <tbody>
             <tr v-for="stat in platformStats" :key="stat.platformType">
               <td>
                 <span class="platform-badge" :class="getPlatformClass(stat.platformType)">
@@ -831,19 +929,10 @@ onMounted(() => {
               <td><strong class="order-no-main">{{ stat.total }}건</strong></td>
               <td><strong class="order-no-main">{{ stat.completed }}건</strong></td>
               <td><strong class="order-no-main">{{ stat.canceled }}건</strong></td>
-              <td><strong class="order-no-main">{{ stat.refunded }}건</strong></td>
-              <td><span class="text-main">{{ stat.closedRate }}%</span></td>
-              <td>{{ formatMoney(stat.sales) }}</td>
-              <td>
-                <strong
-                  class="profit-strong"
-                  :class="{ 'loss-text': Number(stat.profit || 0) < 0 }"
-                >
-                  {{ formatMoney(stat.profit) }}
-                </strong>
-              </td>
+              <td><span class="text-main">{{ stat.cancelRate }}%</span></td>
+              <td>{{ formatProcessingMetric(stat.averageProcessing) }}</td>
             </tr>
-            </tbody>
+          </tbody>
         </table>
       </div>
     </article>
@@ -904,30 +993,22 @@ onMounted(() => {
               <option value="">전체</option>
               <option value="COMPLETED">완료</option>
               <option value="CANCELED">취소</option>
-              <option value="REFUNDED">환불</option>
-            </select>
-          </div>
-          <div class="filter-group compact">
-            <label>위험/확인</label>
-            <select v-model="filters.risk">
-              <option value="">전체</option>
-              <option value="REQUEST">요청사항 확인</option>
-              <option value="LOSS">손실 위험</option>
-              <option value="CANCEL">취소 이력</option>
-              <option value="REFUND">환불 이력</option>
             </select>
           </div>
           <div class="filter-group wide keyword-filter">
             <label>검색어</label>
-            <input type="text" v-model="filters.keyword" placeholder="주문번호, 메뉴, 주소, 요청사항, 취소/환불 사유 검색">
+            <input type="text" v-model="filters.keyword" placeholder="내부 주문번호 또는 플랫폼 주문번호 검색">
           </div>
         </div>
         
+        <p class="report-filter-contract-note">
+          요약·처리시간 지표에는 기간과 플랫폼 조건이 적용됩니다. 상태와 주문번호 검색은 주문 목록·CSV에만 적용됩니다.
+        </p>
+
         <div class="filter-result-line">
           현재 조건에 맞는 주문 <strong>{{ filteredOrders.length }}건</strong> ·
           완료 {{ salesOrders.length }}건 ·
-          취소 {{ cancelOrders.length }}건 ·
-          환불 {{ refundOrders.length }}건
+          취소 {{ cancelOrders.length }}건
         </div>
         <div class="export-preview-box">
         <div class="export-preview-header">
@@ -954,64 +1035,27 @@ onMounted(() => {
                 <th>상태</th>
                 <th>플랫폼 주문번호</th>
                 <th>플랫폼</th>
-                <th>메뉴</th>
                 <th>주문금액</th>
-                <th>예상 순수익</th>
-                <th>취소/환불 사유</th>
+                <th>고객 실결제액</th>
+                <th>정산정보</th>
               </tr>
             </thead>
-
             <tbody>
               <tr v-for="order in previewOrders" :key="order.orderNo">
                 <td class="text-muted">{{ order.orderDate || '-' }}</td>
-
                 <td>
-                  <span
-                    class="status-badge"
-                    :class="getHistoryBadgeClass(order.orderStatus)"
-                  >
+                  <span class="status-badge" :class="getHistoryBadgeClass(order.orderStatus)">
                     {{ statusNames[order.orderStatus] || order.orderStatus }}
                   </span>
                 </td>
-
-                <td>
-                  <strong class="order-no-main">
-                    {{ order.platformOrderNo || '-' }}
-                  </strong>
-                </td>
-
-                <td>
-                  <span class="platform-badge" :class="getPlatformClass(order.platformType)">
-                    {{ platformNames[order.platformType] || order.platformType }}
-                  </span>
-                </td>
-
-                <td class="text-main">
-                  {{ order.menuSummary }}
-                </td>
-
-                <td class="text-muted">
-                  {{ formatMoney(order.totalAmount) }}
-                </td>
-
-                <td>
-                  <strong
-                    class="profit-strong"
-                    :class="{ 'loss-text': Number(order.netProfit || 0) < 0 }"
-                  >
-                    {{ formatMoney(order.netProfit) }}
-                  </strong>
-                </td>
-
-                <td class="text-main preview-reason">
-                  {{ getPreviewHistoryText(order) }}
-                </td>
+                <td><strong>{{ order.platformOrderNo || '-' }}</strong></td>
+                <td>{{ platformNames[order.platformType] || order.platformType }}</td>
+                <td>{{ order.totalAmount == null ? '-' : formatMoney(order.totalAmount) }}</td>
+                <td>{{ order.customerPaidAmount == null ? '-' : formatMoney(order.customerPaidAmount) }}</td>
+                <td>{{ order.financialDataStatus === 'UNAVAILABLE' ? '플랫폼 비용 미확보' : order.financialDataStatus }}</td>
               </tr>
-
               <tr v-if="previewOrders.length === 0">
-                <td colspan="8" class="empty-message">
-                  현재 필터 조건에 맞는 주문이 없습니다.
-                </td>
+                <td colspan="7" class="empty-message">현재 조건에 맞는 주문이 없습니다.</td>
               </tr>
             </tbody>
           </table>
@@ -2293,5 +2337,90 @@ onMounted(() => {
   overflow: hidden;
 }
 
+
+
+
+/* 실제 Report 처리시간 API 연결 */
+.processing-report-section {
+  display: grid;
+  gap: 18px;
+}
+
+.processing-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.processing-summary-box strong {
+  font-size: 24px;
+}
+
+.processing-analysis-card {
+  margin-top: 0;
+}
+
+.processing-sample-badge,
+.financial-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.financial-status-badge.unavailable {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.processing-sample-warning {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.processing-platform-table td small {
+  display: block;
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.report-actual-sales-table td,
+.processing-platform-table td {
+  vertical-align: middle;
+}
+
+@media (max-width: 1200px) {
+  .processing-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .processing-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.report-filter-contract-note {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
 
 </style>

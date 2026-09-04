@@ -62,17 +62,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  const reissue = async () => {
-    const success = await reissueAccessToken();
+const reissue = async () => {
+  const success =
+    await reissueAccessToken();
 
-    if (success) {
-      setLoginHint();
-      return true;
-    }
+  if (success) {
+    setLoginHint();
+    return true;
+  }
 
-    clearAuthStore();
-    return false;
-  };
+  clearAllAuthState();
+
+  return false;
+};
 
   const logout = async () => {
     try {

@@ -1,4 +1,10 @@
 import httpClient from '../../../shared/api/httpClient.js';
 
-export const fetchReportOrders = (params = {}) => httpClient.get('/api/reports/orders', { params });
-export const exportReportOrders = (params = {}) => httpClient.get('/api/reports/orders/export', { params, responseType: 'blob' });
+export const fetchReportOrders = (params = {}) =>
+  httpClient.get('/api/reports/orders', { params });
+
+export const fetchReportSummary = (params = {}) =>
+  httpClient.get('/api/reports/summary', { params });
+
+export const fetchReportProcessingTimes = (params = {}) =>
+  httpClient.get('/api/reports/processing-times', { params });
