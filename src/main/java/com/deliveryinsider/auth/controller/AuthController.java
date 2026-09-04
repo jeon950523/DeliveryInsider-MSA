@@ -7,12 +7,14 @@ import com.deliveryinsider.auth.global.response.LoginResponse;
 import com.deliveryinsider.auth.global.response.TokenReissueResponse;
 import com.deliveryinsider.auth.global.security.jwt.RefreshTokenCookieManager;
 import com.deliveryinsider.auth.request.LoginRequest;
+import com.deliveryinsider.auth.request.RegisterRequest;
 import com.deliveryinsider.auth.service.AuthService;
 import com.deliveryinsider.auth.service.model.LoginResult;
 import com.deliveryinsider.auth.service.model.TokenReissueResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -117,6 +119,27 @@ public class AuthController {
                 CurrentUserResponse.from(user)
             )
         );
+    }
+    @PostMapping("/register")
+    public ResponseEntity<GlobalResponse<Void>> register(
+        @Valid
+        @RequestBody
+        RegisterRequest request
+    ) {
+        authService.register(
+            request
+        );
+
+        return ResponseEntity
+            .status(
+                HttpStatus.CREATED
+            )
+            .body(
+                GlobalResponse.success(
+                    "회원가입에 성공했습니다.",
+                    null
+                )
+            );
     }
 
 
