@@ -140,11 +140,15 @@ public class NotificationOrderEventListener {
         String eventType
     ) {
         return switch (eventType) {
+
             case "ORDER_CREATED",
                  "ORDER_STATUS_CHANGED",
-                 "ORDER_CANCELED" -> true;
+                 "ORDER_OPERATION_STATUS_CHANGED",
+                 "ORDER_CANCELED" ->
+                true;
 
-            default -> false;
+            default ->
+                false;
         };
     }
 
