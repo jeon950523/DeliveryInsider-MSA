@@ -9,9 +9,9 @@ public record ReportSummaryResponse(
     long canceledOrderCount,
 
     long grossOrderAmount,
-    long customerPaidAmount,
+    Long customerPaidAmount,
 
-    long providerChargeAmount,
+    Long providerChargeAmount,
 
     long estimatedMenuCost,
     long estimatedPackagingCost,

@@ -176,19 +176,8 @@
         0
         ) AS gross_order_amount,
 
-        COALESCE(
-        SUM(
-        CASE
-        WHEN fo.status = 'DELIVERED'
-        THEN COALESCE(
-            fo.customer_paid_amount,
-            0
-        )
-        ELSE 0
-        END
-        ),
-        0
-        ) AS customer_paid_amount
+        <!-- Sum only acquired values; no acquired financial data is null, not a confirmed zero. -->
+        SUM(CASE WHEN fo.status = 'DELIVERED' THEN fo.customer_paid_amount END) AS customer_paid_amount
 
         FROM filtered_orders fo
 
@@ -197,10 +186,7 @@
         ),
         completed_charges AS (
         SELECT
-        COALESCE(
-        SUM(rc.amount),
-        0
-        ) AS provider_charge_amount
+        SUM(rc.amount) AS provider_charge_amount
 
         FROM filtered_orders fo
 
@@ -230,10 +216,7 @@
         os.gross_order_amount,
         os.customer_paid_amount,
 
-        COALESCE(
         cc.provider_charge_amount,
-        0
-        ) AS provider_charge_amount,
 
         COALESCE(
         cit.estimated_menu_cost,

@@ -188,4 +188,32 @@ class ReportDailyContractMySqlTest {
             .andExpect(status().isOk()).andExpect(jsonPath("$.totalProcessing.sampleCount").value(2))
             .andExpect(jsonPath("$.totalProcessing.averageSeconds").value(1800));
     }
+    @Test
+    void summaryDistinguishesUnknownRealZeroAndKnownPartialSums() throws Exception {
+        mvc.perform(get("/api/reports/summary").header("X-User-Id", 10).param("platformType", "YOGIYO"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.customerPaidAmount").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.providerChargeAmount").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.financialDataStatuses[0]").value("UNAVAILABLE"));
+        mvc.perform(get("/api/reports/summary").header("X-User-Id", 10).param("from", "2099-01-01T00:00:00"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.totalOrderCount").value(0))
+            .andExpect(jsonPath("$.grossOrderAmount").value(0))
+            .andExpect(jsonPath("$.customerPaidAmount").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.providerChargeAmount").value(org.hamcrest.Matchers.nullValue()));
+        var partial = mapper.findSummary(1L, null, null, null);
+        assertThat(partial.getCustomerPaidAmount()).isEqualTo(12000L);
+        assertThat(partial.getProviderChargeAmount()).isEqualTo(5000L);
+        // Only the UUID database created by this test may receive these fixtures.
+        assertThat(connection.getCatalog()).isEqualTo(testDatabase).matches("report_daily_test_[0-9a-f]{32}");
+        try (Statement sql = connection.createStatement()) {
+            sql.executeUpdate("UPDATE report_orders SET customer_paid_amount = 0, provider_financial_data_status = 'AVAILABLE' WHERE order_id = 6");
+            sql.executeUpdate("INSERT INTO report_order_charges (order_id, charge_type, amount) VALUES (6, 'COMMISSION', 0)");
+            sql.executeUpdate("UPDATE report_orders SET customer_paid_amount = 99999 WHERE order_id IN (4, 5)");
+        }
+        session.clearCache(); // JDBC fixture writes bypass MyBatis local-session cache invalidation.
+        mvc.perform(get("/api/reports/summary").header("X-User-Id", 10).param("platformType", "YOGIYO"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.customerPaidAmount").value(0))
+            .andExpect(jsonPath("$.providerChargeAmount").value(0));
+        assertThat(mapper.findSummary(1L, null, null, "BAEMIN").getCustomerPaidAmount()).isNull();
+    }
 }

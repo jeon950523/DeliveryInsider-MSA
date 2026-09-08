@@ -14,9 +14,9 @@ public class ReportSummaryProjection {
     private long canceledOrderCount;
 
     private long grossOrderAmount;
-    private long customerPaidAmount;
+    private Long customerPaidAmount;
 
-    private long providerChargeAmount;
+    private Long providerChargeAmount;
 
     private long estimatedMenuCost;
     private long estimatedPackagingCost;
