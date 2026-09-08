@@ -40,6 +40,10 @@ try {
     $env:CATALOG_CONSUMER_ENABLED = 'false'
     $env:CATALOG_TEST_SCHEMA = $testDatabase
     Invoke-LocalSql $testDatabase (Get-Content -LiteralPath (Join-Path $platformRoot 'src/main/resources/db/manual/20260908_catalog_inbox.sql') -Raw) | Out-Null
+    foreach ($column in @(@('store_platform_settings','connection_revision','BIGINT NOT NULL DEFAULT 1'), @('provider_webhook_inbox','resolved_setting_id','BIGINT NULL'), @('provider_webhook_inbox','resolved_setting_revision','BIGINT NULL'))) {
+        $exists = Invoke-LocalSql $testDatabase "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='$($column[0])' AND column_name='$($column[1])'"
+        if ($exists -eq '0') { Invoke-LocalSql $testDatabase "ALTER TABLE $($column[0]) ADD COLUMN $($column[1]) $($column[2])" | Out-Null }
+    }
     $env:PLATFORM_TEST_DB_URL = $env:SPRING_DATASOURCE_URL
     $env:PLATFORM_TEST_DB_USER = $platformConfig['DB_USER']
     $env:PLATFORM_TEST_DB_PASSWORD = $platformConfig['DB_PASSWORD']

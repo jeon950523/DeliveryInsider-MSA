@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** Uses a newly created private MySQL database; never clears the user's schema. */
 @EnabledIfEnvironmentVariable(named = "PLATFORM_TEST_DB_URL", matches = ".+")
-@SpringBootTest(properties = {"webhook.worker.enabled=false"})
+@SpringBootTest(properties = {"webhook.worker.enabled=false", "catalog.consumer.enabled=false"})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @Transactional
 class PlatformIntegrationMySqlTest {

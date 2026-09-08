@@ -28,11 +28,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-@SpringBootTest
+@SpringBootTest(properties = {"catalog.consumer.enabled=false", "webhook.worker.enabled=false"})
 @Transactional
 @TestConstructor(autowireMode = TestConstructor.AutowireMode.ALL)
 @RequiredArgsConstructor
 class ProviderWebhookClaimServiceIntegrationTest {
+    @org.springframework.beans.factory.annotation.Autowired
+    void verifyPrivateDatabase(org.springframework.jdbc.core.JdbcTemplate privateJdbc) {
+        com.deliveryinsider.platform.LocalPlatformTestDatabase.verify(privateJdbc);
+    }
 
     private final ProviderWebhookInboxService inboxService;
     private final ProviderWebhookClaimService claimService;

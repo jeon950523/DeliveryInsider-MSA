@@ -1,7 +1,6 @@
 package com.deliveryinsider.platform.domain.catalog.event;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
@@ -15,8 +14,6 @@ import java.util.HexFormat;
 public class CatalogEventConsumer {
     private final CatalogProjectionHandler handler;
     private final JsonMapper json;
-    @KafkaListener(topics = "${catalog.consumer.topic:store.events}", groupId = "${catalog.consumer.group:platform-store-catalog-v1}",
-        autoStartup = "${catalog.consumer.enabled:true}")
     public void receive(String body) {
         try {
             String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body.getBytes(StandardCharsets.UTF_8)));

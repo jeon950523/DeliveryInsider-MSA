@@ -16,13 +16,17 @@ import java.util.concurrent.ThreadLocalRandom;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-@SpringBootTest
+@SpringBootTest(properties = {"catalog.consumer.enabled=false", "webhook.worker.enabled=false"})
 @Transactional
 @TestConstructor(
     autowireMode = TestConstructor.AutowireMode.ALL
 )
 @RequiredArgsConstructor
 class PlatformMappingResolverIntegrationTest {
+    @org.springframework.beans.factory.annotation.Autowired
+    void verifyPrivateDatabase(org.springframework.jdbc.core.JdbcTemplate privateJdbc) {
+        com.deliveryinsider.platform.LocalPlatformTestDatabase.verify(privateJdbc);
+    }
 
     private final StorePlatformResolver storeResolver;
     private final PlatformMenuResolver menuResolver;

@@ -13,6 +13,9 @@ public class StorePlatformSetting {
 
     private Long id;
 
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private long connectionRevision = 1;
+
     private Long storeId;
 
     private PlatformType platformType;

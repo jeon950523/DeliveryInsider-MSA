@@ -22,9 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@SpringBootTest
+@SpringBootTest(properties = {"catalog.consumer.enabled=false", "webhook.worker.enabled=false"})
 @Transactional
 class ProviderWebhookInboxServiceIntegrationTest {
+    @org.springframework.beans.factory.annotation.Autowired
+    void verifyPrivateDatabase(org.springframework.jdbc.core.JdbcTemplate privateJdbc) {
+        com.deliveryinsider.platform.LocalPlatformTestDatabase.verify(privateJdbc);
+    }
 
     private final ProviderWebhookInboxService inboxService;
     private final ProviderWebhookInboxMapper inboxMapper;

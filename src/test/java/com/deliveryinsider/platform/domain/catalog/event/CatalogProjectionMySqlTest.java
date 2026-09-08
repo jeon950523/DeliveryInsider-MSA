@@ -17,7 +17,9 @@ class CatalogProjectionMySqlTest {
     @Autowired CatalogEventConsumer consumer;
     @Autowired PlatformTransactionManager transactions;
     @Autowired JsonMapper json;
+    @Autowired org.springframework.kafka.config.KafkaListenerEndpointRegistry listeners;
     @BeforeEach void isolatedFixture() {
+        assertTrue(listeners.getListenerContainers().isEmpty(), "Disabled Catalog must not register a live listener");
         String schema = System.getenv("CATALOG_TEST_SCHEMA");
         assertNotNull(schema, "Run scripts/test-local-mysql.ps1");
         assertTrue(schema.matches("platform_regression_test_[0-9a-f]{32}"));

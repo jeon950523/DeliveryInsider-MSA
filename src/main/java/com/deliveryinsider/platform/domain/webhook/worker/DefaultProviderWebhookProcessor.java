@@ -7,6 +7,7 @@ import com.deliveryinsider.platform.domain.provider.order.service.NormalizedOrde
 import com.deliveryinsider.platform.domain.provider.order.service.ProviderOrderLoader;
 import com.deliveryinsider.platform.domain.provider.order.service.ProviderOrderLoaderResolver;
 import com.deliveryinsider.platform.domain.webhook.model.ClaimedWebhook;
+import com.deliveryinsider.platform.domain.webhook.service.ProviderWebhookClaimService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,7 @@ public class DefaultProviderWebhookProcessor
     private final ProviderOrderLoaderResolver loaderResolver;
     private final NormalizedOrderEventAssembler eventAssembler;
     private final PlatformOrderEventPublisher eventPublisher;
+    private final ProviderWebhookClaimService claimService;
 
     @Override
     public void process(
@@ -30,6 +32,8 @@ public class DefaultProviderWebhookProcessor
 
         CanonicalPlatformOrder canonicalOrder =
             loader.load(webhook);
+
+        claimService.recordResolvedStore(webhook, canonicalOrder.externalStoreId());
 
         PlatformOrderEvent event =
             eventAssembler.assemble(

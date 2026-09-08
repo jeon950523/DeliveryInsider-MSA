@@ -44,6 +44,7 @@ public class PlatformIntegrationService {
         setting.setEnabled(request.enabled());
         setting.setEnvironment(request.environment());
         if (identityChanged) {
+            if (setting.getId() != null) setting.setConnectionRevision(setting.getConnectionRevision() + 1);
             // Configuration is not proof that an external Provider connection succeeded.
             setting.setConnectionStatus("PENDING");
             setting.setLastWebhookAt(null);

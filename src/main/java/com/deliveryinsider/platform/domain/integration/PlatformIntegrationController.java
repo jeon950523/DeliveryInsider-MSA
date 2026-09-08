@@ -1,7 +1,7 @@
 package com.deliveryinsider.platform.domain.integration;
 
 import com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping;
-import com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting;
+
 import com.deliveryinsider.platform.domain.provider.PlatformType;
 import com.deliveryinsider.platform.global.response.GlobalResponse;
 import jakarta.validation.Valid;
@@ -16,25 +16,25 @@ public class PlatformIntegrationController {
     private final PlatformIntegrationService service;
 
     @GetMapping
-    public GlobalResponse<List<StorePlatformSetting>> list(@RequestHeader("X-User-Id") Long userId) {
-        return GlobalResponse.success("현재 매장의 플랫폼 연결 설정입니다.", service.list(userId));
+    public GlobalResponse<List<PlatformIntegrationResponse>> list(@RequestHeader("X-User-Id") Long userId) {
+        return GlobalResponse.success("현재 매장의 플랫폼 연결 설정입니다.", service.list(userId).stream().map(PlatformIntegrationResponse::from).toList());
     }
 
     @PutMapping("/{platformType}")
-    public GlobalResponse<StorePlatformSetting> save(@RequestHeader("X-User-Id") Long userId,
+    public GlobalResponse<PlatformIntegrationResponse> save(@RequestHeader("X-User-Id") Long userId,
         @PathVariable PlatformType platformType, @Valid @RequestBody PlatformIntegrationRequest request) {
-        return GlobalResponse.success("플랫폼 설정을 저장했습니다. 실제 연동 기록은 별도로 확인합니다.", service.save(userId, platformType, request));
+        return GlobalResponse.success("플랫폼 설정을 저장했습니다. 실제 연동 기록은 별도로 확인합니다.", PlatformIntegrationResponse.from(service.save(userId, platformType, request)));
     }
 
     @PatchMapping("/{platformType}/enabled")
-    public GlobalResponse<StorePlatformSetting> enabled(@RequestHeader("X-User-Id") Long userId,
+    public GlobalResponse<PlatformIntegrationResponse> enabled(@RequestHeader("X-User-Id") Long userId,
         @PathVariable PlatformType platformType, @Valid @RequestBody PlatformIntegrationRequest.Enabled request) {
-        return GlobalResponse.success("플랫폼 활성 설정을 변경했습니다.", service.setEnabled(userId, platformType, request.enabled()));
+        return GlobalResponse.success("플랫폼 활성 설정을 변경했습니다.", PlatformIntegrationResponse.from(service.setEnabled(userId, platformType, request.enabled())));
     }
 
     @GetMapping("/{platformType}/status")
-    public GlobalResponse<StorePlatformSetting> status(@RequestHeader("X-User-Id") Long userId, @PathVariable PlatformType platformType) {
-        return GlobalResponse.success("저장된 설정과 실제 수신 기록입니다.", service.status(userId, platformType));
+    public GlobalResponse<PlatformIntegrationResponse> status(@RequestHeader("X-User-Id") Long userId, @PathVariable PlatformType platformType) {
+        return GlobalResponse.success("저장된 설정과 실제 수신 기록입니다.", PlatformIntegrationResponse.from(service.status(userId, platformType)));
     }
 
     @GetMapping("/{platformType}/menus")

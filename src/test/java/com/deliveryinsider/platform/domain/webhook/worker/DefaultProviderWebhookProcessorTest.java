@@ -9,6 +9,7 @@ import com.deliveryinsider.platform.domain.provider.order.service.ProviderOrderL
 import com.deliveryinsider.platform.domain.provider.order.service.ProviderOrderLoaderResolver;
 import com.deliveryinsider.platform.domain.webhook.model.ClaimedWebhook;
 import org.junit.jupiter.api.Test;
+import com.deliveryinsider.platform.domain.webhook.service.ProviderWebhookClaimService;
 
 import static org.mockito.Mockito.*;
 
@@ -59,16 +60,22 @@ class DefaultProviderWebhookProcessorTest {
             assembler.assemble(canonical)
         ).thenReturn(event);
 
+        var claims = mock(ProviderWebhookClaimService.class);
+        when(canonical.externalStoreId()).thenReturn("BAE-STORE-001");
         DefaultProviderWebhookProcessor processor =
             new DefaultProviderWebhookProcessor(
                 resolver,
                 assembler,
-                publisher
+                publisher, claims
             );
 
         processor.process(webhook);
 
-        verify(loader).load(webhook);
+        var sequence = inOrder(loader, claims, assembler, publisher);
+        sequence.verify(loader).load(webhook);
+        sequence.verify(claims).recordResolvedStore(webhook, "BAE-STORE-001");
+        sequence.verify(assembler).assemble(canonical);
+        sequence.verify(publisher).publish(event);
 
         verify(assembler)
             .assemble(canonical);

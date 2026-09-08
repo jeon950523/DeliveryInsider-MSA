@@ -3,6 +3,7 @@ package com.deliveryinsider.platform.domain.webhook.service;
 import com.deliveryinsider.platform.domain.webhook.entity.ProviderWebhookInbox;
 import com.deliveryinsider.platform.domain.webhook.exception.WebhookClaimLostException;
 import com.deliveryinsider.platform.domain.webhook.mapper.ProviderWebhookInboxMapper;
+import com.deliveryinsider.platform.domain.webhook.mapper.ProviderConnectionHealthMapper;
 import com.deliveryinsider.platform.domain.webhook.model.ClaimedWebhook;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,14 @@ public class ProviderWebhookClaimService {
     private static final long LEASE_SECONDS = 30L;
 
     private final ProviderWebhookInboxMapper inboxMapper;
+    private final ProviderConnectionHealthMapper healthMapper;
+
+    @Transactional
+    public void recordResolvedStore(ClaimedWebhook webhook, String externalStoreId) {
+        validateClaimOwnership(healthMapper.bindResolvedSetting(
+            webhook.inboxId(), webhook.claimVersion(), externalStoreId));
+        healthMapper.recordReceipt(webhook.inboxId());
+    }
 
     @Transactional
     public Optional<ClaimedWebhook> claimNext(String workerId) {
@@ -39,6 +48,7 @@ public class ProviderWebhookClaimService {
         );
 
         validateClaimOwnership(updated);
+        healthMapper.recordOutcome(inboxId);
     }
 
     private ClaimedWebhook claim(
@@ -96,6 +106,7 @@ public class ProviderWebhookClaimService {
             );
 
         if (exhausted == 1) {
+            healthMapper.recordOutcome(inboxId);
             return;
         }
 
@@ -111,6 +122,7 @@ public class ProviderWebhookClaimService {
             );
 
         validateClaimOwnership(updated);
+        healthMapper.recordOutcome(inboxId);
     }
 
     @Transactional
@@ -130,6 +142,7 @@ public class ProviderWebhookClaimService {
         );
 
         validateClaimOwnership(updated);
+        healthMapper.recordOutcome(inboxId);
     }
     private void validateClaimOwnership(int updated) {
         if (updated != 1) {
