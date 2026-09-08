@@ -39,7 +39,10 @@ public record PaymentResponse(
             payment.getRequestedAt(),
             payment.getApprovedAt(),
             payment.getFailureCode(),
-            payment.getFailureMessage()
+            payment.getFailureMessage() == null ? null
+                : "UNKNOWN".equals(payment.getStatus().name())
+                    ? "결제 결과를 확인 중입니다. 잠시 후 구독 상태를 확인해 주세요."
+                    : "결제가 완료되지 않았습니다. 결제 수단을 확인하고 다시 시도해 주세요."
         );
     }
 }

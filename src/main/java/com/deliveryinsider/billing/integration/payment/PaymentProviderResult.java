@@ -14,4 +14,11 @@ public record PaymentProviderResult(
     String failureMessage
 
 ) {
+    public PaymentProviderResult {
+        if (failureCode != null || failureMessage != null) {
+            var safe = PaymentFailureDetails.from(failureCode, failureMessage);
+            failureCode = safe.code();
+            failureMessage = safe.message();
+        }
+    }
 }
