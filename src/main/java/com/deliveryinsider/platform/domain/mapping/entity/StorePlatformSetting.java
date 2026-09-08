@@ -4,6 +4,7 @@ import com.deliveryinsider.platform.domain.provider.PlatformType;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -23,4 +24,8 @@ public class StorePlatformSetting {
     private String connectionStatus;
 
     private String environment;
+
+    private LocalDateTime lastWebhookAt;
+    private LocalDateTime lastSuccessAt;
+    private String lastErrorCode;
 }

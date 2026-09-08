@@ -1,0 +1,50 @@
+package com.deliveryinsider.platform.domain.integration;
+
+import com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping;
+import com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting;
+import com.deliveryinsider.platform.domain.provider.PlatformType;
+import com.deliveryinsider.platform.global.response.GlobalResponse;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/platform-integrations")
+@RequiredArgsConstructor
+public class PlatformIntegrationController {
+    private final PlatformIntegrationService service;
+
+    @GetMapping
+    public GlobalResponse<List<StorePlatformSetting>> list(@RequestHeader("X-User-Id") Long userId) {
+        return GlobalResponse.success("현재 매장의 플랫폼 연결 설정입니다.", service.list(userId));
+    }
+
+    @PutMapping("/{platformType}")
+    public GlobalResponse<StorePlatformSetting> save(@RequestHeader("X-User-Id") Long userId,
+        @PathVariable PlatformType platformType, @Valid @RequestBody PlatformIntegrationRequest request) {
+        return GlobalResponse.success("플랫폼 설정을 저장했습니다. 실제 연동 기록은 별도로 확인합니다.", service.save(userId, platformType, request));
+    }
+
+    @PatchMapping("/{platformType}/enabled")
+    public GlobalResponse<StorePlatformSetting> enabled(@RequestHeader("X-User-Id") Long userId,
+        @PathVariable PlatformType platformType, @Valid @RequestBody PlatformIntegrationRequest.Enabled request) {
+        return GlobalResponse.success("플랫폼 활성 설정을 변경했습니다.", service.setEnabled(userId, platformType, request.enabled()));
+    }
+
+    @GetMapping("/{platformType}/status")
+    public GlobalResponse<StorePlatformSetting> status(@RequestHeader("X-User-Id") Long userId, @PathVariable PlatformType platformType) {
+        return GlobalResponse.success("저장된 설정과 실제 수신 기록입니다.", service.status(userId, platformType));
+    }
+
+    @GetMapping("/{platformType}/menus")
+    public GlobalResponse<List<PlatformMenuMapping>> menus(@RequestHeader("X-User-Id") Long userId, @PathVariable PlatformType platformType) {
+        return GlobalResponse.success("현재 매장의 외부 메뉴 매핑입니다.", service.menus(userId, platformType));
+    }
+
+    @PutMapping("/{platformType}/menus/{menuId}")
+    public GlobalResponse<PlatformMenuMapping> menu(@RequestHeader("X-User-Id") Long userId,
+        @PathVariable PlatformType platformType, @PathVariable long menuId, @Valid @RequestBody PlatformIntegrationRequest.Menu request) {
+        return GlobalResponse.success("외부 메뉴 매핑을 저장했습니다.", service.saveMenu(userId, platformType, menuId, request));
+    }
+}
