@@ -90,3 +90,6 @@ provider-client:
     base-url: ${YOGIYO_API_BASE_URL:http://localhost:8101}
   ddangyo:
     base-url: ${DDANGYO_API_BASE_URL:http://localhost:8101}
+catalog:
+  consumer:
+    enabled: ${CATALOG_CONSUMER_ENABLED:true}

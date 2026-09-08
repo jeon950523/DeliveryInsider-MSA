@@ -11,7 +11,7 @@ $sourceDatabase = $platformConfig['DB_NAME']
 if ($sourceDatabase -notmatch '^[A-Za-z0-9_]+$') { throw 'Invalid source schema identifier' }
 $testDatabase = 'platform_regression_test_' + [Guid]::NewGuid().ToString('N')
 $created = $false
-$environmentKeys = @('MYSQL_PWD','SPRING_DATASOURCE_URL','SPRING_DATASOURCE_USERNAME','SPRING_DATASOURCE_PASSWORD','WEBHOOK_WORKER_ENABLED','PLATFORM_TEST_DB_URL','PLATFORM_TEST_DB_USER','PLATFORM_TEST_DB_PASSWORD')
+$environmentKeys = @('MYSQL_PWD','SPRING_DATASOURCE_URL','SPRING_DATASOURCE_USERNAME','SPRING_DATASOURCE_PASSWORD','WEBHOOK_WORKER_ENABLED','CATALOG_CONSUMER_ENABLED','CATALOG_TEST_SCHEMA','PLATFORM_TEST_DB_URL','PLATFORM_TEST_DB_USER','PLATFORM_TEST_DB_PASSWORD')
 $previousEnvironment = @{}
 foreach ($key in $environmentKeys) { $previousEnvironment[$key] = [Environment]::GetEnvironmentVariable($key, 'Process') }
 $testExit = 1
@@ -37,6 +37,9 @@ try {
     $env:SPRING_DATASOURCE_USERNAME = $platformConfig['DB_USER']
     $env:SPRING_DATASOURCE_PASSWORD = $platformConfig['DB_PASSWORD']
     $env:WEBHOOK_WORKER_ENABLED = 'false'
+    $env:CATALOG_CONSUMER_ENABLED = 'false'
+    $env:CATALOG_TEST_SCHEMA = $testDatabase
+    Invoke-LocalSql $testDatabase (Get-Content -LiteralPath (Join-Path $platformRoot 'src/main/resources/db/manual/20260908_catalog_inbox.sql') -Raw) | Out-Null
     $env:PLATFORM_TEST_DB_URL = $env:SPRING_DATASOURCE_URL
     $env:PLATFORM_TEST_DB_USER = $platformConfig['DB_USER']
     $env:PLATFORM_TEST_DB_PASSWORD = $platformConfig['DB_PASSWORD']
