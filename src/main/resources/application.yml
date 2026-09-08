@@ -83,4 +83,10 @@ webhook:
     max-retry-count: ${WEBHOOK_WORKER_MAX_RETRY_COUNT:5}
 provider-client:
   baemin:
-    base-url: ${BAEMIN_API_BASE_URL:http://localhost:8100}
+    base-url: ${BAEMIN_API_BASE_URL:http://localhost:8101}
+  coupang-eats:
+    base-url: ${COUPANG_EATS_API_BASE_URL:http://localhost:8101}
+  yogiyo:
+    base-url: ${YOGIYO_API_BASE_URL:http://localhost:8101}
+  ddangyo:
+    base-url: ${DDANGYO_API_BASE_URL:http://localhost:8101}

@@ -3,7 +3,7 @@ package com.deliveryinsider.platform.domain.webhook.controller;
 import com.deliveryinsider.platform.domain.provider.PlatformType;
 import com.deliveryinsider.platform.domain.webhook.model.WebhookReceiptCommand;
 import com.deliveryinsider.platform.domain.webhook.model.WebhookReceiptResult;
-import com.deliveryinsider.platform.domain.webhook.provider.baemin.BaeminOrderWebhookParser;
+import com.deliveryinsider.platform.domain.provider.simulator.SimulatorWebhookParser;
 import com.deliveryinsider.platform.domain.webhook.service.ProviderWebhookInboxService;
 import com.deliveryinsider.platform.global.provider.ProviderSecretResolver;
 import com.deliveryinsider.platform.global.provider.ProviderWebhookVerifier;
@@ -29,7 +29,7 @@ public class ProviderWebhookController {
 
     private final ProviderSecretResolver providerSecretResolver;
     private final ProviderWebhookVerifier providerWebhookVerifier;
-    private final BaeminOrderWebhookParser baeminOrderWebhookParser;
+    private final SimulatorWebhookParser simulatorWebhookParser;
     private final ProviderWebhookInboxService inboxService;
 
     @PostMapping("/{platformType}/webhooks/orders")
@@ -55,7 +55,7 @@ public class ProviderWebhookController {
         );
 
         WebhookReceiptCommand command =
-            parse(platformType, rawBody);
+            simulatorWebhookParser.parse(rawBody);
 
         WebhookReceiptResult result =
             inboxService.receive(
@@ -67,19 +67,4 @@ public class ProviderWebhookController {
         return ResponseEntity.ok().build();
     }
 
-    private WebhookReceiptCommand parse(
-        PlatformType platformType,
-        byte[] rawBody
-    ) {
-        return switch (platformType) {
-            case BAEMIN ->
-                baeminOrderWebhookParser.parse(rawBody);
-
-            default ->
-                throw new UnsupportedOperationException(
-                    "Provider parser is not implemented: "
-                        + platformType
-                );
-        };
-    }
 }

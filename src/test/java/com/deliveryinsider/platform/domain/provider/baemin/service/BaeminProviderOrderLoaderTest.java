@@ -43,9 +43,7 @@ class BaeminProviderOrderLoaderTest {
             );
 
         when(
-            connector.getOrderDetail(
-                "BAE-ORDER-001"
-            )
+            connector.getOrderDetail("BAE-ORDER-001", "BAE-EVENT-001")
         ).thenReturn(
             detail("BAE-ORDER-001")
         );
@@ -86,9 +84,7 @@ class BaeminProviderOrderLoaderTest {
         );
 
         verify(connector)
-            .getOrderDetail(
-                "BAE-ORDER-001"
-            );
+            .getOrderDetail("BAE-ORDER-001", "BAE-EVENT-001");
     }
 
     @Test
@@ -100,9 +96,7 @@ class BaeminProviderOrderLoaderTest {
             );
 
         when(
-            connector.getOrderDetail(
-                "BAE-ORDER-001"
-            )
+            connector.getOrderDetail("BAE-ORDER-001", "BAE-EVENT-001")
         ).thenReturn(
             detail("BAE-ORDER-WRONG")
         );
@@ -128,9 +122,7 @@ class BaeminProviderOrderLoaderTest {
             );
 
         when(
-            connector.getOrderDetail(
-                "BAE-ORDER-001"
-            )
+            connector.getOrderDetail("BAE-ORDER-001", "BAE-EVENT-001")
         ).thenReturn(
             detail("BAE-ORDER-001")
         );
