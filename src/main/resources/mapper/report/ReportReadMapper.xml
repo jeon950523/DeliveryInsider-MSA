@@ -434,7 +434,14 @@
         ro.order_id,
         ro.ordered_at,
         ro.status,
-        ro.gross_order_amount,
+        COALESCE(
+            ro.gross_order_amount,
+            (
+                SELECT SUM(ri.ordered_unit_price * ri.quantity)
+                FROM report_order_items ri
+                WHERE ri.order_id = ro.order_id
+            )
+        ) AS gross_order_amount,
         ro.customer_paid_amount,
         ro.provider_financial_data_status
         FROM report_orders ro
