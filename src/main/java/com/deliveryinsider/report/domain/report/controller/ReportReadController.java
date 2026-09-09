@@ -1,17 +1,23 @@
 package com.deliveryinsider.report.domain.report.controller;
 
+import com.deliveryinsider.report.domain.report.request.ReportAiInsightRequest;
 import com.deliveryinsider.report.domain.report.request.ReportDailyTrendRequest;
 import com.deliveryinsider.report.domain.report.request.ReportOrderSearchRequest;
 import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
 import com.deliveryinsider.report.domain.report.response.*;
+import com.deliveryinsider.report.domain.report.service.ReportAiInsightService;
 import com.deliveryinsider.report.domain.report.service.ReportReadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import jakarta.validation.Valid;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +28,12 @@ import java.util.List;
 public class ReportReadController {
 
     private final ReportReadService reportReadService;
+    private final ReportAiInsightService reportAiInsightService;
+
+    public ReportReadController(ReportReadService reportReadService) {
+        this.reportReadService = reportReadService;
+        this.reportAiInsightService = null;
+    }
 
     @GetMapping("/summary")
     public ReportSummaryResponse getSummary(
@@ -160,6 +172,22 @@ public class ReportReadController {
             )
         );
     }
+
+    @PostMapping("/ai-insights")
+    public ReportAiInsightResponse getAiInsight(
+        @RequestHeader("X-User-Id")
+        Long userId,
+
+        @Valid
+        @RequestBody
+        ReportAiInsightRequest request
+    ) {
+        return reportAiInsightService.analyze(
+            userId,
+            request
+        );
+    }
+
     @GetMapping("/processing-times")
     public ReportProcessingTimeResponse getProcessingTimes(
         @RequestHeader("X-User-Id")

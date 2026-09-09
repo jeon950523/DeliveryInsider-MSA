@@ -1,6 +1,8 @@
 server:
   port: ${APP_PORT:8095}
 spring:
+  config:
+    import: optional:file:./.env[.properties]
   application:
     name: baef-p2-report
   datasource:
@@ -68,3 +70,15 @@ store-client:
   internal-api-key: ${INTERNAL_API_KEY:}
   connect-timeout: ${STORE_CLIENT_CONNECT_TIMEOUT:2s}
   read-timeout: ${STORE_CLIENT_READ_TIMEOUT:3s}
+billing-client:
+  base-url: ${BILLING_SERVICE_URL:http://localhost:8097}
+  internal-api-key: ${INTERNAL_API_KEY:}
+  connect-timeout: ${BILLING_CLIENT_CONNECT_TIMEOUT:2s}
+  read-timeout: ${BILLING_CLIENT_READ_TIMEOUT:3s}
+
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  model: ${GEMINI_MODEL:gemini-2.5-flash}
+  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta}
+  connect-timeout: ${GEMINI_CONNECT_TIMEOUT:3s}
+  read-timeout: ${GEMINI_READ_TIMEOUT:12s}

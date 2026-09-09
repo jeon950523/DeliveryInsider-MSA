@@ -56,6 +56,15 @@ public class ReportReadService {
     private final CurrentStoreClient currentStoreClient;
     private final ReportReadMapper reportReadMapper;
 
+    public ReportReadService(
+        CurrentStoreClient currentStoreClient,
+        Object ignoredLegacyEntitlementClient,
+        ReportReadMapper reportReadMapper
+    ) {
+        this.currentStoreClient = currentStoreClient;
+        this.reportReadMapper = reportReadMapper;
+    }
+
     @Transactional(readOnly = true)
     public ReportSummaryResponse getSummary(
         Long userId,
@@ -68,7 +77,7 @@ public class ReportReadService {
         );
 
         CurrentStoreResponse store =
-            currentStoreClient.findByUserId(
+            resolveStore(
                 userId
             );
 
@@ -110,7 +119,7 @@ public class ReportReadService {
         validateOrderSearch(request);
 
         CurrentStoreResponse store =
-            currentStoreClient.findByUserId(
+            resolveStore(
                 userId
             );
 
@@ -169,7 +178,7 @@ public class ReportReadService {
         );
 
         CurrentStoreResponse store =
-            currentStoreClient.findByUserId(
+            resolveStore(
                 userId
             );
 
@@ -197,7 +206,7 @@ public class ReportReadService {
         );
 
         CurrentStoreResponse store =
-            currentStoreClient.findByUserId(
+            resolveStore(
                 userId
             );
 
@@ -278,6 +287,14 @@ public class ReportReadService {
             ReportErrorCode.REPORT_QUERY_INVALID
         );
     }
+    private CurrentStoreResponse resolveStore(
+        Long userId
+    ) {
+        return currentStoreClient.findByUserId(
+            userId
+        );
+    }
+
     @Transactional(readOnly = true)
     public ReportProcessingTimeResponse getProcessingTimes(
         Long userId,
@@ -290,7 +307,7 @@ public class ReportReadService {
         );
 
         CurrentStoreResponse store =
-            currentStoreClient.findByUserId(
+            resolveStore(
                 userId
             );
 

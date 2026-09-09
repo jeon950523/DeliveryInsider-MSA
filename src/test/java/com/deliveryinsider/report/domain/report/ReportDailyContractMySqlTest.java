@@ -5,6 +5,7 @@ import com.deliveryinsider.report.domain.report.mapper.ReportReadMapper;
 import com.deliveryinsider.report.domain.report.projection.ReportDailyTrendProjection;
 import com.deliveryinsider.report.domain.report.service.ReportReadService;
 import com.deliveryinsider.report.global.error.GlobalExceptionHandler;
+import com.deliveryinsider.report.integration.billing.BillingEntitlementClient;
 import com.deliveryinsider.report.integration.store.CurrentStoreClient;
 import com.deliveryinsider.report.integration.store.CurrentStoreResponse;
 import org.apache.ibatis.builder.xml.XMLMapperBuilder;
@@ -106,7 +107,15 @@ class ReportDailyContractMySqlTest {
         mapper = session.getMapper(ReportReadMapper.class);
         CurrentStoreClient storeClient = mock(CurrentStoreClient.class);
         when(storeClient.findByUserId(10L)).thenReturn(new CurrentStoreResponse(1L, "Daily test store"));
-        mvc = MockMvcBuilders.standaloneSetup(new ReportReadController(new ReportReadService(storeClient, mapper)))
+        BillingEntitlementClient billingEntitlementClient =
+            mock(BillingEntitlementClient.class);
+        mvc = MockMvcBuilders.standaloneSetup(new ReportReadController(
+            new ReportReadService(
+                storeClient,
+                billingEntitlementClient,
+                mapper
+            )
+        ))
             .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
 

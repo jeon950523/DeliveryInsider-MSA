@@ -280,11 +280,18 @@
         platform_order_id AS platformOrderId,
         status,
         ordered_at AS orderedAt,
-        gross_order_amount AS grossOrderAmount,
+        COALESCE(
+            ro.gross_order_amount,
+            (
+                SELECT SUM(ri.ordered_unit_price * ri.quantity)
+                FROM report_order_items ri
+                WHERE ri.order_id = ro.order_id
+            )
+        ) AS grossOrderAmount,
         customer_paid_amount AS customerPaidAmount,
         provider_financial_data_status AS financialDataStatus
 
-        FROM report_orders
+        FROM report_orders ro
 
         <include refid="orderFilter"/>
 
@@ -292,7 +299,7 @@
 
         <choose>
             <when test="sortBy == 'grossOrderAmount'">
-                gross_order_amount
+                grossOrderAmount
             </when>
 
             <when test="sortBy == 'status'">
