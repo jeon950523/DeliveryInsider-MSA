@@ -426,8 +426,8 @@ class OrderCreatedTransactionServiceIntegrationTest {
                     18000L,
                     7000L,
                     500L,
-                    15,
-                    3
+                    15
+
                 )
             )
         );

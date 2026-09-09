@@ -10,7 +10,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class OrderOperationEntitlementTest {
+class OrderOperationServiceTest {
 
     @Test
     void subscription이_없어도_주문상태변경은_매장소유권만_확인한다() {

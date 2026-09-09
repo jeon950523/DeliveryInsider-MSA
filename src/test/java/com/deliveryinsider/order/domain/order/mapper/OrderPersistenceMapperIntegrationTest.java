@@ -5,6 +5,7 @@ import com.deliveryinsider.order.domain.order.entity.OrderItemEntity;
 import com.deliveryinsider.order.domain.order.entity.OrderProviderChargeEntity;
 import com.deliveryinsider.order.domain.order.entity.OutboxEventEntity;
 import com.deliveryinsider.order.domain.order.entity.ProcessedPlatformEvent;
+import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
 import com.deliveryinsider.order.domain.order.model.OutboxStatus;
 import com.deliveryinsider.order.domain.order.model.PlatformType;
@@ -78,6 +79,7 @@ class OrderPersistenceMapperIntegrationTest {
                 .storeId(900001L)
                 .externalStoreId("BAE-STORE-001")
                 .status(OrderStatus.CREATED)
+                .operationStatus(OrderOperationStatus.WAITING)
                 .lastSourceSequence(1L)
                 .eventVersion(1L)
                 .orderedAt(
@@ -240,6 +242,11 @@ class OrderPersistenceMapperIntegrationTest {
         );
 
         assertEquals(
+            OrderOperationStatus.WAITING,
+            storedOrder.getOperationStatus()
+        );
+
+        assertEquals(
             900001L,
             storedOrder.getStoreId()
         );
@@ -366,6 +373,7 @@ class OrderPersistenceMapperIntegrationTest {
             .storeId(900001L)
             .externalStoreId("BAE-STORE-001")
             .status(OrderStatus.CREATED)
+            .operationStatus(OrderOperationStatus.WAITING)
             .lastSourceSequence(1L)
             .eventVersion(1L)
             .orderedAt(
