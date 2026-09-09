@@ -7,6 +7,7 @@ import com.deliveryinsider.billing.domain.subscription.model.SubscriptionStatus;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -163,6 +164,41 @@ class EntitlementServiceTest {
                     now
                 )
             ).isFalse();
+        }
+    }
+
+    @Test
+    void expired는_entitled가_아니다() {
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+
+        assertThat(
+            service.isEntitled(
+                subscription(
+                    SubscriptionStatus.EXPIRED,
+                    now.plusDays(1)
+                ),
+                now
+            )
+        ).isFalse();
+    }
+
+    @Test
+    void feature조회는_모든코드에_같은구독판정을_적용한다() {
+        LocalDateTime future =
+            LocalDateTime.now(ZoneOffset.UTC).plusDays(1);
+
+        for (SubscriptionStatus status : SubscriptionStatus.values()) {
+            when(subscriptionMapper.findCurrentByStoreId(3L))
+                .thenReturn(Optional.of(subscription(status, future)));
+
+            boolean expected = status == SubscriptionStatus.ACTIVE
+                || status == SubscriptionStatus.CANCELED;
+
+            for (PremiumFeatureCode featureCode : PremiumFeatureCode.values()) {
+                assertThat(
+                    service.findFeature(3L, featureCode).entitled()
+                ).isEqualTo(expected);
+            }
         }
     }
 
