@@ -5,13 +5,16 @@ import com.deliveryinsider.auth.entity.UserStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
@@ -86,4 +89,48 @@ class UserMapperIntegrationTest {
         assertEquals(1, updated);
         assertEquals(UserStatus.ACTIVE, found.getStatus());
     }
+    @Test
+    void updateVerifiedPhoneAndRejectDuplicatePhone() {
+        UserEntity first = UserEntity.builder()
+            .email("phone-first-" + UUID.randomUUID() + "@test.com")
+            .passwordHash(passwordEncoder.encode("Test1234!"))
+            .status(UserStatus.ACTIVE)
+            .build();
+        UserEntity second = UserEntity.builder()
+            .email("phone-second-" + UUID.randomUUID() + "@test.com")
+            .passwordHash(passwordEncoder.encode("Test1234!"))
+            .status(UserStatus.ACTIVE)
+            .build();
+
+        userMapper.insert(first);
+        userMapper.insert(second);
+
+        LocalDateTime verifiedAt = LocalDateTime.now();
+        String phoneNumber = "01012345678";
+
+        assertEquals(
+            1,
+            userMapper.updateVerifiedPhone(
+                first.getId(),
+                phoneNumber,
+                verifiedAt
+            )
+        );
+
+        UserEntity found = userMapper.findById(first.getId())
+            .orElseThrow();
+
+        assertEquals(phoneNumber, found.getPhoneNumber());
+        assertNotNull(found.getPhoneVerifiedAt());
+
+        assertThrows(
+            DuplicateKeyException.class,
+            () -> userMapper.updateVerifiedPhone(
+                second.getId(),
+                phoneNumber,
+                verifiedAt
+            )
+        );
+    }
+
 }

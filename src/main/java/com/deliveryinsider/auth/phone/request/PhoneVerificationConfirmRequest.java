@@ -1,0 +1,21 @@
+package com.deliveryinsider.auth.phone.request;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+
+public record PhoneVerificationConfirmRequest(
+    @NotBlank(message = "휴대폰 번호는 필수입니다.")
+    @Pattern(
+        regexp = "^010-?\\d{4}-?\\d{4}$",
+        message = "010으로 시작하는 휴대폰 번호를 입력해 주세요."
+    )
+    String phoneNumber,
+
+    @NotBlank(message = "인증번호는 필수입니다.")
+    @Pattern(
+        regexp = "^\\d{6}$",
+        message = "인증번호 6자리를 입력해 주세요."
+    )
+    String code
+) {
+}

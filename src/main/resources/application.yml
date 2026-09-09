@@ -55,3 +55,26 @@ jwt:
   refresh-token-expiry-ms: ${JWT_REFRESH_TOKEN_EXPIRY_MS:1209600000}
   refresh-token-cookie-name: refresh-token
   secret: ${JWT_SECRET:}
+
+phone-verification:
+  expiry-seconds: ${PHONE_VERIFICATION_EXPIRY_SECONDS:180}
+  resend-cooldown-seconds: ${PHONE_VERIFICATION_RESEND_COOLDOWN_SECONDS:60}
+  max-attempts: ${PHONE_VERIFICATION_MAX_ATTEMPTS:5}
+
+solapi:
+  base-url: ${SOLAPI_BASE_URL:https://api.solapi.com}
+  api-key: ${GEMINI_API_KEY:}
+  api-secret: ${SOLAPI_API_SECRET:}
+  sender-number: ${SOLAPI_SENDER_NUMBER:}
+
+
+kakao-oauth:
+  rest-api-key: ${KAKAO_REST_API_KEY:${KAKAO_CLIENT_ID:}}
+  client-secret: ${KAKAO_CLIENT_SECRET:}
+  redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8090/api/auth/oauth2/callback/kakao}
+  front-callback-uri: ${KAKAO_FRONT_CALLBACK_URI:http://localhost:5174/login/oauth2/callback}
+  auth-base-url: ${KAKAO_AUTH_BASE_URL:https://kauth.kakao.com}
+  api-base-url: ${KAKAO_API_BASE_URL:https://kapi.kakao.com}
+  state-cookie-name: ${KAKAO_STATE_COOKIE_NAME:kakao-oauth-state}
+  state-ttl-seconds: ${KAKAO_STATE_TTL_SECONDS:300}
+  cookie-secure: ${KAKAO_COOKIE_SECURE:false}

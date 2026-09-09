@@ -16,6 +16,8 @@
                 property="status"
                 column="status"
                 javaType="com.deliveryinsider.auth.entity.UserStatus"/>
+        <result property="phoneNumber" column="phone_number"/>
+        <result property="phoneVerifiedAt" column="phone_verified_at"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
@@ -47,6 +49,8 @@
             email,
             password_hash,
             status,
+            phone_number,
+            phone_verified_at,
             created_at,
             updated_at
         FROM users
@@ -63,12 +67,41 @@
             email,
             password_hash,
             status,
+            phone_number,
+            phone_verified_at,
             created_at,
             updated_at
         FROM users
         WHERE id = #{id}
 
     </select>
+
+    <select
+            id="findByPhoneNumber"
+            resultMap="userResultMap">
+
+        SELECT
+            id,
+            email,
+            password_hash,
+            status,
+            phone_number,
+            phone_verified_at,
+            created_at,
+            updated_at
+        FROM users
+        WHERE phone_number = #{phoneNumber}
+
+    </select>
+
+    <update id="updateVerifiedPhone">
+        UPDATE users
+        SET phone_number = #{phoneNumber},
+            phone_verified_at = #{phoneVerifiedAt},
+            updated_at = #{phoneVerifiedAt}
+        WHERE id = #{id}
+          AND phone_verified_at IS NULL
+    </update>
 
     <update id="updateStatus">
         UPDATE users

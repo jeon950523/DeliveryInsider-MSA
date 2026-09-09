@@ -14,6 +14,8 @@ public class UserEntity {
     private String email;
     private String passwordHash;
     private UserStatus status;
+    private String phoneNumber;
+    private LocalDateTime phoneVerifiedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
