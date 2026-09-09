@@ -40,7 +40,9 @@ public class JwtAuthenticationWebFilter implements WebFilter {
         "/api/auth/login",
         "/api/auth/reissue-token",
         "/api/auth/logout",
-        "/api/auth/register"
+        "/api/auth/register",
+        "/api/auth/oauth2/authorization/kakao",
+        "/api/auth/oauth2/callback/kakao"
     );
 
     private final JwtAccessTokenVerifier jwtAccessTokenVerifier;

@@ -49,7 +49,10 @@ spring:
               uri: ${BILLING_SERVICE_URI:http://localhost:8097}
               predicates:
                 - Path=/api/billing/**
-
+            - id: report-service
+              uri: ${REPORT_SERVICE_URI:http://localhost:8095}
+              predicates:
+                - Path=/api/reports/**
             # OpenAPI specs: 하위 서비스 UI는 끄고 SCG /docs에서 통합한다.
             - id: auth-service-docs
               uri: ${AUTH_SERVICE_URI:http://localhost:8091}

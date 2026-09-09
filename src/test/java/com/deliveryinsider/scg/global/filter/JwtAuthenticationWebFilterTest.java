@@ -169,6 +169,50 @@ class JwtAuthenticationWebFilterTest {
         assertNull(forwardedUserId.get());
     }
 
+
+
+    @Test
+    void kakaoOAuthCallbackIsPublicAndTrustedHeadersAreRemoved() {
+        MockServerWebExchange exchange =
+            MockServerWebExchange.from(
+                MockServerHttpRequest
+                    .get(
+                        "/api/auth/oauth2/callback/kakao"
+                    )
+                    .header(
+                        "X-User-Id",
+                        "999"
+                    )
+                    .build()
+            );
+
+        AtomicReference<String> forwardedUserId =
+            new AtomicReference<>();
+
+        WebFilterChain chain =
+            currentExchange -> {
+                forwardedUserId.set(
+                    currentExchange
+                        .getRequest()
+                        .getHeaders()
+                        .getFirst("X-User-Id")
+                );
+
+                return Mono.empty();
+            };
+
+        StepVerifier.create(
+            filter.filter(
+                exchange,
+                chain
+            )
+        ).verifyComplete();
+
+        assertNull(
+            forwardedUserId.get()
+        );
+    }
+
     private String createToken(
         String subject,
         String tokenType
