@@ -59,6 +59,8 @@ public interface ProviderWebhookInboxMapper {
     int requeueBlocked(
         @Param("id") Long id
     );
+
+    int requeueBlockedForMenuResolution();
     int markRetryableFailed(
         @Param("id") Long id,
         @Param("workerId") String workerId,

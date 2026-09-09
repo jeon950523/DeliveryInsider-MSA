@@ -45,4 +45,20 @@ public class PlatformStoreClient {
     }
 
     public record OwnedStore(Long storeId, String storeName) {}
+
+    public CreatedMenu createMenu(long storeId, CreateMenuRequest request) {
+        if (!configured) throw new BusinessException(PlatformIntegrationError.STORE_UNAVAILABLE);
+        try {
+            return Optional.ofNullable(client.post().uri("/internal/stores/{storeId}/menus", storeId)
+                    .body(request).retrieve().body(CreatedMenu.class))
+                .filter(menu -> menu.id() != null && menu.id() > 0)
+                .orElseThrow(() -> new BusinessException(PlatformIntegrationError.STORE_UNAVAILABLE));
+        } catch (RestClientResponseException | ResourceAccessException e) {
+            throw new BusinessException(PlatformIntegrationError.STORE_UNAVAILABLE, e);
+        }
+    }
+
+    public record CreateMenuRequest(String operationKey, String menuName, Integer menuPrice, Integer menuCost,
+                                    Integer packagingFee, Integer expectedCookingTime) {}
+    public record CreatedMenu(Long id, String menuName, Integer menuPrice) {}
 }

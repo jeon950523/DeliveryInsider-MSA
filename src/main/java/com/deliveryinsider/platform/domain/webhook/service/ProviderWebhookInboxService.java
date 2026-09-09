@@ -135,4 +135,14 @@ public class ProviderWebhookInboxService {
         }
     }
 
+    /**
+     * Rechecking is deliberately broad because Inbox stores the original provider payload,
+     * not a denormalized external menu ID. The assembler still verifies every order item
+     * before emitting Kafka, so a partly mapped multi-item order remains BLOCKED.
+     */
+    @Transactional
+    public int requeueBlockedForMenuResolution() {
+        return inboxMapper.requeueBlockedForMenuResolution();
+    }
+
 }

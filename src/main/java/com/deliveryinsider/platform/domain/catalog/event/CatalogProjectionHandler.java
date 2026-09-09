@@ -1,6 +1,7 @@
 package com.deliveryinsider.platform.domain.catalog.event;
 
 import com.deliveryinsider.platform.domain.catalog.mapper.MenuCatalogProjectionMapper;
+import com.deliveryinsider.platform.domain.webhook.service.ProviderWebhookInboxService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,6 +13,7 @@ import java.util.Set;
 public class CatalogProjectionHandler {
     private final CatalogEventMapper mapper;
     private final MenuCatalogProjectionMapper menus;
+    private final ProviderWebhookInboxService inboxService;
     @Transactional
     public void apply(CatalogEvent event, String hash) {
         validate(event);
@@ -29,6 +31,9 @@ public class CatalogProjectionHandler {
         }
         // Any failure (including a racing duplicate ID) rolls back the projection as well.
         mapper.insertInbox(event.eventId(), hash);
+        if ("MENU".equals(event.aggregateType()) && !"DELETED".equals(event.data().status())) {
+            inboxService.requeueBlockedForMenuResolution();
+        }
     }
     private void validate(CatalogEvent event) {
         if (event == null || event.eventId() == null || event.eventId().isBlank() || event.eventId().length() > 150

@@ -47,4 +47,26 @@ public class PlatformIntegrationController {
         @PathVariable PlatformType platformType, @PathVariable long menuId, @Valid @RequestBody PlatformIntegrationRequest.Menu request) {
         return GlobalResponse.success("외부 메뉴 매핑을 저장했습니다.", service.saveMenu(userId, platformType, menuId, request));
     }
+
+    @GetMapping("/{platformType}/unmapped-menus")
+    public GlobalResponse<List<ExternalMenuResponse>> unmappedMenus(@RequestHeader("X-User-Id") Long userId,
+        @PathVariable PlatformType platformType) {
+        return GlobalResponse.success("아직 연결되지 않은 외부 메뉴입니다.", service.unmappedMenus(userId, platformType));
+    }
+
+    @PostMapping("/{platformType}/unmapped-menus/{externalMenuId}/connect")
+    public GlobalResponse<PlatformMenuMapping> connectExistingMenu(@RequestHeader("X-User-Id") Long userId,
+        @PathVariable PlatformType platformType, @PathVariable String externalMenuId,
+        @Valid @RequestBody ExternalMenuConnectionRequest request) {
+        return GlobalResponse.success("기존 메뉴와 외부 메뉴를 연결했습니다.",
+            service.connectExistingMenu(userId, platformType, externalMenuId, request));
+    }
+
+    @PostMapping("/{platformType}/unmapped-menus/{externalMenuId}/create-and-connect")
+    public GlobalResponse<PlatformMenuMapping> createAndConnectMenu(@RequestHeader("X-User-Id") Long userId,
+        @PathVariable PlatformType platformType, @PathVariable String externalMenuId,
+        @Valid @RequestBody ExternalMenuConnectionRequest.CreateAndConnect request) {
+        return GlobalResponse.success("내부 메뉴를 만들고 외부 메뉴를 연결했습니다.",
+            service.createAndConnectMenu(userId, platformType, externalMenuId, request));
+    }
 }

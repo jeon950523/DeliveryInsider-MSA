@@ -4,7 +4,9 @@ import com.deliveryinsider.platform.domain.catalog.entity.MenuCatalogProjection;
 import com.deliveryinsider.platform.domain.catalog.mapper.MenuCatalogProjectionMapper;
 import com.deliveryinsider.platform.domain.catalog.model.MenuCatalogStatus;
 import com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting;
+import com.deliveryinsider.platform.domain.mapping.mapper.PlatformMenuMappingMapper;
 import com.deliveryinsider.platform.domain.provider.PlatformType;
+import com.deliveryinsider.platform.domain.webhook.service.ProviderWebhookInboxService;
 import com.deliveryinsider.platform.global.error.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,7 +21,10 @@ class PlatformIntegrationServiceTest {
     private final PlatformStoreClient store = mock(PlatformStoreClient.class);
     private final PlatformIntegrationMapper mapper = mock(PlatformIntegrationMapper.class);
     private final MenuCatalogProjectionMapper catalog = mock(MenuCatalogProjectionMapper.class);
-    private final PlatformIntegrationService service = new PlatformIntegrationService(store, mapper, catalog);
+    private final PlatformMenuMappingMapper menuMappings = mock(PlatformMenuMappingMapper.class);
+    private final SimulatorCatalogClient simulatorCatalog = mock(SimulatorCatalogClient.class);
+    private final ProviderWebhookInboxService inbox = mock(ProviderWebhookInboxService.class);
+    private final PlatformIntegrationService service = new PlatformIntegrationService(store, mapper, catalog, menuMappings, simulatorCatalog, inbox);
     @BeforeEach void owner() { when(store.findOwnedStoreId(10L)).thenReturn(1L); }
     private StorePlatformSetting existing() {
         var setting = new StorePlatformSetting();
@@ -91,5 +96,26 @@ class PlatformIntegrationServiceTest {
         assertThat(result.getStoreId()).isEqualTo(1L);
         assertThat(result.getExternalStoreId()).isEqualTo("external-1");
         verify(mapper).insertMenu(result);
+    }
+    @Test void onlyUnmappedExternalMenusAreShownForTheOwnedStore() {
+        existing();
+        var unconnected = new ExternalMenuResponse(PlatformType.BAEMIN, "external-1", "external-new", "새 메뉴", 12000, true);
+        var connected = new ExternalMenuResponse(PlatformType.BAEMIN, "external-1", "external-old", "기존 메뉴", 9000, true);
+        when(simulatorCatalog.findMenus(PlatformType.BAEMIN, "external-1")).thenReturn(List.of(unconnected, connected));
+        when(menuMappings.findByExternalIdentity(PlatformType.BAEMIN, "external-1", "external-new")).thenReturn(Optional.empty());
+        when(menuMappings.findByExternalIdentity(PlatformType.BAEMIN, "external-1", "external-old")).thenReturn(Optional.of(new com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping()));
+        assertThat(service.unmappedMenus(10L, PlatformType.BAEMIN)).containsExactly(unconnected);
+    }
+    @Test void connectingAnExternalMenuRequeuesBlockedOrdersButDoesNotBypassOwnership() {
+        existing();
+        var external = new ExternalMenuResponse(PlatformType.BAEMIN, "external-1", "external-menu", "외부 메뉴", 12000, true);
+        var owned = new MenuCatalogProjection(); owned.setMenuId(11L); owned.setStoreId(1L); owned.setStatus(MenuCatalogStatus.ACTIVE);
+        when(simulatorCatalog.findMenus(PlatformType.BAEMIN, "external-1")).thenReturn(List.of(external));
+        when(catalog.findByMenuId(11L)).thenReturn(Optional.of(owned));
+        when(mapper.findMenu(1L, PlatformType.BAEMIN, 11L)).thenReturn(Optional.empty());
+        var result = service.connectExistingMenu(10L, PlatformType.BAEMIN, "external-menu", new ExternalMenuConnectionRequest(11L));
+        assertThat(result.getExternalMenuId()).isEqualTo("external-menu");
+        verify(mapper).insertMenu(result);
+        verify(inbox).requeueBlockedForMenuResolution();
     }
 }

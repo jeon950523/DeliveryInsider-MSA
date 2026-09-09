@@ -243,6 +243,19 @@
         WHERE id = #{id}
         AND status = 'BLOCKED'
     </update>
+    <update id="requeueBlockedForMenuResolution">
+        UPDATE provider_webhook_inbox
+        SET
+        status = 'RECEIVED',
+        retry_count = 0,
+        next_retry_at = CURRENT_TIMESTAMP(6),
+        claimed_by = NULL,
+        claimed_until = NULL,
+        requeue_count = requeue_count + 1,
+        last_requeued_at = CURRENT_TIMESTAMP(6)
+        WHERE status = 'BLOCKED'
+        AND last_error_code IN ('PLATFORM_MENU_MAPPING_NOT_FOUND', 'PLATFORM_MENU_NOT_ORDERABLE')
+    </update>
     <update id="markRetryExhausted">
         UPDATE provider_webhook_inbox
         SET
