@@ -8,6 +8,7 @@ import { PROVIDERS } from './constants/providers.js';
 import {
   changeExternalOrderStatus,
   createExternalOrder,
+  createExternalMenu,
   fetchControlStatus,
   fetchExternalMenus,
   fetchExternalStores,
@@ -28,6 +29,9 @@ const deliveryAddress = ref('대구광역시 동구 동대구로 475');
 const customerRequest = ref('문 앞에 놓아주세요.');
 const isLoadingCatalog = ref(false);
 const isCreating = ref(false);
+const isCreatingMenu = ref(false);
+const newMenuName = ref('');
+const newMenuPrice = ref('');
 const changingOrderId = ref('');
 const isBackendAvailable = ref(false);
 const errorMessage = ref('');
@@ -161,6 +165,21 @@ const createOrder = async () => {
   }
 };
 
+const createMenu = async () => {
+  if (!selectedStoreId.value || !newMenuName.value.trim() || Number(newMenuPrice.value) < 0) return;
+  isCreatingMenu.value = true; errorMessage.value = ''; successMessage.value = '';
+  try {
+    const menu = await createExternalMenu(selectedProvider.value, selectedStoreId.value, {
+      menuName: newMenuName.value.trim(), price: Number(newMenuPrice.value),
+    });
+    newMenuName.value = ''; newMenuPrice.value = '';
+    successMessage.value = `${menu.externalMenuId} 메뉴를 등록했습니다.`;
+    menus.value = await fetchExternalMenus(selectedProvider.value, selectedStoreId.value);
+    initializeQuantities(); clearMessageLater();
+  } catch (error) { setError(error, '외부 메뉴를 등록하지 못했습니다.'); }
+  finally { isCreatingMenu.value = false; }
+};
+
 const changeOrderStatus = async (order, status) => {
   changingOrderId.value = order.externalOrderId;
   errorMessage.value = '';
@@ -246,6 +265,15 @@ onMounted(async () => {
           <span>최근 주문</span>
           <strong>{{ recentOrders.length }}건</strong>
         </div>
+      </section>
+
+      <section class="panel menu-create-panel">
+        <div class="panel-heading"><div><span class="eyebrow">EXTERNAL MENU</span><h2>메뉴 등록</h2></div><small>선택된 Provider / Store에만 등록됩니다.</small></div>
+        <form class="menu-create-form" @submit.prevent="createMenu">
+          <label>메뉴명<input v-model="newMenuName" maxlength="160" required :disabled="isCreatingMenu"></label>
+          <label>판매가<input v-model.number="newMenuPrice" type="number" min="0" step="1" required :disabled="isCreatingMenu"></label>
+          <button type="submit" :disabled="isCreatingMenu || !selectedStoreId">{{ isCreatingMenu ? '등록 중...' : '+ 메뉴 등록' }}</button>
+        </form>
       </section>
 
       <div v-if="successMessage" class="notice notice--success">
