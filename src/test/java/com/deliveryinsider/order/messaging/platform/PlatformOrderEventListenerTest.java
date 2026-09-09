@@ -2,6 +2,7 @@ package com.deliveryinsider.order.messaging.platform;
 
 import com.deliveryinsider.order.application.order.OrderEventHandlingResult;
 import com.deliveryinsider.order.application.order.PlatformOrderCreatedApplicationService;
+import com.deliveryinsider.order.application.order.PlatformOrderStatusApplicationService;
 import com.deliveryinsider.order.messaging.platform.dto.PlatformOrderEventMessage;
 import com.deliveryinsider.order.messaging.platform.exception.NonRetryableOrderEventProcessingException;
 import com.deliveryinsider.order.messaging.platform.exception.RetryableOrderEventProcessingException;
@@ -15,34 +16,40 @@ import static org.mockito.Mockito.*;
 
 class PlatformOrderEventListenerTest {
 
-    private PlatformOrderCreatedApplicationService service;
-
+    private PlatformOrderStatusApplicationService statusService;
+    private PlatformOrderCreatedApplicationService createdService;
     private PlatformOrderEventListener listener;
 
     @BeforeEach
     void setUp() {
-        service =
+        statusService =
+            mock(
+                PlatformOrderStatusApplicationService.class
+            );
+
+        createdService =
             mock(
                 PlatformOrderCreatedApplicationService.class
             );
 
         listener =
             new PlatformOrderEventListener(
+                statusService,
                 JsonMapper.builder().build(),
-                service
+                createdService
             );
     }
 
     @Test
-    void validEventIsDelegatedToApplicationService() {
+    void orderCreatedEventIsDelegatedToCreatedApplicationService() {
         ConsumerRecord<String, String> record =
             record(
                 "BAEMIN:BAE-ORDER-001",
-                validJson()
+                validJson("ORDER_CREATED")
             );
 
         when(
-            service.handle(
+            createdService.handle(
                 any(PlatformOrderEventMessage.class)
             )
         ).thenReturn(
@@ -51,7 +58,7 @@ class PlatformOrderEventListenerTest {
 
         listener.consume(record);
 
-        verify(service).handle(
+        verify(createdService).handle(
             argThat(message ->
                 "BAE-EVENT-001".equals(
                     message.eventId()
@@ -63,6 +70,40 @@ class PlatformOrderEventListenerTest {
                     )
             )
         );
+        verifyNoInteractions(statusService);
+    }
+
+    @Test
+    void orderStatusEventIsDelegatedToStatusApplicationService() {
+        ConsumerRecord<String, String> record =
+            record(
+                "BAEMIN:BAE-ORDER-001",
+                validJson("ORDER_PICKED_UP")
+            );
+
+        when(
+            statusService.handle(
+                any(PlatformOrderEventMessage.class)
+            )
+        ).thenReturn(
+            OrderEventHandlingResult.APPLIED
+        );
+
+        listener.consume(record);
+
+        verify(statusService).handle(
+            argThat(message ->
+                "ORDER_PICKED_UP".equals(
+                    message.eventType()
+                )
+                    &&
+                    "BAE-ORDER-001".equals(
+                        message.data()
+                            .platformOrderId()
+                    )
+            )
+        );
+        verifyNoInteractions(createdService);
     }
 
     @Test
@@ -78,7 +119,10 @@ class PlatformOrderEventListenerTest {
             () -> listener.consume(record)
         );
 
-        verifyNoInteractions(service);
+        verifyNoInteractions(
+            createdService,
+            statusService
+        );
     }
 
     @Test
@@ -86,7 +130,7 @@ class PlatformOrderEventListenerTest {
         ConsumerRecord<String, String> record =
             record(
                 "BAEMIN:WRONG-ORDER",
-                validJson()
+                validJson("ORDER_CREATED")
             );
 
         assertThrows(
@@ -94,7 +138,10 @@ class PlatformOrderEventListenerTest {
             () -> listener.consume(record)
         );
 
-        verifyNoInteractions(service);
+        verifyNoInteractions(
+            createdService,
+            statusService
+        );
     }
 
     @Test
@@ -102,11 +149,11 @@ class PlatformOrderEventListenerTest {
         ConsumerRecord<String, String> record =
             record(
                 "BAEMIN:BAE-ORDER-001",
-                validJson()
+                validJson("ORDER_CREATED")
             );
 
         when(
-            service.handle(
+            createdService.handle(
                 any(PlatformOrderEventMessage.class)
             )
         ).thenThrow(
@@ -123,6 +170,8 @@ class PlatformOrderEventListenerTest {
             RetryableOrderEventProcessingException.class,
             () -> listener.consume(record)
         );
+
+        verifyNoInteractions(statusService);
     }
 
     private ConsumerRecord<String, String> record(
@@ -138,11 +187,13 @@ class PlatformOrderEventListenerTest {
         );
     }
 
-    private String validJson() {
+    private String validJson(
+        String eventType
+    ) {
         return """
             {
               "eventId": "BAE-EVENT-001",
-              "eventType": "ORDER_CREATED",
+              "eventType": "%s",
               "schemaVersion": 1,
               "eventVersion": null,
               "occurredAt": "2026-08-24T06:01:00Z",
@@ -177,6 +228,6 @@ class PlatformOrderEventListenerTest {
                 "providerCancelReason": null
               }
             }
-            """;
+            """.formatted(eventType);
     }
 }

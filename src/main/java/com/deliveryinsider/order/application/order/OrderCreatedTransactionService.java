@@ -283,9 +283,6 @@ public class OrderCreatedTransactionService {
             .expectedCookingTimeSnapshot(
                 snapshot.expectedCookingTime()
             )
-            .batchCapacitySnapshot(
-                snapshot.batchCapacity()
-            )
             .orderedUnitPrice(
                 item.orderedUnitPrice()
             )

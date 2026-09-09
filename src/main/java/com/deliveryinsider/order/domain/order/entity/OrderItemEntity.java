@@ -36,11 +36,6 @@ public class OrderItemEntity {
      */
     private Integer expectedCookingTimeSnapshot;
 
-    /*
-     * 주문 당시 메뉴 동시 처리 가능 수.
-     */
-    private Integer batchCapacitySnapshot;
-
     private long orderedUnitPrice;
 
     private int quantity;
@@ -57,7 +52,6 @@ public class OrderItemEntity {
         long menuCostSnapshot,
         long packagingCostSnapshot,
         Integer expectedCookingTimeSnapshot,
-        Integer batchCapacitySnapshot,
         long orderedUnitPrice,
         int quantity
     ) {
@@ -70,8 +64,6 @@ public class OrderItemEntity {
         this.packagingCostSnapshot = packagingCostSnapshot;
         this.expectedCookingTimeSnapshot =
             expectedCookingTimeSnapshot;
-        this.batchCapacitySnapshot =
-            batchCapacitySnapshot;
         this.orderedUnitPrice = orderedUnitPrice;
         this.quantity = quantity;
     }

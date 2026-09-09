@@ -58,8 +58,7 @@ class StoreOrderSnapshotClientTest {
                           "menuPrice": 18000,
                           "menuCost": 7000,
                           "packagingCost": 500,
-                          "expectedCookingTime": 15,
-                          "batchCapacity": 3
+                          "expectedCookingTime": 15
                         }
                       ]
                     }

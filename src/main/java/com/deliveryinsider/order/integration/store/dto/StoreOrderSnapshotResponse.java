@@ -28,9 +28,7 @@ public record StoreOrderSnapshotResponse(
 
         long packagingCost,
 
-        Integer expectedCookingTime,
-
-        Integer batchCapacity
+        Integer expectedCookingTime
 
     ) {
     }

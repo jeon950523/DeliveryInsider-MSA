@@ -44,6 +44,24 @@ public enum OrderErrorCode implements ErrorCode {
         "ORDER-007",
         HttpStatus.CONFLICT,
         "현재 운영 상태에서 요청한 상태로 변경할 수 없습니다."
+    ),
+
+    SUBSCRIPTION_REQUIRED(
+        "SUBSCRIPTION_REQUIRED",
+        HttpStatus.FORBIDDEN,
+        "구독이 필요한 기능입니다."
+    ),
+
+    SUBSCRIPTION_NOT_ENTITLED(
+        "SUBSCRIPTION_NOT_ENTITLED",
+        HttpStatus.FORBIDDEN,
+        "현재 구독 상태에서는 이 기능을 사용할 수 없습니다."
+    ),
+
+    BILLING_SERVICE_UNAVAILABLE(
+        "BILLING_SERVICE_UNAVAILABLE",
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "구독 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요."
     );
 
     private final String code;
