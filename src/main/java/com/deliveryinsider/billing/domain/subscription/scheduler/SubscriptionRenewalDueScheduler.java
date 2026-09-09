@@ -1,6 +1,6 @@
 package com.deliveryinsider.billing.domain.subscription.scheduler;
 
-import com.deliveryinsider.billing.domain.subscription.service.SubscriptionExpirationService;
+import com.deliveryinsider.billing.domain.subscription.service.SubscriptionRenewalDueService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -15,19 +15,19 @@ import org.springframework.stereotype.Component;
     havingValue = "true",
     matchIfMissing = true
 )
-public class SubscriptionExpirationScheduler {
+public class SubscriptionRenewalDueScheduler {
 
-    private final SubscriptionExpirationService expirationService;
+    private final SubscriptionRenewalDueService renewalDueService;
 
-    @Value("${billing.subscription.expiration.batch-size:50}")
+    @Value("${billing.subscription.renewal-due.batch-size:50}")
     private int batchSize;
 
     @Scheduled(
         fixedDelayString =
-            "${billing.subscription.expiration.fixed-delay-ms:60000}"
+            "${billing.subscription.renewal-due.fixed-delay-ms:60000}"
     )
-    public void expire() {
-        expirationService.expireDue(
+    public void markDue() {
+        renewalDueService.markDue(
             batchSize
         );
     }

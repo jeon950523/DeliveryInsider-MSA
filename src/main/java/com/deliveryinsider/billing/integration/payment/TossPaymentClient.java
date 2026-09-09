@@ -1,6 +1,5 @@
 package com.deliveryinsider.billing.integration.payment;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -11,7 +10,10 @@ import org.springframework.web.client.RestClientResponseException;
 import java.util.Map;
 
 @Component
-public class TossPaymentClient {
+public class TossPaymentClient
+    implements PaymentProviderQueryClient {
+
+    private static final String PROVIDER = "TOSS";
 
     private final RestClient restClient;
 
@@ -20,6 +22,11 @@ public class TossPaymentClient {
         RestClient restClient
     ) {
         this.restClient = restClient;
+    }
+
+    @Override
+    public String provider() {
+        return PROVIDER;
     }
 
     public PaymentProviderResult confirm(
@@ -46,10 +53,8 @@ public class TossPaymentClient {
                         Map.of(
                             "paymentKey",
                             paymentKey,
-
                             "orderId",
                             orderId,
-
                             "amount",
                             amount
                         )
@@ -66,20 +71,11 @@ public class TossPaymentClient {
                 );
             }
 
-            String responseOrderId =
-                text(
-                    response.get("orderId")
-                );
-
-            long responseAmount =
-                number(
-                    response.get("totalAmount")
-                );
-
-            if (!orderId.equals(
-                responseOrderId
-            ) || amount != responseAmount) {
-
+            if (!matchesExpectedPayment(
+                response,
+                orderId,
+                amount
+            )) {
                 return unknown(
                     "TOSS_RESPONSE_MISMATCH",
                     "토스 승인 응답의 주문번호 또는 금액이 일치하지 않습니다."
@@ -117,11 +113,20 @@ public class TossPaymentClient {
                 "TOSS_CONFIRM_UNKNOWN",
                 e.getMessage()
             );
+
+        } catch (RuntimeException e) {
+
+            return unknown(
+                "TOSS_CONFIRM_INVALID_RESPONSE",
+                e.getMessage()
+            );
         }
     }
 
+    @Override
     public PaymentProviderResult findPayment(
-        String orderId
+        String orderId,
+        long expectedAmount
     ) {
         try {
             Map<?, ?> response =
@@ -143,8 +148,27 @@ public class TossPaymentClient {
                 );
             }
 
+            if (!matchesExpectedPayment(
+                response,
+                orderId,
+                expectedAmount
+            )) {
+                return unknown(
+                    "TOSS_QUERY_MISMATCH",
+                    "토스 결제 조회 결과의 주문번호 또는 금액이 일치하지 않습니다."
+                );
+            }
+
             return toResult(
                 response
+            );
+
+        } catch (RestClientResponseException e) {
+
+            return unknown(
+                "TOSS_QUERY_HTTP_"
+                    + e.getStatusCode().value(),
+                e.getResponseBodyAsString()
             );
 
         } catch (RestClientException e) {
@@ -153,7 +177,36 @@ public class TossPaymentClient {
                 "TOSS_QUERY_UNKNOWN",
                 e.getMessage()
             );
+
+        } catch (RuntimeException e) {
+
+            return unknown(
+                "TOSS_QUERY_INVALID_RESPONSE",
+                e.getMessage()
+            );
         }
+    }
+
+    private boolean matchesExpectedPayment(
+        Map<?, ?> response,
+        String expectedOrderId,
+        long expectedAmount
+    ) {
+        String responseOrderId =
+            text(
+                response.get("orderId")
+            );
+
+        Long responseAmount =
+            numberOrNull(
+                response.get("totalAmount")
+            );
+
+        return expectedOrderId.equals(
+            responseOrderId
+        )
+            && responseAmount != null
+            && responseAmount == expectedAmount;
     }
 
     private PaymentProviderResult toResult(
@@ -174,23 +227,18 @@ public class TossPaymentClient {
 
             return new PaymentProviderResult(
                 PaymentProviderResultStatus.SUCCEEDED,
-
                 text(
                     response.get("paymentKey")
                 ),
-
                 text(
                     response.get("method")
                 ),
-
                 text(
                     card.get("issuerCode")
                 ),
-
                 text(
                     card.get("number")
                 ),
-
                 null,
                 null
             );
@@ -244,14 +292,18 @@ public class TossPaymentClient {
             : String.valueOf(value);
     }
 
-    private long number(
+    private Long numberOrNull(
         Object value
     ) {
+        if (value == null) {
+            return null;
+        }
+
         if (value instanceof Number number) {
             return number.longValue();
         }
 
-        return Long.parseLong(
+        return Long.valueOf(
             String.valueOf(value)
         );
     }

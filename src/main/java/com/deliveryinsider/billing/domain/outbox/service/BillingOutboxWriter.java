@@ -137,6 +137,111 @@ public class BillingOutboxWriter {
         );
     }
 
+    public void appendSubscriptionPastDue(
+        Long subscriptionId,
+        Long storeId,
+        Long planId,
+        LocalDateTime pastDueAt,
+        LocalDateTime currentPeriodEnd,
+        long subscriptionVersion
+    ) {
+        String eventId =
+            UUID.randomUUID().toString();
+
+        String traceId =
+            currentTraceId();
+
+        var data =
+            new SubscriptionPastDueEventData(
+                subscriptionId,
+                planId,
+                pastDueAt.toString(),
+                currentPeriodEnd.toString()
+            );
+
+        var envelope =
+            new BillingEventEnvelope<>(
+                eventId,
+                "SUBSCRIPTION_PAST_DUE",
+                SCHEMA_VERSION,
+                subscriptionVersion,
+                LocalDateTime.now(
+                    ZoneOffset.UTC
+                ).toString(),
+                traceId,
+                "SUBSCRIPTION",
+                String.valueOf(subscriptionId),
+                storeId,
+                data
+            );
+
+        insert(
+            eventId,
+            "SUBSCRIPTION",
+            String.valueOf(subscriptionId),
+            "SUBSCRIPTION_PAST_DUE",
+            subscriptionVersion,
+            storeId,
+            traceId,
+            envelope
+        );
+    }
+
+    public void appendSubscriptionRenewed(
+        Long subscriptionId,
+        Long storeId,
+        Long planId,
+        Long paymentId,
+        long billingAmount,
+        LocalDateTime periodStart,
+        LocalDateTime periodEnd,
+        long subscriptionVersion
+    ) {
+        String eventId =
+            UUID.randomUUID().toString();
+
+        String traceId =
+            currentTraceId();
+
+        var data =
+            new SubscriptionRenewedEventData(
+                subscriptionId,
+                paymentId,
+                planId,
+                billingAmount,
+                periodStart.toString(),
+                periodEnd.toString(),
+                periodEnd.toString()
+            );
+
+        var envelope =
+            new BillingEventEnvelope<>(
+                eventId,
+                "SUBSCRIPTION_RENEWED",
+                SCHEMA_VERSION,
+                subscriptionVersion,
+                LocalDateTime.now(
+                    ZoneOffset.UTC
+                ).toString(),
+                traceId,
+                "SUBSCRIPTION",
+                String.valueOf(subscriptionId),
+                storeId,
+                data
+            );
+
+        insert(
+            eventId,
+            "SUBSCRIPTION",
+            String.valueOf(subscriptionId),
+            "SUBSCRIPTION_RENEWED",
+            subscriptionVersion,
+            storeId,
+            traceId,
+            envelope
+        );
+    }
+
     private void insert(
         String eventId,
         String aggregateType,
@@ -280,7 +385,9 @@ public class BillingOutboxWriter {
                 subscriptionId,
                 planId,
                 expiredAt.toString(),
-                currentPeriodEnd.toString()
+                currentPeriodEnd == null
+                    ? null
+                    : currentPeriodEnd.toString()
             );
 
         var envelope =

@@ -74,6 +74,12 @@ public class TossPaymentService {
         PaymentEntity payment =
             target.payment();
 
+        if (target.alreadySucceeded()) {
+            return PaymentResponse.from(
+                payment
+            );
+        }
+
         PaymentProviderResult result =
             tossPaymentClient.confirm(
                 request.paymentKey(),
@@ -111,16 +117,6 @@ public class TossPaymentService {
         PaymentEntity payment,
         PaymentProviderResult result
     ) {
-        /*
-         * 이미 UNKNOWN인 Payment를 다시 UNKNOWN으로 바꿀 필요는 없다.
-         *
-         * 예:
-         * 1차 Toss 승인 Timeout → UNKNOWN
-         * 사용자가 confirm을 다시 호출
-         * Toss 조회/승인 결과가 여전히 불명확
-         *
-         * 이 경우 기존 UNKNOWN Payment를 그대로 반환한다.
-         */
         if (payment.getStatus()
             == PaymentStatus.UNKNOWN) {
 
@@ -129,9 +125,6 @@ public class TossPaymentService {
             );
         }
 
-        /*
-         * REQUESTED 상태에서 Toss 승인 결과를 알 수 없게 된 경우.
-         */
         PaymentEntity unknownPayment =
             initialPaymentTransactionService.unknown(
                 payment.getId(),
@@ -142,18 +135,29 @@ public class TossPaymentService {
             unknownPayment
         );
     }
+
     public PaymentResponse fail(
         Long userId,
         TossPaymentFailRequest request
     ) {
         var store =
-            currentStoreClient.findByUserId(userId);
+            currentStoreClient.findByUserId(
+                userId
+            );
 
         PaymentEntity payment =
             confirmTransactionService.validateFailure(
                 store.storeId(),
                 request.orderId()
             );
+
+        if (payment.getStatus()
+            == PaymentStatus.FAILED) {
+
+            return PaymentResponse.from(
+                payment
+            );
+        }
 
         PaymentProviderResult result =
             new PaymentProviderResult(

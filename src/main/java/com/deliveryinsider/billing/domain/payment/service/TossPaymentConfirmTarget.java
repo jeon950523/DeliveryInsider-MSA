@@ -4,7 +4,8 @@ import com.deliveryinsider.billing.domain.payment.entity.PaymentEntity;
 
 public record TossPaymentConfirmTarget(
 
-    PaymentEntity payment
+    PaymentEntity payment,
+    boolean alreadySucceeded
 
 ) {
 }

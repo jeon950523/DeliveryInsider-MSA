@@ -3,6 +3,7 @@ package com.deliveryinsider.billing.domain.subscription.service;
 import com.deliveryinsider.billing.domain.subscription.mapper.SubscriptionMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -15,9 +16,11 @@ import java.util.List;
 public class SubscriptionExpirationService {
 
     private final SubscriptionMapper subscriptionMapper;
-
     private final SubscriptionExpirationTransactionService
         transactionService;
+
+    @Value("${billing.subscription.past-due-recovery-days:7}")
+    private int pastDueRecoveryDays;
 
     public void expireDue(
         int limit
@@ -27,6 +30,21 @@ public class SubscriptionExpirationService {
                 ZoneOffset.UTC
             );
 
+        expireCanceled(
+            now,
+            limit
+        );
+
+        expirePastDue(
+            now,
+            limit
+        );
+    }
+
+    private void expireCanceled(
+        LocalDateTime now,
+        int limit
+    ) {
         List<Long> candidateIds =
             subscriptionMapper
                 .findCanceledExpirationCandidateIds(
@@ -35,17 +53,47 @@ public class SubscriptionExpirationService {
                 );
 
         for (Long subscriptionId : candidateIds) {
-
             try {
-                transactionService.expire(
+                transactionService.expireCanceled(
                     subscriptionId,
                     now
                 );
-
             } catch (RuntimeException e) {
-
                 log.error(
-                    "Subscription expiration failed. subscriptionId={}",
+                    "Canceled subscription expiration failed. subscriptionId={}",
+                    subscriptionId,
+                    e
+                );
+            }
+        }
+    }
+
+    private void expirePastDue(
+        LocalDateTime now,
+        int limit
+    ) {
+        LocalDateTime cutoff =
+            now.minusDays(
+                pastDueRecoveryDays
+            );
+
+        List<Long> candidateIds =
+            subscriptionMapper
+                .findPastDueExpirationCandidateIds(
+                    cutoff,
+                    limit
+                );
+
+        for (Long subscriptionId : candidateIds) {
+            try {
+                transactionService.expirePastDue(
+                    subscriptionId,
+                    now,
+                    cutoff
+                );
+            } catch (RuntimeException e) {
+                log.error(
+                    "Past-due subscription expiration failed. subscriptionId={}",
                     subscriptionId,
                     e
                 );

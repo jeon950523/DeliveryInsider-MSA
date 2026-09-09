@@ -50,7 +50,7 @@ public interface PaymentMapper {
         @Param("failureCode") String failureCode,
         @Param("failureMessage") String failureMessage
     );
-    List<PaymentEntity> findInitialReconciliationCandidates(
+    List<PaymentEntity> findReconciliationCandidates(
         @Param("limit") int limit
     );
     boolean existsFinancialInFlightBySubscriptionId(

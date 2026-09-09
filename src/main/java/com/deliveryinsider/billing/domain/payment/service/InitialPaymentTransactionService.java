@@ -23,7 +23,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class InitialPaymentTransactionService {
 
-    private static final String INITIAL_BILLING_CYCLE_KEY = "INITIAL";
+    private static final String INITIAL_BILLING_CYCLE_KEY =
+        "INITIAL";
+
+    private static final String RENEWAL_BILLING_CYCLE_PREFIX =
+        "RENEWAL-";
 
     private final SubscriptionMapper subscriptionMapper;
     private final PaymentMapper paymentMapper;
@@ -43,7 +47,10 @@ public class InitialPaymentTransactionService {
     }
 
     /**
-     * 실제 Toss 일반결제 준비.
+     * Toss 일반결제 준비.
+     *
+     * PENDING이면 최초 결제,
+     * PAST_DUE이면 다음 이용기간 갱신 결제를 준비한다.
      */
     @Transactional
     public PaymentEntity prepareToss(
@@ -56,10 +63,10 @@ public class InitialPaymentTransactionService {
     }
 
     /**
-     * Initial Payment 공통 준비 로직.
+     * 구독 Payment 공통 준비 로직.
      *
-     * - PENDING 구독만 결제 가능
-     * - REQUESTED / SUCCEEDED / UNKNOWN 존재 시 신규 결제 차단
+     * - PENDING / PAST_DUE 구독만 결제 가능
+     * - 같은 Billing Cycle에 REQUESTED / SUCCEEDED / UNKNOWN이 있으면 신규 결제 차단
      * - FAILED 이후에는 RETRY Payment 생성 가능
      */
     private PaymentEntity prepareInternal(
@@ -88,30 +95,53 @@ public class InitialPaymentTransactionService {
                     )
                 );
 
-        if (subscription.getStatus()
-            != SubscriptionStatus.PENDING) {
-
+        if (!isPayableStatus(
+            subscription.getStatus()
+        )) {
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
             );
         }
 
+        boolean initialPayment =
+            subscription.getStatus()
+                == SubscriptionStatus.PENDING;
+
+        String billingCycleKey =
+            resolveBillingCycleKey(
+                subscription,
+                initialPayment
+            );
+
         var latestPayment =
             paymentMapper
                 .findLatestBySubscriptionIdAndBillingCycleKey(
                     subscription.getId(),
-                    INITIAL_BILLING_CYCLE_KEY
+                    billingCycleKey
                 );
 
         if (latestPayment.isPresent()) {
 
-            PaymentStatus latestStatus =
-                latestPayment
-                    .get()
-                    .getStatus();
+            PaymentEntity existingPayment =
+                latestPayment.get();
 
-            if (latestStatus == PaymentStatus.REQUESTED
-                || latestStatus == PaymentStatus.SUCCEEDED
+            PaymentStatus latestStatus =
+                existingPayment.getStatus();
+
+            if (latestStatus == PaymentStatus.REQUESTED) {
+
+                if (provider.equals(
+                    existingPayment.getProvider()
+                )) {
+                    return existingPayment;
+                }
+
+                throw new BusinessException(
+                    BillingErrorCode.PAYMENT_STATE_CONFLICT
+                );
+            }
+
+            if (latestStatus == PaymentStatus.SUCCEEDED
                 || latestStatus == PaymentStatus.UNKNOWN) {
 
                 throw new BusinessException(
@@ -127,14 +157,20 @@ public class InitialPaymentTransactionService {
                 .orElse(1);
 
         PaymentType paymentType =
-            attemptNo == 1
-                ? PaymentType.INITIAL
-                : PaymentType.RETRY;
+            resolvePaymentType(
+                initialPayment,
+                attemptNo
+            );
 
         LocalDateTime now =
             LocalDateTime.now(
                 ZoneOffset.UTC
             );
+
+        String orderPrefix =
+            initialPayment
+                ? "DI-INITIAL-"
+                : "DI-RENEW-";
 
         PaymentEntity payment =
             PaymentEntity.builder()
@@ -142,7 +178,7 @@ public class InitialPaymentTransactionService {
                     subscription.getId()
                 )
                 .billingCycleKey(
-                    INITIAL_BILLING_CYCLE_KEY
+                    billingCycleKey
                 )
                 .attemptNo(
                     attemptNo
@@ -151,7 +187,7 @@ public class InitialPaymentTransactionService {
                     paymentType
                 )
                 .paymentOrderId(
-                    "DI-INITIAL-"
+                    orderPrefix
                         + subscription.getId()
                         + "-"
                         + attemptNo
@@ -192,8 +228,11 @@ public class InitialPaymentTransactionService {
     /**
      * 결제 성공 확정.
      *
-     * REQUESTED 또는 UNKNOWN Payment를 SUCCEEDED로 확정하고
-     * PENDING Subscription을 ACTIVE로 전환한다.
+     * 최초 결제:
+     * PENDING -> ACTIVE
+     *
+     * 갱신 결제:
+     * PAST_DUE -> ACTIVE
      */
     @Transactional
     public PaymentEntity succeed(
@@ -230,13 +269,16 @@ public class InitialPaymentTransactionService {
                     )
                 );
 
-        if (subscription.getStatus()
-            != SubscriptionStatus.PENDING) {
-
+        if (!isPayableStatus(
+            subscription.getStatus()
+        )) {
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
             );
         }
+
+        SubscriptionStatus previousStatus =
+            subscription.getStatus();
 
         LocalDateTime now =
             LocalDateTime.now(
@@ -271,14 +313,23 @@ public class InitialPaymentTransactionService {
             subscription.getVersion() + 1;
 
         int subscriptionUpdated =
-            subscriptionMapper.activate(
-                subscription.getId(),
-                now,
-                periodStart,
-                periodEnd,
-                periodEnd,
-                nextVersion
-            );
+            previousStatus
+                == SubscriptionStatus.PENDING
+                ? subscriptionMapper.activate(
+                    subscription.getId(),
+                    now,
+                    periodStart,
+                    periodEnd,
+                    periodEnd,
+                    nextVersion
+                )
+                : subscriptionMapper.renew(
+                    subscription.getId(),
+                    periodStart,
+                    periodEnd,
+                    periodEnd,
+                    nextVersion
+                );
 
         if (subscriptionUpdated != 1) {
             throw new IllegalStateException(
@@ -286,17 +337,35 @@ public class InitialPaymentTransactionService {
             );
         }
 
-        billingOutboxWriter
-            .appendSubscriptionActivated(
-                subscription.getId(),
-                subscription.getStoreId(),
-                subscription.getPlanId(),
-                payment.getId(),
-                payment.getAmount(),
-                periodStart,
-                periodEnd,
-                nextVersion
-            );
+        if (previousStatus
+            == SubscriptionStatus.PENDING) {
+
+            billingOutboxWriter
+                .appendSubscriptionActivated(
+                    subscription.getId(),
+                    subscription.getStoreId(),
+                    subscription.getPlanId(),
+                    payment.getId(),
+                    payment.getAmount(),
+                    periodStart,
+                    periodEnd,
+                    nextVersion
+                );
+
+        } else {
+
+            billingOutboxWriter
+                .appendSubscriptionRenewed(
+                    subscription.getId(),
+                    subscription.getStoreId(),
+                    subscription.getPlanId(),
+                    payment.getId(),
+                    payment.getAmount(),
+                    periodStart,
+                    periodEnd,
+                    nextVersion
+                );
+        }
 
         return paymentMapper
             .findByIdForUpdate(
@@ -308,7 +377,8 @@ public class InitialPaymentTransactionService {
     /**
      * 결제 실패 확정.
      *
-     * FAILED는 이후 새로운 RETRY Payment를 생성할 수 있다.
+     * FAILED는 같은 Billing Cycle에서
+     * 이후 새로운 RETRY Payment를 생성할 수 있다.
      */
     @Transactional
     public PaymentEntity fail(
@@ -345,9 +415,9 @@ public class InitialPaymentTransactionService {
                     )
                 );
 
-        if (subscription.getStatus()
-            != SubscriptionStatus.PENDING) {
-
+        if (!isPayableStatus(
+            subscription.getStatus()
+        )) {
             throw new BusinessException(
                 BillingErrorCode.PAYMENT_STATE_CONFLICT
             );
@@ -438,5 +508,37 @@ public class InitialPaymentTransactionService {
                 paymentId
             )
             .orElseThrow();
+    }
+
+    private boolean isPayableStatus(
+        SubscriptionStatus status
+    ) {
+        return status == SubscriptionStatus.PENDING
+            || status == SubscriptionStatus.PAST_DUE;
+    }
+
+    private String resolveBillingCycleKey(
+        SubscriptionEntity subscription,
+        boolean initialPayment
+    ) {
+        if (initialPayment) {
+            return INITIAL_BILLING_CYCLE_KEY;
+        }
+
+        return RENEWAL_BILLING_CYCLE_PREFIX
+            + subscription.getVersion();
+    }
+
+    private PaymentType resolvePaymentType(
+        boolean initialPayment,
+        int attemptNo
+    ) {
+        if (attemptNo > 1) {
+            return PaymentType.RETRY;
+        }
+
+        return initialPayment
+            ? PaymentType.INITIAL
+            : PaymentType.RECURRING;
     }
 }

@@ -6,6 +6,8 @@ store-client:
 server:
   port: ${APP_PORT:8097}
 spring:
+  config:
+    import: optional:file:./.env[.properties]
   application:
     name: baef-p2-billing
   datasource:
@@ -72,17 +74,22 @@ billing:
   toss-base-url: ${TOSS_BASE_URL:https://api.tosspayments.com}
 
   subscription:
+    renewal-due:
+      fixed-delay-ms: ${BILLING_SUBSCRIPTION_RENEWAL_DUE_DELAY_MS:60000}
+      batch-size: ${BILLING_SUBSCRIPTION_RENEWAL_DUE_BATCH_SIZE:50}
     expiration:
       fixed-delay-ms: ${BILLING_SUBSCRIPTION_EXPIRATION_DELAY_MS:3000}
       batch-size: ${BILLING_SUBSCRIPTION_EXPIRATION_BATCH_SIZE:50}
+    past-due-recovery-days: ${BILLING_PAST_DUE_RECOVERY_DAYS:7}
   kafka:
     topic: ${BILLING_EVENTS_TOPIC:billing.events}
   payment:
     reconciliation:
       fixed-delay-ms: ${BILLING_PAYMENT_RECONCILIATION_DELAY_MS:5000}
+      batch-size: ${BILLING_PAYMENT_RECONCILIATION_BATCH_SIZE:20}
     mock:
       mode: ${BILLING_MOCK_PAYMENT_MODE:SUCCESS}
-      reconcile-mode: UNKNOWN #${BILLING_MOCK_PAYMENT_RECONCILE_MODE:UNKNOWN}
+      reconcile-mode: ${BILLING_MOCK_PAYMENT_RECONCILE_MODE:UNKNOWN}
   outbox:
     publisher:
       fixed-delay-ms: ${BILLING_OUTBOX_FIXED_DELAY_MS:500}

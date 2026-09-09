@@ -148,15 +148,14 @@
 
     </update>
     <select
-            id="findInitialReconciliationCandidates"
+            id="findReconciliationCandidates"
             resultMap="paymentResultMap">
 
         SELECT p.*
         FROM payments p
                  INNER JOIN subscriptions s
                             ON s.id = p.subscription_id
-        WHERE p.billing_cycle_key = 'INITIAL'
-          AND s.status = 'PENDING'
+        WHERE s.status IN ('PENDING', 'PAST_DUE')
           AND (
             p.status = 'UNKNOWN'
                 OR (

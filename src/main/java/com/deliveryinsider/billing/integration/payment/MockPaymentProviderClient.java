@@ -9,6 +9,8 @@ import java.util.UUID;
 public class MockPaymentProviderClient
     implements PaymentProviderClient {
 
+    private static final String PROVIDER = "MOCK";
+
     private final MockPaymentMode mode;
     private final MockPaymentReconcileMode reconcileMode;
 
@@ -21,6 +23,11 @@ public class MockPaymentProviderClient
     ) {
         this.mode = mode;
         this.reconcileMode = reconcileMode;
+    }
+
+    @Override
+    public String provider() {
+        return PROVIDER;
     }
 
     @Override
@@ -62,7 +69,8 @@ public class MockPaymentProviderClient
 
     @Override
     public PaymentProviderResult findPayment(
-        String paymentOrderId
+        String paymentOrderId,
+        long expectedAmount
     ) {
         return switch (reconcileMode) {
 

@@ -21,7 +21,6 @@ public class SubscriptionCancelTransactionService {
 
     private final SubscriptionMapper subscriptionMapper;
     private final PaymentMapper paymentMapper;
-
     private final BillingOutboxWriter billingOutboxWriter;
 
     @Transactional
@@ -57,17 +56,8 @@ public class SubscriptionCancelTransactionService {
                 );
 
         if (financialInFlight) {
-
             throw new BusinessException(
                 BillingErrorCode.FINANCIAL_IN_FLIGHT
-            );
-        }
-
-        if (subscription.getStatus()
-            != SubscriptionStatus.ACTIVE) {
-
-            throw new BusinessException(
-                BillingErrorCode.SUBSCRIPTION_CANCEL_NOT_ALLOWED
             );
         }
 
@@ -79,6 +69,38 @@ public class SubscriptionCancelTransactionService {
         long nextVersion =
             subscription.getVersion() + 1;
 
+        if (subscription.getStatus()
+            == SubscriptionStatus.ACTIVE) {
+
+            return cancelActive(
+                subscription,
+                now,
+                nextVersion
+            );
+        }
+
+        if (subscription.getStatus()
+            == SubscriptionStatus.PENDING
+            || subscription.getStatus()
+            == SubscriptionStatus.PAST_DUE) {
+
+            return expireImmediately(
+                subscription,
+                now,
+                nextVersion
+            );
+        }
+
+        throw new BusinessException(
+            BillingErrorCode.SUBSCRIPTION_CANCEL_NOT_ALLOWED
+        );
+    }
+
+    private CancelSubscriptionResponse cancelActive(
+        SubscriptionEntity subscription,
+        LocalDateTime now,
+        long nextVersion
+    ) {
         int updated =
             subscriptionMapper.cancel(
                 subscription.getId(),
@@ -106,6 +128,45 @@ public class SubscriptionCancelTransactionService {
             subscription.getId(),
             subscription.getStoreId(),
             SubscriptionStatus.CANCELED.name(),
+            now,
+            subscription.getCurrentPeriodEnd(),
+            nextVersion
+        );
+    }
+
+    private CancelSubscriptionResponse expireImmediately(
+        SubscriptionEntity subscription,
+        LocalDateTime now,
+        long nextVersion
+    ) {
+        int updated =
+            subscriptionMapper.expireByUserCancel(
+                subscription.getId(),
+                now,
+                now,
+                nextVersion
+            );
+
+        if (updated != 1) {
+            throw new IllegalStateException(
+                "Subscription EXPIRED 전환에 실패했습니다."
+            );
+        }
+
+        billingOutboxWriter
+            .appendSubscriptionExpired(
+                subscription.getId(),
+                subscription.getStoreId(),
+                subscription.getPlanId(),
+                now,
+                subscription.getCurrentPeriodEnd(),
+                nextVersion
+            );
+
+        return new CancelSubscriptionResponse(
+            subscription.getId(),
+            subscription.getStoreId(),
+            SubscriptionStatus.EXPIRED.name(),
             now,
             subscription.getCurrentPeriodEnd(),
             nextVersion
