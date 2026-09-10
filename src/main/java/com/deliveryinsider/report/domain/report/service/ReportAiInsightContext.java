@@ -23,6 +23,8 @@ public record ReportAiInsightContext(
 
     boolean cancellationReasonAvailable,
 
+    List<CancellationReason> cancellationReasons,
+
     Metric totalProcessing,
 
     Metric waiting,
@@ -40,6 +42,12 @@ public record ReportAiInsightContext(
     public record Metric(
         long sampleCount,
         Long averageSeconds
+    ) {
+    }
+
+    public record CancellationReason(
+        String reasonCode,
+        long count
     ) {
     }
 

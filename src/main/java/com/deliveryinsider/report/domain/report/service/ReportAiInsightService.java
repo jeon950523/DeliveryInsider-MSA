@@ -3,6 +3,7 @@ package com.deliveryinsider.report.domain.report.service;
 import com.deliveryinsider.report.domain.report.mapper.ReportReadMapper;
 import com.deliveryinsider.report.domain.report.projection.ReportPlatformProcessingTimeProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportProcessingTimeProjection;
+import com.deliveryinsider.report.domain.report.projection.ReportCancellationReasonProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportSummaryProjection;
 import com.deliveryinsider.report.domain.report.request.ReportAiInsightQuestionType;
 import com.deliveryinsider.report.domain.report.request.ReportAiInsightRequest;
@@ -16,6 +17,8 @@ import com.deliveryinsider.report.integration.store.CurrentStoreClient;
 import com.deliveryinsider.report.integration.store.CurrentStoreResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
@@ -30,6 +33,8 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class ReportAiInsightService {
+
+    private static final Logger log = LoggerFactory.getLogger(ReportAiInsightService.class);
 
     private static final Set<String> SUPPORTED_PLATFORMS =
         Set.of(
@@ -82,6 +87,14 @@ public class ReportAiInsightService {
                     request.platformType()
                 );
 
+        List<ReportCancellationReasonProjection> cancellationReasons =
+            reportReadMapper.findCancellationReasonCounts(
+                store.storeId(),
+                request.from(),
+                request.to(),
+                request.platformType()
+            );
+
         ReportProcessingTimeProjection processing =
             reportReadMapper
                 .findProcessingTimeSummary(
@@ -106,6 +119,7 @@ public class ReportAiInsightService {
                 request,
                 summary,
                 financialStatuses,
+                cancellationReasons,
                 processing,
                 platformProcessing
             );
@@ -127,24 +141,31 @@ public class ReportAiInsightService {
             return fallback;
         }
 
-        String prompt =
-            createPrompt(
-                request.questionType(),
-                context,
-                warnings
-            );
+        Map<ReportAiEvidenceKey, String> evidenceCatalog = createEvidenceCatalog(context);
+        Set<ReportAiEvidenceKey> availableEvidenceKeys = questionTypeEvidenceKeys(request.questionType(), evidenceCatalog);
 
-        GeminiInsightOutput output =
-            geminiInsightClient.generate(
-                prompt
-            );
+        String prompt;
+        try {
+            prompt = createPrompt(request.questionType(), context, warnings, availableEvidenceKeys);
+        } catch (RuntimeException e) {
+            logAiFailure(request.questionType(), "PROMPT_SERIALIZATION", e);
+            throw e;
+        }
 
-        return mapResponse(
-            request.questionType(),
-            context,
-            warnings,
-            output
-        );
+        GeminiInsightOutput output;
+        try {
+            output = geminiInsightClient.generate(request.questionType(), prompt, availableEvidenceKeys);
+        } catch (RuntimeException e) {
+            logAiFailure(request.questionType(), "GEMINI_GENERATE", e);
+            throw e;
+        }
+
+        try {
+            return mapResponse(request.questionType(), evidenceCatalog, warnings, output);
+        } catch (RuntimeException e) {
+            logAiFailure(request.questionType(), "RESPONSE_MAPPING", e);
+            throw e;
+        }
     }
 
     private void validateRequest(
@@ -181,6 +202,7 @@ public class ReportAiInsightService {
         ReportAiInsightRequest request,
         ReportSummaryProjection summary,
         List<String> financialStatuses,
+        List<ReportCancellationReasonProjection> cancellationReasons,
         ReportProcessingTimeProjection processing,
         List<ReportPlatformProcessingTimeProjection>
             platformProcessing
@@ -210,6 +232,14 @@ public class ReportAiInsightService {
                 )
                 .toList();
 
+        List<ReportAiInsightContext.CancellationReason> reasonMetrics =
+            cancellationReasons == null
+                ? List.of()
+                : cancellationReasons.stream()
+                    .filter(reason -> reason != null && isSafeReasonCode(reason.getReasonCode()) && reason.getCount() > 0)
+                    .map(reason -> new ReportAiInsightContext.CancellationReason(reason.getReasonCode().trim(), reason.getCount()))
+                    .toList();
+
         return new ReportAiInsightContext(
             request.from(),
             request.to(),
@@ -219,7 +249,8 @@ public class ReportAiInsightService {
             summary.getCanceledOrderCount(),
             summary.getGrossOrderAmount(),
             financialDataAvailable,
-            false,
+            !reasonMetrics.isEmpty(),
+            reasonMetrics,
             metric(
                 processing.getTotalProcessingSampleCount(),
                 processing.getAverageTotalProcessingSeconds()
@@ -252,6 +283,10 @@ public class ReportAiInsightService {
             sampleCount,
             averageSeconds
         );
+    }
+
+    private boolean isSafeReasonCode(String value) {
+        return value != null && value.matches("[A-Za-z0-9_:-]{1,80}");
     }
 
     private List<String> buildWarnings(
@@ -368,6 +403,16 @@ public class ReportAiInsightService {
             );
         }
 
+        if (questionType == ReportAiInsightQuestionType.CANCELLATION_REVIEW
+            && context.canceledOrderCount() > 0
+            && !context.cancellationReasonAvailable()) {
+            return localResponse(
+                questionType,
+                "취소율은 확인되지만 취소 원인을 판단할 수 있는 취소 코드 집계가 없습니다. 취소 사유 수집 상태를 먼저 확인해 주세요.",
+                warnings
+            );
+        }
+
         return null;
     }
 
@@ -405,7 +450,8 @@ public class ReportAiInsightService {
     private String createPrompt(
         ReportAiInsightQuestionType questionType,
         ReportAiInsightContext context,
-        List<String> warnings
+        List<String> warnings,
+        Set<ReportAiEvidenceKey> availableEvidenceKeys
     ) {
         try {
             return """
@@ -419,14 +465,19 @@ public class ReportAiInsightService {
                 - 아래 context에 없는 사실을 추가하지 않는다.
                 - reason에는 숫자를 새로 작성하지 않는다.
                 - 숫자 근거는 evidenceKeys로만 선택한다.
+                - evidenceKeys는 아래 허용 목록 안에서만 선택한다.
                 - 표본이 적으면 확정적으로 표현하지 않는다.
-                - 취소 사유가 없으므로 취소 원인을 추측하지 않는다.
+                - cancellationReasonAvailable=false이면 취소 원인을 추측하지 않는다.
+                - cancellationReasonAvailable=true여도 context의 취소 코드 집계 밖의 원인을 추가하지 않는다.
                 - financialDataAvailable=false이면 수수료, 순이익, 비용 절감 조언을 하지 않는다.
                 - 플랫폼 비교에서는 totalProcessing.sampleCount가 5건 이상인 플랫폼을 우선한다.
                 - 최대 3개 insight만 작성한다.
                 - 점주가 바로 이해할 수 있는 한국어를 사용한다.
 
                 서버 경고:
+                %s
+
+                허용 evidenceKeys:
                 %s
 
                 context:
@@ -437,6 +488,7 @@ public class ReportAiInsightService {
                 jsonMapper.writeValueAsString(
                     warnings
                 ),
+                jsonMapper.writeValueAsString(availableEvidenceKeys.stream().map(Enum::name).toList()),
                 jsonMapper.writeValueAsString(
                     context
                 )
@@ -451,7 +503,7 @@ public class ReportAiInsightService {
 
     private ReportAiInsightResponse mapResponse(
         ReportAiInsightQuestionType questionType,
-        ReportAiInsightContext context,
+        Map<ReportAiEvidenceKey, String> evidenceCatalog,
         List<String> warnings,
         GeminiInsightOutput output
     ) {
@@ -462,12 +514,6 @@ public class ReportAiInsightService {
                 ReportErrorCode.REPORT_AI_RESPONSE_INVALID
             );
         }
-
-        Map<ReportAiEvidenceKey, String>
-            evidenceCatalog =
-            createEvidenceCatalog(
-                context
-            );
 
         List<ReportAiInsightResponse.Insight>
             insights =
@@ -521,7 +567,9 @@ public class ReportAiInsightService {
     ) {
         if (item == null
             || item.title() == null
-            || item.reason() == null) {
+            || item.reason() == null
+            || item.action() == null
+            || item.action().isBlank()) {
             return null;
         }
 
@@ -561,6 +609,10 @@ public class ReportAiInsightService {
             ),
             safeText(
                 item.reason(),
+                240
+            ),
+            safeText(
+                item.action(),
                 240
             ),
             evidence
@@ -644,6 +696,13 @@ public class ReportAiInsightService {
                 context
             )
         );
+
+        if (context.cancellationReasonAvailable()) {
+            evidence.put(
+                ReportAiEvidenceKey.CANCELLATION_REASONS,
+                cancellationReasonEvidence(context)
+            );
+        }
 
         evidence.put(
             ReportAiEvidenceKey.COMPLETED_REVENUE,
@@ -782,6 +841,31 @@ public class ReportAiInsightService {
             + rate.stripTrailingZeros()
                 .toPlainString()
             + "%";
+    }
+
+    private String cancellationReasonEvidence(ReportAiInsightContext context) {
+        long knownCount = context.cancellationReasons().stream().mapToLong(ReportAiInsightContext.CancellationReason::count).sum();
+        String reasons = context.cancellationReasons().stream()
+            .map(reason -> reason.reasonCode() + " " + reason.count() + "건")
+            .limit(3)
+            .reduce((left, right) -> left + " · " + right)
+            .orElse("없음");
+        return "취소 사유 확인 가능 " + knownCount + "건 · " + reasons;
+    }
+
+    private Set<ReportAiEvidenceKey> questionTypeEvidenceKeys(
+        ReportAiInsightQuestionType questionType,
+        Map<ReportAiEvidenceKey, String> evidenceCatalog
+    ) {
+        return questionType.allowedEvidenceKeys().stream()
+            .filter(evidenceCatalog::containsKey)
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private void logAiFailure(ReportAiInsightQuestionType questionType, String failureStage, RuntimeException exception) {
+        log.warn("Report AI failure: questionType={}, failureStage={}, exceptionClass={}, errorCode={}",
+            questionType, failureStage, exception.getClass().getSimpleName(),
+            exception instanceof BusinessException businessException ? businessException.errorCode().code() : "UNMAPPED");
     }
 
     private ReportAiEvidenceKey platformEvidenceKey(

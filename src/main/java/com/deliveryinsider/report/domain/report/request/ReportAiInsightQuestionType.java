@@ -11,6 +11,7 @@ public enum ReportAiInsightQuestionType {
         Set.of(
             ReportAiEvidenceKey.ORDER_VOLUME,
             ReportAiEvidenceKey.CANCELLATION,
+            ReportAiEvidenceKey.CANCELLATION_REASONS,
             ReportAiEvidenceKey.COMPLETED_REVENUE,
             ReportAiEvidenceKey.TOTAL_PROCESSING,
             ReportAiEvidenceKey.WAITING,
@@ -42,10 +43,11 @@ public enum ReportAiInsightQuestionType {
     ),
 
     CANCELLATION_REVIEW(
-        "취소 건수와 전체 주문 수만 이용해 확인할 점을 설명한다. 취소 원인은 추측하지 않는다.",
+        "취소율과 실제 수집된 취소 코드 집계만 이용해 우선 확인할 점과 다음 행동을 설명한다. 취소 원인은 추측하지 않는다.",
         Set.of(
             ReportAiEvidenceKey.ORDER_VOLUME,
-            ReportAiEvidenceKey.CANCELLATION
+            ReportAiEvidenceKey.CANCELLATION,
+            ReportAiEvidenceKey.CANCELLATION_REASONS
         )
     ),
 

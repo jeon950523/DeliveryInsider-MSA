@@ -1,6 +1,7 @@
 package com.deliveryinsider.report.integration.gemini;
 
 import com.deliveryinsider.report.domain.report.service.ReportAiEvidenceKey;
+import com.deliveryinsider.report.domain.report.request.ReportAiInsightQuestionType;
 import com.deliveryinsider.report.global.error.BusinessException;
 import com.deliveryinsider.report.global.error.ReportErrorCode;
 import com.deliveryinsider.report.global.gemini.GeminiProperties;
@@ -11,15 +12,19 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class GeminiInsightClient {
+
+    private static final Logger log = LoggerFactory.getLogger(GeminiInsightClient.class);
 
     private static final List<String> PRIORITIES =
         List.of(
@@ -44,7 +49,9 @@ public class GeminiInsightClient {
     }
 
     public GeminiInsightOutput generate(
-        String prompt
+        ReportAiInsightQuestionType questionType,
+        String prompt,
+        Set<ReportAiEvidenceKey> allowedEvidenceKeys
     ) {
         if (!properties.configured()) {
             throw new BusinessException(
@@ -66,7 +73,8 @@ public class GeminiInsightClient {
                     )
                     .body(
                         createRequestBody(
-                            prompt
+                            prompt,
+                            allowedEvidenceKeys
                         )
                     )
                     .retrieve()
@@ -85,6 +93,7 @@ public class GeminiInsightClient {
             );
 
         } catch (RestClientResponseException e) {
+            logFailure(questionType, "GEMINI_HTTP", e);
             if (e.getStatusCode().value() == 429) {
                 throw new BusinessException(
                     ReportErrorCode.REPORT_AI_RATE_LIMITED
@@ -96,19 +105,23 @@ public class GeminiInsightClient {
             );
 
         } catch (ResourceAccessException e) {
+            logFailure(questionType, "GEMINI_CONNECTION", e);
             throw new BusinessException(
                 ReportErrorCode.REPORT_AI_UNAVAILABLE
             );
 
         } catch (RestClientException e) {
+            logFailure(questionType, "GEMINI_CLIENT", e);
             throw new BusinessException(
                 ReportErrorCode.REPORT_AI_UNAVAILABLE
             );
 
         } catch (BusinessException e) {
+            logFailure(questionType, "GEMINI_RESPONSE_VALIDATION", e);
             throw e;
 
         } catch (Exception e) {
+            logFailure(questionType, "GEMINI_RESPONSE_PARSE", e);
             throw new BusinessException(
                 ReportErrorCode.REPORT_AI_RESPONSE_INVALID
             );
@@ -120,7 +133,8 @@ public class GeminiInsightClient {
     }
 
     private Map<String, Object> createRequestBody(
-        String prompt
+        String prompt,
+        Set<ReportAiEvidenceKey> allowedEvidenceKeys
     ) {
         return Map.of(
             "systemInstruction",
@@ -156,7 +170,7 @@ public class GeminiInsightClient {
                 "responseMimeType",
                 "application/json",
                 "responseSchema",
-                responseSchema()
+                responseSchema(allowedEvidenceKeys)
             )
         );
     }
@@ -170,17 +184,18 @@ public class GeminiInsightClient {
             financialDataAvailable=false이면 수수료, 순이익, 비용 절감 효과를 추측하거나 조언하지 않는다.
             표본이 적다는 경고가 있으면 단정적인 표현을 피한다.
             답변과 reason에는 새로운 숫자를 만들어 쓰지 않는다.
+            action에는 점주가 실행할 다음 단계를 한 문장으로 작성한다.
             숫자 근거는 evidenceKeys로만 선택한다.
             evidenceKeys는 제공된 enum 값만 사용한다.
             최대 3개의 짧고 실행 가능한 insight만 반환한다.
             """;
     }
 
-    private Map<String, Object> responseSchema() {
+    private Map<String, Object> responseSchema(
+        Set<ReportAiEvidenceKey> allowedEvidenceKeys
+    ) {
         List<String> evidenceKeys =
-            Arrays.stream(
-                    ReportAiEvidenceKey.values()
-                )
+            allowedEvidenceKeys.stream()
                 .map(Enum::name)
                 .toList();
 
@@ -207,6 +222,11 @@ public class GeminiInsightClient {
                         "type",
                         "STRING"
                     ),
+                    "action",
+                    Map.of(
+                        "type",
+                        "STRING"
+                    ),
                     "evidenceKeys",
                     Map.of(
                         "type",
@@ -229,6 +249,7 @@ public class GeminiInsightClient {
                     "priority",
                     "title",
                     "reason",
+                    "action",
                     "evidenceKeys"
                 )
             );
@@ -295,5 +316,22 @@ public class GeminiInsightClient {
         }
 
         return text;
+    }
+
+    private void logFailure(
+        ReportAiInsightQuestionType questionType,
+        String failureStage,
+        Exception exception
+    ) {
+        String providerStatus = exception instanceof RestClientResponseException response
+            ? Integer.toString(response.getStatusCode().value())
+            : "n/a";
+        log.warn(
+            "Gemini insight failure: questionType={}, failureStage={}, exceptionClass={}, providerStatus={}",
+            questionType,
+            failureStage,
+            exception.getClass().getSimpleName(),
+            providerStatus
+        );
     }
 }

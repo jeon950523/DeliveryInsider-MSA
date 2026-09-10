@@ -28,6 +28,8 @@ public record ReportAiInsightResponse(
 
         String reason,
 
+        String action,
+
         List<String> evidence
 
     ) {

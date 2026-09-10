@@ -20,6 +20,8 @@ public record GeminiInsightOutput(
 
         String reason,
 
+        String action,
+
         List<String> evidenceKeys
 
     ) {

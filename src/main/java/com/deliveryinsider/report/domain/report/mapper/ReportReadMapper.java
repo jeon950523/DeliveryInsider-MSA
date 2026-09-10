@@ -1,6 +1,7 @@
 package com.deliveryinsider.report.domain.report.mapper;
 
 import com.deliveryinsider.report.domain.report.projection.ReportDailyTrendProjection;
+import com.deliveryinsider.report.domain.report.projection.ReportCancellationReasonProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportMenuPerformanceProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportOrderProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportPlatformProcessingTimeProjection;
@@ -23,6 +24,13 @@ public interface ReportReadMapper {
     );
 
     List<String> findFinancialDataStatuses(
+        @Param("storeId") Long storeId,
+        @Param("from") LocalDateTime from,
+        @Param("to") LocalDateTime to,
+        @Param("platformType") String platformType
+    );
+
+    List<ReportCancellationReasonProjection> findCancellationReasonCounts(
         @Param("storeId") Long storeId,
         @Param("from") LocalDateTime from,
         @Param("to") LocalDateTime to,
