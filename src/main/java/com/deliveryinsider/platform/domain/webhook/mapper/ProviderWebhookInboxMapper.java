@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Mapper
@@ -20,6 +21,8 @@ public interface ProviderWebhookInboxMapper {
     );
 
     Optional<ProviderWebhookInbox> findNextClaimCandidate();
+
+    List<ProviderWebhookInbox> findBlockedForMenuResolution();
 
     int claim(
         @Param("id") Long id,

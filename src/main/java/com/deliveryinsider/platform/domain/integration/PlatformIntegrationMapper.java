@@ -22,4 +22,5 @@ public interface PlatformIntegrationMapper {
                                          @Param("menuId") long menuId);
     void insertMenu(PlatformMenuMapping mapping);
     int updateMenu(PlatformMenuMapping mapping);
+    int rebindMenu(PlatformMenuMapping mapping);
 }

@@ -15,6 +15,8 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class ProviderWebhookInboxService {
@@ -123,6 +125,11 @@ public class ProviderWebhookInboxService {
             existing.getId()
         );
     }
+    @Transactional(readOnly = true)
+    public List<ProviderWebhookInbox> findBlockedForMenuResolution() {
+        return inboxMapper.findBlockedForMenuResolution();
+    }
+
     @Transactional
     public void requeueBlocked(Long inboxId) {
         int updated =

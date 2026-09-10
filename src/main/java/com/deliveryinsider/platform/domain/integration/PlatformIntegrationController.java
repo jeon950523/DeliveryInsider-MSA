@@ -48,6 +48,16 @@ public class PlatformIntegrationController {
         return GlobalResponse.success("외부 메뉴 매핑을 저장했습니다.", service.saveMenu(userId, platformType, menuId, request));
     }
 
+    @GetMapping("/unresolved-order-menus")
+    public GlobalResponse<List<UnresolvedOrderMenuResponse>> unresolvedOrderMenus(
+        @RequestHeader("X-User-Id") Long userId
+    ) {
+        return GlobalResponse.success(
+            "실제 차단 주문에 포함된 미연결 외부 메뉴입니다.",
+            service.unresolvedOrderMenus(userId)
+        );
+    }
+
     @GetMapping("/{platformType}/unmapped-menus")
     public GlobalResponse<List<ExternalMenuResponse>> unmappedMenus(@RequestHeader("X-User-Id") Long userId,
         @PathVariable PlatformType platformType) {

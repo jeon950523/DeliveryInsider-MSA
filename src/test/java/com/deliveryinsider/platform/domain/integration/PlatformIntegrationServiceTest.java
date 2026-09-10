@@ -6,6 +6,11 @@ import com.deliveryinsider.platform.domain.catalog.model.MenuCatalogStatus;
 import com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting;
 import com.deliveryinsider.platform.domain.mapping.mapper.PlatformMenuMappingMapper;
 import com.deliveryinsider.platform.domain.provider.PlatformType;
+import com.deliveryinsider.platform.domain.provider.order.model.CanonicalPlatformOrder;
+import com.deliveryinsider.platform.domain.provider.order.model.CanonicalPlatformOrderItem;
+import com.deliveryinsider.platform.domain.provider.order.service.ProviderOrderLoader;
+import com.deliveryinsider.platform.domain.provider.order.service.ProviderOrderLoaderResolver;
+import com.deliveryinsider.platform.domain.webhook.entity.ProviderWebhookInbox;
 import com.deliveryinsider.platform.domain.webhook.service.ProviderWebhookInboxService;
 import com.deliveryinsider.platform.global.error.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,12 +29,23 @@ class PlatformIntegrationServiceTest {
     private final PlatformMenuMappingMapper menuMappings = mock(PlatformMenuMappingMapper.class);
     private final SimulatorCatalogClient simulatorCatalog = mock(SimulatorCatalogClient.class);
     private final ProviderWebhookInboxService inbox = mock(ProviderWebhookInboxService.class);
-    private final PlatformIntegrationService service = new PlatformIntegrationService(store, mapper, catalog, menuMappings, simulatorCatalog, inbox);
+    private final ProviderOrderLoaderResolver orderLoaderResolver = mock(ProviderOrderLoaderResolver.class);
+    private final ProviderOrderLoader orderLoader = mock(ProviderOrderLoader.class);
+    private final PlatformIntegrationService service = new PlatformIntegrationService(
+        store,
+        mapper,
+        catalog,
+        menuMappings,
+        simulatorCatalog,
+        inbox,
+        orderLoaderResolver
+    );
     @BeforeEach void owner() { when(store.findOwnedStoreId(10L)).thenReturn(1L); }
     private StorePlatformSetting existing() {
         var setting = new StorePlatformSetting();
         setting.setId(1L); setting.setStoreId(1L); setting.setPlatformType(PlatformType.BAEMIN);
         setting.setExternalStoreId("external-1"); setting.setEnvironment("SIMULATOR");
+        setting.setEnabled(true);
         setting.setConnectionStatus("ACTIVE"); setting.setLastSuccessAt(LocalDateTime.parse("2026-09-08T01:00:00"));
         when(mapper.findOne(1L, PlatformType.BAEMIN)).thenReturn(Optional.of(setting));
         when(mapper.findForUpdate(1L, PlatformType.BAEMIN)).thenReturn(Optional.of(setting));
@@ -109,16 +125,268 @@ class PlatformIntegrationServiceTest {
         verify(mapper).findOne(1L, PlatformType.BAEMIN);
         verify(mapper, never()).findForUpdate(1L, PlatformType.BAEMIN);
     }
+    @Test void dashboardShowsOnlyMenusThatActuallyBlockOrdersAndDeduplicatesTheSameOrder() {
+        var setting = existing();
+        when(mapper.findAll(1L)).thenReturn(List.of(setting));
+
+        var mapped = new com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping();
+        mapped.setId(1L);
+        mapped.setStoreId(1L);
+        mapped.setPlatformType(PlatformType.BAEMIN);
+        mapped.setExternalStoreId("external-1");
+        mapped.setExternalMenuId("external-mapped");
+        mapped.setMenuId(11L);
+        mapped.setEnabled(true);
+        when(mapper.findMenus(1L, PlatformType.BAEMIN)).thenReturn(List.of(mapped));
+
+        var activeMenu = new MenuCatalogProjection();
+        activeMenu.setMenuId(11L);
+        activeMenu.setStoreId(1L);
+        activeMenu.setStatus(MenuCatalogStatus.ACTIVE);
+        when(catalog.findByMenuId(11L)).thenReturn(Optional.of(activeMenu));
+
+        var blocked = new ProviderWebhookInbox();
+        blocked.setId(7L);
+        blocked.setPlatformType(PlatformType.BAEMIN);
+        blocked.setSourceEventId("event-1");
+        blocked.setEventType("ORDER_CREATED");
+        blocked.setExternalOrderId("order-1");
+        blocked.setPayloadJson("{}");
+        blocked.setClaimVersion(2L);
+
+        when(inbox.findBlockedForMenuResolution()).thenReturn(List.of(blocked));
+        when(orderLoaderResolver.resolve(PlatformType.BAEMIN)).thenReturn(orderLoader);
+        when(orderLoader.load(any())).thenReturn(
+            CanonicalPlatformOrder.builder()
+                .platformType(PlatformType.BAEMIN)
+                .externalOrderId("order-1")
+                .externalStoreId("external-1")
+                .items(List.of(
+                    new CanonicalPlatformOrderItem("external-mapped", 1, 9000L),
+                    new CanonicalPlatformOrderItem("external-blocked", 1, 12000L)
+                ))
+                .build()
+        );
+
+        var blockedMenu = new ExternalMenuResponse(
+            PlatformType.BAEMIN,
+            "external-1",
+            "external-blocked",
+            "실제 차단 메뉴",
+            12000,
+            true
+        );
+        var unrelatedMenu = new ExternalMenuResponse(
+            PlatformType.BAEMIN,
+            "external-1",
+            "external-unrelated",
+            "주문과 무관한 미연결 메뉴",
+            8000,
+            true
+        );
+        when(simulatorCatalog.findMenus(PlatformType.BAEMIN, "external-1"))
+            .thenReturn(List.of(blockedMenu, unrelatedMenu));
+
+        assertThat(service.unresolvedOrderMenus(10L))
+            .containsExactly(
+                new UnresolvedOrderMenuResponse(
+                    PlatformType.BAEMIN,
+                    "external-1",
+                    "external-blocked",
+                    "실제 차단 메뉴",
+                    12000,
+                    1
+                )
+            );
+    }
+
     @Test void connectingAnExternalMenuRequeuesBlockedOrdersButDoesNotBypassOwnership() {
         existing();
         var external = new ExternalMenuResponse(PlatformType.BAEMIN, "external-1", "external-menu", "외부 메뉴", 12000, true);
         var owned = new MenuCatalogProjection(); owned.setMenuId(11L); owned.setStoreId(1L); owned.setStatus(MenuCatalogStatus.ACTIVE);
         when(simulatorCatalog.findMenus(PlatformType.BAEMIN, "external-1")).thenReturn(List.of(external));
         when(catalog.findByMenuId(11L)).thenReturn(Optional.of(owned));
+        when(menuMappings.findByExternalIdentity(PlatformType.BAEMIN, "external-1", "external-menu"))
+            .thenReturn(Optional.empty());
         when(mapper.findMenu(1L, PlatformType.BAEMIN, 11L)).thenReturn(Optional.empty());
         var result = service.connectExistingMenu(10L, PlatformType.BAEMIN, "external-menu", new ExternalMenuConnectionRequest(11L));
         assertThat(result.getExternalMenuId()).isEqualTo("external-menu");
         verify(mapper).insertMenu(result);
         verify(inbox).requeueBlockedForMenuResolution();
     }
+
+    @Test
+    void dashboardTreatsMappingToDeletedMenuAsUnresolved() {
+        var setting = existing();
+        when(mapper.findAll(1L)).thenReturn(List.of(setting));
+
+        var staleMapping = new com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping();
+        staleMapping.setId(9L);
+        staleMapping.setStoreId(1L);
+        staleMapping.setPlatformType(PlatformType.BAEMIN);
+        staleMapping.setExternalStoreId("external-1");
+        staleMapping.setExternalMenuId("external-stale");
+        staleMapping.setMenuId(29L);
+        staleMapping.setEnabled(true);
+        when(mapper.findMenus(1L, PlatformType.BAEMIN)).thenReturn(List.of(staleMapping));
+
+        var deletedMenu = new MenuCatalogProjection();
+        deletedMenu.setMenuId(29L);
+        deletedMenu.setStoreId(1L);
+        deletedMenu.setStatus(MenuCatalogStatus.DELETED);
+        when(catalog.findByMenuId(29L)).thenReturn(Optional.of(deletedMenu));
+
+        var blocked = new ProviderWebhookInbox();
+        blocked.setId(12L);
+        blocked.setPlatformType(PlatformType.BAEMIN);
+        blocked.setSourceEventId("event-stale");
+        blocked.setEventType("ORDER_CREATED");
+        blocked.setExternalOrderId("order-stale");
+        blocked.setPayloadJson("{}");
+
+        when(inbox.findBlockedForMenuResolution()).thenReturn(List.of(blocked));
+        when(orderLoaderResolver.resolve(PlatformType.BAEMIN)).thenReturn(orderLoader);
+        when(orderLoader.load(any())).thenReturn(
+            CanonicalPlatformOrder.builder()
+                .platformType(PlatformType.BAEMIN)
+                .externalOrderId("order-stale")
+                .externalStoreId("external-1")
+                .items(List.of(
+                    new CanonicalPlatformOrderItem("external-stale", 1, 2000L)
+                ))
+                .build()
+        );
+
+        var externalMenu = new ExternalMenuResponse(
+            PlatformType.BAEMIN,
+            "external-1",
+            "external-stale",
+            "콜라",
+            2000,
+            true
+        );
+        when(simulatorCatalog.findMenus(PlatformType.BAEMIN, "external-1"))
+            .thenReturn(List.of(externalMenu));
+
+        assertThat(service.unresolvedOrderMenus(10L))
+            .containsExactly(
+                new UnresolvedOrderMenuResponse(
+                    PlatformType.BAEMIN,
+                    "external-1",
+                    "external-stale",
+                    "콜라",
+                    2000,
+                    1
+                )
+            );
+    }
+
+    @Test
+    void existingExternalMappingCanBeReboundToActiveOwnedMenu() {
+        existing();
+
+        var external = new ExternalMenuResponse(
+            PlatformType.BAEMIN,
+            "external-1",
+            "external-cola",
+            "콜라",
+            2000,
+            true
+        );
+        when(simulatorCatalog.findMenus(PlatformType.BAEMIN, "external-1"))
+            .thenReturn(List.of(external));
+
+        var activeTarget = new MenuCatalogProjection();
+        activeTarget.setMenuId(28L);
+        activeTarget.setStoreId(1L);
+        activeTarget.setStatus(MenuCatalogStatus.ACTIVE);
+        when(catalog.findByMenuId(28L)).thenReturn(Optional.of(activeTarget));
+
+        var staleMapping = new com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping();
+        staleMapping.setId(7L);
+        staleMapping.setStoreId(1L);
+        staleMapping.setPlatformType(PlatformType.BAEMIN);
+        staleMapping.setExternalStoreId("external-1");
+        staleMapping.setExternalMenuId("external-cola");
+        staleMapping.setMenuId(29L);
+        staleMapping.setEnabled(true);
+
+        when(menuMappings.findByExternalIdentity(PlatformType.BAEMIN, "external-1", "external-cola"))
+            .thenReturn(Optional.of(staleMapping));
+        when(mapper.findMenu(1L, PlatformType.BAEMIN, 28L))
+            .thenReturn(Optional.empty());
+        when(mapper.rebindMenu(staleMapping)).thenReturn(1);
+
+        PlatformMenuMapping result = service.connectExistingMenu(
+            10L,
+            PlatformType.BAEMIN,
+            "external-cola",
+            new ExternalMenuConnectionRequest(28L)
+        );
+
+        assertThat(result.getMenuId()).isEqualTo(28L);
+        assertThat(result.isEnabled()).isTrue();
+        verify(mapper).rebindMenu(staleMapping);
+        verify(mapper, never()).insertMenu(any());
+        verify(inbox).requeueBlockedForMenuResolution();
+    }
+
+    @Test
+    void rebindRejectsTargetMenuAlreadyUsedByAnotherExternalMenu() {
+        existing();
+
+        var external = new ExternalMenuResponse(
+            PlatformType.BAEMIN,
+            "external-1",
+            "external-cola",
+            "콜라",
+            2000,
+            true
+        );
+        when(simulatorCatalog.findMenus(PlatformType.BAEMIN, "external-1"))
+            .thenReturn(List.of(external));
+
+        var activeTarget = new MenuCatalogProjection();
+        activeTarget.setMenuId(28L);
+        activeTarget.setStoreId(1L);
+        activeTarget.setStatus(MenuCatalogStatus.ACTIVE);
+        when(catalog.findByMenuId(28L)).thenReturn(Optional.of(activeTarget));
+
+        var staleMapping = new com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping();
+        staleMapping.setId(7L);
+        staleMapping.setStoreId(1L);
+        staleMapping.setPlatformType(PlatformType.BAEMIN);
+        staleMapping.setExternalStoreId("external-1");
+        staleMapping.setExternalMenuId("external-cola");
+        staleMapping.setMenuId(29L);
+
+        var targetMapping = new com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping();
+        targetMapping.setId(8L);
+        targetMapping.setStoreId(1L);
+        targetMapping.setPlatformType(PlatformType.BAEMIN);
+        targetMapping.setExternalStoreId("external-1");
+        targetMapping.setExternalMenuId("external-other");
+        targetMapping.setMenuId(28L);
+
+        when(menuMappings.findByExternalIdentity(PlatformType.BAEMIN, "external-1", "external-cola"))
+            .thenReturn(Optional.of(staleMapping));
+        when(mapper.findMenu(1L, PlatformType.BAEMIN, 28L))
+            .thenReturn(Optional.of(targetMapping));
+
+        assertThatThrownBy(() -> service.connectExistingMenu(
+            10L,
+            PlatformType.BAEMIN,
+            "external-cola",
+            new ExternalMenuConnectionRequest(28L)
+        ))
+            .isInstanceOfSatisfying(
+                BusinessException.class,
+                error -> assertThat(error.errorCode())
+                    .isEqualTo(PlatformIntegrationError.MENU_MAPPING_CONFLICT)
+            );
+
+        verify(mapper, never()).rebindMenu(any());
+        verify(inbox, never()).requeueBlockedForMenuResolution();
+    }
+
 }

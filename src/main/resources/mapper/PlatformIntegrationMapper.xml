@@ -47,4 +47,14 @@
         UPDATE platform_menu_mappings SET external_store_id = #{externalStoreId}, external_menu_id = #{externalMenuId}, enabled = #{enabled}
         WHERE id = #{id} AND store_id = #{storeId} AND platform_type = #{platformType} AND menu_id = #{menuId}
     </update>
+    <update id="rebindMenu">
+        UPDATE platform_menu_mappings
+        SET external_store_id = #{externalStoreId},
+            menu_id = #{menuId},
+            external_menu_id = #{externalMenuId},
+            enabled = #{enabled}
+        WHERE id = #{id}
+          AND store_id = #{storeId}
+          AND platform_type = #{platformType}
+    </update>
 </mapper>
