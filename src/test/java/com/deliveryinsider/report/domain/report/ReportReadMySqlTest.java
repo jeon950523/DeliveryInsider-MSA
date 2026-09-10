@@ -137,14 +137,11 @@ class ReportReadMySqlTest {
         mapper = session.getMapper(ReportReadMapper.class);
         CurrentStoreClient storeClient = mock(CurrentStoreClient.class);
         when(storeClient.findByUserId(10L)).thenReturn(new CurrentStoreResponse(1L, "Test store"));
-        BillingEntitlementClient billingEntitlementClient =
-            mock(BillingEntitlementClient.class);
         mvc = MockMvcBuilders.standaloneSetup(new ReportReadController(
                 new ReportReadService(
                     storeClient,
-                    billingEntitlementClient,
                     mapper
-                )))
+                ), mock(com.deliveryinsider.report.domain.report.service.ReportAiInsightService.class)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
     }
