@@ -4,6 +4,9 @@ store-client:
   connect-timeout: ${STORE_CLIENT_CONNECT_TIMEOUT:2s}
   read-timeout: ${STORE_CLIENT_READ_TIMEOUT:3s}
 
+platform-client:
+  base-url: ${PLATFORM_SERVICE_URL:http://localhost:8093}
+
 server:
   port: ${APP_PORT:8094}
 

@@ -44,6 +44,30 @@ public enum OrderErrorCode implements ErrorCode {
         "ORDER-007",
         HttpStatus.CONFLICT,
         "현재 운영 상태에서 요청한 상태로 변경할 수 없습니다."
+    ),
+
+    ORDER_REFUND_NOT_ALLOWED(
+        "ORDER-008",
+        HttpStatus.CONFLICT,
+        "배달 완료된 주문만 환불 요청할 수 있습니다."
+    ),
+
+    ORDER_REFUND_ALREADY_REQUESTED(
+        "ORDER-009",
+        HttpStatus.CONFLICT,
+        "이미 환불 요청 이력이 있는 주문입니다."
+    ),
+
+    ORDER_CANCELLATION_NOT_ALLOWED(
+        "ORDER-010",
+        HttpStatus.CONFLICT,
+        "플랫폼 픽업 전 주문만 취소 요청할 수 있습니다."
+    ),
+
+    PROVIDER_CANCEL_UNAVAILABLE(
+        "ORDER-011",
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "플랫폼 취소 요청에 실패했습니다."
     );
 
     private final String code;

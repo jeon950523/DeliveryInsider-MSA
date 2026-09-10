@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.order.domain.order.mapper.OrderCancellationMapper">
+    <insert id="insert">
+        INSERT INTO order_cancellations (order_id, actor, reason_code, provider_cancel_code, reason_text, canceled_at)
+        VALUES (#{orderId}, #{actor}, #{reasonCode}, #{providerCancelCode}, #{reasonText}, #{canceledAt})
+    </insert>
+    <select id="findByOrderId" resultType="com.deliveryinsider.order.domain.order.entity.OrderCancellationEntity">
+        SELECT order_id AS orderId, actor, reason_code AS reasonCode, provider_cancel_code AS providerCancelCode,
+               reason_text AS reasonText, canceled_at AS canceledAt
+        FROM order_cancellations WHERE order_id = #{orderId}
+    </select>
+</mapper>

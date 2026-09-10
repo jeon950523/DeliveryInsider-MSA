@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.order.domain.order.mapper.OrderRefundMapper">
+    <insert id="insert">
+        INSERT INTO order_refunds (order_id, status, amount, actor, reason_code, reason_text, requested_at)
+        VALUES (#{orderId}, #{status}, #{amount}, #{actor}, #{reasonCode}, #{reasonText}, #{requestedAt})
+    </insert>
+    <select id="findByOrderId" resultType="com.deliveryinsider.order.domain.order.entity.OrderRefundEntity">
+        SELECT order_id AS orderId, status, amount, actor, reason_code AS reasonCode, reason_text AS reasonText,
+               requested_at AS requestedAt
+        FROM order_refunds WHERE order_id = #{orderId}
+    </select>
+</mapper>

@@ -6,6 +6,7 @@ import com.deliveryinsider.order.domain.order.entity.OrderProviderChargeEntity;
 import com.deliveryinsider.order.domain.order.entity.OutboxEventEntity;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
+import com.deliveryinsider.order.domain.order.model.CancellationReasonCode;
 import com.deliveryinsider.order.domain.order.model.OutboxStatus;
 import com.deliveryinsider.order.messaging.order.dto.OrderCreatedEventData;
 import com.deliveryinsider.order.messaging.order.dto.OrderDomainEventMessage;
@@ -86,9 +87,11 @@ public class OrderOutboxEventFactory {
                     .data()
                     .providerOccurredAt(),
 
-                sourceEvent
-                    .data()
-                    .providerCancelCode(),
+                order.getStatus() == OrderStatus.CANCELED
+                    ? CancellationReasonCode.fromProviderCode(
+                        sourceEvent.data().providerCancelCode()
+                    ).name()
+                    : sourceEvent.data().providerCancelCode(),
 
                 sourceEvent
                     .data()

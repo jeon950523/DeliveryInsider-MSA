@@ -10,6 +10,8 @@ import com.deliveryinsider.order.domain.order.mapper.OrderItemMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderProviderChargeMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderReadMapper;
+import com.deliveryinsider.order.domain.order.mapper.OrderCancellationMapper;
+import com.deliveryinsider.order.domain.order.mapper.OrderRefundMapper;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.ProviderChargeType;
 import com.deliveryinsider.order.domain.order.model.ProviderFinancialDataStatus;
@@ -39,6 +41,10 @@ public class OrderReadService {
 
     private final OrderProviderChargeMapper
         orderProviderChargeMapper;
+
+    private final OrderCancellationMapper orderCancellationMapper;
+
+    private final OrderRefundMapper orderRefundMapper;
 
     private final Clock clock;
 
@@ -294,17 +300,24 @@ public class OrderReadService {
                     order.getId()
                 );
 
+        var cancellation = orderCancellationMapper.findByOrderId(order.getId()).orElse(null);
+        var refund = orderRefundMapper.findByOrderId(order.getId()).orElse(null);
+
         return toDetailResponse(
             order,
             items,
-            charges
+            charges,
+            cancellation,
+            refund
         );
     }
 
     private OrderDetailResponse toDetailResponse(
         OrderEntity order,
         List<OrderItemEntity> items,
-        List<OrderProviderChargeEntity> charges
+        List<OrderProviderChargeEntity> charges,
+        com.deliveryinsider.order.domain.order.entity.OrderCancellationEntity cancellation,
+        com.deliveryinsider.order.domain.order.entity.OrderRefundEntity refund
     ) {
         long itemTotalAmount =
             items.stream()
@@ -436,7 +449,7 @@ public class OrderReadService {
 
             order.getCanceledAt(),
 
-            null,
+            refund == null ? null : refund.getRequestedAt(),
 
             toProcessingTimeInfo(
                 order
@@ -448,9 +461,13 @@ public class OrderReadService {
                 null
             ),
 
-            null,
+            cancellation == null ? null : new OrderDetailResponse.CancellationInfo(
+                cancellation.getActor().name(), cancellation.getReasonCode().name(), cancellation.getCanceledAt()
+            ),
 
-            null,
+            refund == null ? null : new OrderDetailResponse.RefundInfo(
+                refund.getStatus().name(), refund.getReasonCode(), refund.getRequestedAt()
+            ),
 
             itemResponses
         );

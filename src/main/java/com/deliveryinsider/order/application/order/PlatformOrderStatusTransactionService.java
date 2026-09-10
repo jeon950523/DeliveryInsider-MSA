@@ -5,11 +5,13 @@ import com.deliveryinsider.order.domain.order.entity.OrderEntity;
 import com.deliveryinsider.order.domain.order.entity.OutboxEventEntity;
 import com.deliveryinsider.order.domain.order.entity.ProcessedPlatformEvent;
 import com.deliveryinsider.order.domain.order.mapper.OrderMapper;
+import com.deliveryinsider.order.domain.order.mapper.OrderCancellationMapper;
 import com.deliveryinsider.order.domain.order.mapper.OutboxEventMapper;
 import com.deliveryinsider.order.domain.order.mapper.ProcessedPlatformEventMapper;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatusTransitionPolicy;
+import com.deliveryinsider.order.domain.order.model.CancellationReasonCode;
 import com.deliveryinsider.order.domain.order.model.ProcessedPlatformEventResult;
 import com.deliveryinsider.order.messaging.platform.dto.PlatformOrderEventMessage;
 import com.deliveryinsider.order.messaging.platform.exception.RetryableOrderEventProcessingException;
@@ -28,6 +30,7 @@ import java.time.ZoneOffset;
 public class PlatformOrderStatusTransactionService {
 
     private final OrderMapper orderMapper;
+    private final OrderCancellationMapper cancellationMapper;
     private final ProcessedPlatformEventMapper processedEventMapper;
     private final OutboxEventMapper outboxEventMapper;
     private final OrderOutboxEventFactory outboxFactory;
@@ -134,6 +137,23 @@ public class PlatformOrderStatusTransactionService {
             completedAt,
             canceledAt
         );
+
+        if (targetStatus == OrderStatus.CANCELED) {
+            CancellationReasonCode reasonCode =
+                CancellationReasonCode.fromProviderCode(
+                    message.data().providerCancelCode()
+                );
+            cancellationMapper.insert(
+                com.deliveryinsider.order.domain.order.entity.OrderCancellationEntity.builder()
+                    .orderId(order.getId())
+                    .actor(reasonCode.actor())
+                    .reasonCode(reasonCode)
+                    .providerCancelCode(message.data().providerCancelCode())
+                    .reasonText(message.data().providerCancelReason())
+                    .canceledAt(canceledAt)
+                    .build()
+            );
+        }
 
         OutboxEventEntity outboxEvent =
             outboxFactory
