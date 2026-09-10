@@ -30,11 +30,6 @@ public class ReportReadController {
     private final ReportReadService reportReadService;
     private final ReportAiInsightService reportAiInsightService;
 
-    public ReportReadController(ReportReadService reportReadService) {
-        this.reportReadService = reportReadService;
-        this.reportAiInsightService = null;
-    }
-
     @GetMapping("/summary")
     public ReportSummaryResponse getSummary(
         @RequestHeader("X-User-Id")
