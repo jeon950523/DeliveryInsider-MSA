@@ -31,7 +31,7 @@ export const calculateOrderTotal = (menus, quantities) => {
 
 export const resolveAllowedActions = (status) => {
   if (status === 'CREATED') {
-    return ['PICKED_UP', 'CANCELED'];
+    return ['CANCELED'];
   }
 
   if (status === 'PICKED_UP') {
