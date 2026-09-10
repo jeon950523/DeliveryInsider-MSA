@@ -56,15 +56,6 @@ public class ReportReadService {
     private final CurrentStoreClient currentStoreClient;
     private final ReportReadMapper reportReadMapper;
 
-    public ReportReadService(
-        CurrentStoreClient currentStoreClient,
-        Object ignoredLegacyEntitlementClient,
-        ReportReadMapper reportReadMapper
-    ) {
-        this.currentStoreClient = currentStoreClient;
-        this.reportReadMapper = reportReadMapper;
-    }
-
     @Transactional(readOnly = true)
     public ReportSummaryResponse getSummary(
         Long userId,
