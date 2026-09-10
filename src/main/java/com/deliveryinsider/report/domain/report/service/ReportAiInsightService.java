@@ -454,6 +454,10 @@ public class ReportAiInsightService {
         Set<ReportAiEvidenceKey> availableEvidenceKeys
     ) {
         try {
+            boolean periodSummary =
+                questionType
+                    == ReportAiInsightQuestionType.PERIOD_SUMMARY;
+
             return """
                 질문 유형:
                 %s
@@ -471,7 +475,8 @@ public class ReportAiInsightService {
                 - cancellationReasonAvailable=true여도 context의 취소 코드 집계 밖의 원인을 추가하지 않는다.
                 - financialDataAvailable=false이면 수수료, 순이익, 비용 절감 조언을 하지 않는다.
                 - 플랫폼 비교에서는 totalProcessing.sampleCount가 5건 이상인 플랫폼을 우선한다.
-                - 최대 3개 insight만 작성한다.
+                - 최대 %d개 insight만 작성한다.
+                - %s
                 - 점주가 바로 이해할 수 있는 한국어를 사용한다.
 
                 서버 경고:
@@ -485,6 +490,10 @@ public class ReportAiInsightService {
                 """.formatted(
                 questionType.name(),
                 questionType.instruction(),
+                periodSummary ? 2 : 3,
+                periodSummary
+                    ? "기간 요약은 한 문단 요약, 최대 2개 insight, 최대 2개 주의사항으로 짧게 작성한다."
+                    : "각 insight는 title, reason, action을 짧게 작성한다.",
                 jsonMapper.writeValueAsString(
                     warnings
                 ),
