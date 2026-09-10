@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.platform.domain.mapping.mapper.StorePlatformSettingMapper">
+<resultMap
+        id="storePlatformSettingResultMap"
+        type="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
+
+    <id
+            property="id"
+            column="id"/>
+
+    <result
+            property="storeId"
+            column="store_id"/>
+
+    <result
+            property="platformType"
+            column="platform_type"/>
+
+    <result
+            property="externalStoreId"
+            column="external_store_id"/>
+
+    <result
+            property="enabled"
+            column="enabled"/>
+
+    <result
+            property="connectionStatus"
+            column="connection_status"/>
+
+    <result
+            property="environment"
+            column="environment"/>
+
+</resultMap>
+
+<select
+id="findByPlatformTypeAndExternalStoreId"
+resultMap="storePlatformSettingResultMap">
+
+SELECT
+id,
+store_id,
+platform_type,
+external_store_id,
+enabled,
+connection_status,
+environment
+FROM store_platform_settings
+WHERE platform_type = #{platformType}
+AND external_store_id = #{externalStoreId}
+LIMIT 1
+
+</select>
+</mapper>

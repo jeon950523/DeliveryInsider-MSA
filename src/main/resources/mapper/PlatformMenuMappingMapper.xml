@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.platform.domain.mapping.mapper.PlatformMenuMappingMapper">
+
+    <resultMap
+            id="platformMenuMappingResultMap"
+            type="com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping">
+
+        <id
+                property="id"
+                column="id"/>
+
+        <result
+                property="platformType"
+                column="platform_type"/>
+
+        <result
+                property="storeId"
+                column="store_id"/>
+
+        <result
+                property="externalStoreId"
+                column="external_store_id"/>
+
+        <result
+                property="menuId"
+                column="menu_id"/>
+
+        <result
+                property="externalMenuId"
+                column="external_menu_id"/>
+
+        <result
+                property="enabled"
+                column="enabled"/>
+
+    </resultMap>
+
+    <select
+            id="findByExternalIdentity"
+            resultMap="platformMenuMappingResultMap">
+
+        SELECT
+            id,
+            platform_type,
+            store_id,
+            external_store_id,
+            menu_id,
+            external_menu_id,
+            enabled
+        FROM platform_menu_mappings
+        WHERE platform_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+          AND external_menu_id = #{externalMenuId}
+        LIMIT 1
+
+    </select>
+
+</mapper>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.platform.domain.catalog.event.CatalogEventMapper">
+ <select id="findHash" resultType="string">
+  SELECT payload_sha256 FROM catalog_event_inbox WHERE event_id = #{eventId}
+ </select>
+ <insert id="insertInbox">
+  INSERT INTO catalog_event_inbox(event_id,payload_sha256,processed_at) VALUES(#{eventId},#{hash},UTC_TIMESTAMP(6))
+ </insert>
+ <insert id="applyStore">
+  INSERT INTO store_catalog_projection(store_id,status,store_event_version,deleted_at)
+  VALUES(#{storeId},#{data.status},#{eventVersion},#{data.deletedAt})
+  ON DUPLICATE KEY UPDATE
+   status = IF(VALUES(store_event_version) > store_event_version, VALUES(status), status),
+   deleted_at = IF(VALUES(store_event_version) > store_event_version, VALUES(deleted_at), deleted_at),
+   store_event_version = GREATEST(store_event_version, VALUES(store_event_version))
+ </insert>
+ <insert id="applyMenu">
+  INSERT INTO menu_catalog_projection(menu_id,store_id,status,menu_event_version)
+  VALUES(#{data.menuId},#{storeId},#{data.status},#{eventVersion})
+  ON DUPLICATE KEY UPDATE
+   status = IF(store_id = VALUES(store_id) AND VALUES(menu_event_version) > menu_event_version, VALUES(status), status),
+   menu_event_version = IF(store_id = VALUES(store_id), GREATEST(menu_event_version,VALUES(menu_event_version)),menu_event_version)
+ </insert>
+</mapper>
