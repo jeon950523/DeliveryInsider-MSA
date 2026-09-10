@@ -72,7 +72,7 @@ public class PlatformIntegrationService {
     @Transactional
     public StorePlatformSetting setEnabled(Long userId, PlatformType platform, boolean enabled) {
         long storeId = storeClient.findOwnedStoreId(userId);
-        StorePlatformSetting setting = requireSetting(storeId, platform);
+        StorePlatformSetting setting = requireSettingForUpdate(storeId, platform);
         setting.setEnabled(enabled);
         mapper.update(setting);
         return setting;
@@ -86,7 +86,7 @@ public class PlatformIntegrationService {
     @Transactional
     public PlatformMenuMapping saveMenu(Long userId, PlatformType platform, long menuId, PlatformIntegrationRequest.Menu request) {
         long storeId = storeClient.findOwnedStoreId(userId);
-        StorePlatformSetting setting = requireSetting(storeId, platform);
+        StorePlatformSetting setting = requireSettingForUpdate(storeId, platform);
         menuCatalog.findByMenuId(menuId)
             .filter(menu -> Objects.equals(menu.getStoreId(), storeId))
             .filter(menu -> !request.enabled() || menu.getStatus() == MenuCatalogStatus.ACTIVE)
@@ -110,7 +110,7 @@ public class PlatformIntegrationService {
     public PlatformMenuMapping connectExistingMenu(Long userId, PlatformType platform, String externalMenuId,
                                                    ExternalMenuConnectionRequest request) {
         long storeId = storeClient.findOwnedStoreId(userId);
-        StorePlatformSetting setting = requireSetting(storeId, platform);
+        StorePlatformSetting setting = requireSettingForUpdate(storeId, platform);
         ExternalMenuResponse externalMenu = requireExternalMenu(platform, setting, externalMenuId);
         menuCatalog.findByMenuId(request.menuId())
             .filter(menu -> Objects.equals(menu.getStoreId(), storeId))
@@ -126,7 +126,7 @@ public class PlatformIntegrationService {
     public PlatformMenuMapping createAndConnectMenu(Long userId, PlatformType platform, String externalMenuId,
                                                      ExternalMenuConnectionRequest.CreateAndConnect request) {
         long storeId = storeClient.findOwnedStoreId(userId);
-        StorePlatformSetting setting = requireSetting(storeId, platform);
+        StorePlatformSetting setting = requireSettingForUpdate(storeId, platform);
         ExternalMenuResponse externalMenu = requireExternalMenu(platform, setting, externalMenuId);
         if (menuMappingMapper.findByExternalIdentity(platform, setting.getExternalStoreId(), externalMenu.externalMenuId()).isPresent()) {
             throw new BusinessException(PlatformIntegrationError.IDENTITY_CONFLICT);
@@ -169,6 +169,11 @@ public class PlatformIntegrationService {
     }
 
     private StorePlatformSetting requireSetting(long storeId, PlatformType platform) {
+        return mapper.findOne(storeId, platform)
+            .orElseThrow(() -> new BusinessException(PlatformIntegrationError.SETTING_NOT_FOUND));
+    }
+
+    private StorePlatformSetting requireSettingForUpdate(long storeId, PlatformType platform) {
         return mapper.findForUpdate(storeId, platform)
             .orElseThrow(() -> new BusinessException(PlatformIntegrationError.SETTING_NOT_FOUND));
     }

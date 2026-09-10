@@ -11,6 +11,7 @@ import java.util.Optional;
 @Mapper
 public interface PlatformIntegrationMapper {
     List<StorePlatformSetting> findAll(@Param("storeId") long storeId);
+    Optional<StorePlatformSetting> findOne(@Param("storeId") long storeId, @Param("platformType") PlatformType platformType);
     Optional<StorePlatformSetting> findForUpdate(@Param("storeId") long storeId, @Param("platformType") PlatformType platformType);
     void insert(StorePlatformSetting setting);
     int update(StorePlatformSetting setting);

@@ -31,6 +31,7 @@ class PlatformIntegrationServiceTest {
         setting.setId(1L); setting.setStoreId(1L); setting.setPlatformType(PlatformType.BAEMIN);
         setting.setExternalStoreId("external-1"); setting.setEnvironment("SIMULATOR");
         setting.setConnectionStatus("ACTIVE"); setting.setLastSuccessAt(LocalDateTime.parse("2026-09-08T01:00:00"));
+        when(mapper.findOne(1L, PlatformType.BAEMIN)).thenReturn(Optional.of(setting));
         when(mapper.findForUpdate(1L, PlatformType.BAEMIN)).thenReturn(Optional.of(setting));
         return setting;
     }
@@ -105,6 +106,8 @@ class PlatformIntegrationServiceTest {
         when(menuMappings.findByExternalIdentity(PlatformType.BAEMIN, "external-1", "external-new")).thenReturn(Optional.empty());
         when(menuMappings.findByExternalIdentity(PlatformType.BAEMIN, "external-1", "external-old")).thenReturn(Optional.of(new com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping()));
         assertThat(service.unmappedMenus(10L, PlatformType.BAEMIN)).containsExactly(unconnected);
+        verify(mapper).findOne(1L, PlatformType.BAEMIN);
+        verify(mapper, never()).findForUpdate(1L, PlatformType.BAEMIN);
     }
     @Test void connectingAnExternalMenuRequeuesBlockedOrdersButDoesNotBypassOwnership() {
         existing();

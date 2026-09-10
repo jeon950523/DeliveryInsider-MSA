@@ -8,6 +8,10 @@
         SELECT <include refid="settingColumns"/> FROM store_platform_settings
         WHERE store_id = #{storeId} ORDER BY platform_type
     </select>
+    <select id="findOne" resultType="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
+        SELECT <include refid="settingColumns"/> FROM store_platform_settings
+        WHERE store_id = #{storeId} AND platform_type = #{platformType}
+    </select>
     <select id="findForUpdate" resultType="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
         SELECT <include refid="settingColumns"/> FROM store_platform_settings
         WHERE store_id = #{storeId} AND platform_type = #{platformType} FOR UPDATE
