@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,44 +60,38 @@ public class GeminiInsightClient {
             );
         }
 
+        OutputContract contract = outputContract(questionType);
+
         try {
-            JsonNode response =
-                restClient
-                    .post()
-                    .uri(
-                        "/models/{model}:generateContent",
-                        properties.model()
-                    )
-                    .header(
-                        "x-goog-api-key",
-                        properties.apiKey()
-                    )
-                    .body(
-                        createRequestBody(
-                            questionType,
-                            prompt,
-                            allowedEvidenceKeys
-                        )
-                    )
-                    .retrieve()
-                    .body(
-                        JsonNode.class
-                    );
-
-            CandidateText candidate =
-                extractCandidate(
-                    response
-                );
-
             try {
-                return jsonMapper.readValue(
-                    candidate.text(),
-                    GeminiInsightOutput.class
+                return generateOnce(
+                    questionType,
+                    prompt,
+                    allowedEvidenceKeys,
+                    contract,
+                    false
                 );
-            } catch (Exception e) {
-                logParseFailure(questionType, candidate.metadata(), e);
-                throw new BusinessException(
-                    ReportErrorCode.REPORT_AI_RESPONSE_INVALID
+            } catch (TruncatedGeminiResponseException e) {
+                OutputContract retryContract =
+                    periodSummaryRetryContract();
+
+                log.warn(
+                    "Gemini period summary retry: questionType={}, reason=MAX_TOKENS, attempt=2, previousCandidateTextLength={}, previousThoughtsTokenCount={}, previousCandidatesTokenCount={}, previousTotalTokenCount={}, nextMaxOutputTokens={}, nextThinkingBudget={}",
+                    questionType,
+                    e.metadata().candidateTextLength(),
+                    e.metadata().thoughtsTokenCount(),
+                    e.metadata().candidateTokenCount(),
+                    e.metadata().totalTokenCount(),
+                    retryContract.maxOutputTokens(),
+                    retryContract.thinkingBudget()
+                );
+
+                return generateOnce(
+                    questionType,
+                    retryPrompt(prompt),
+                    allowedEvidenceKeys,
+                    retryContract,
+                    true
                 );
             }
 
@@ -136,6 +131,75 @@ public class GeminiInsightClient {
         }
     }
 
+    private GeminiInsightOutput generateOnce(
+        ReportAiInsightQuestionType questionType,
+        String prompt,
+        Set<ReportAiEvidenceKey> allowedEvidenceKeys,
+        OutputContract contract,
+        boolean retryAttempt
+    ) {
+        JsonNode response =
+            restClient
+                .post()
+                .uri(
+                    "/models/{model}:generateContent",
+                    properties.model()
+                )
+                .header(
+                    "x-goog-api-key",
+                    properties.apiKey()
+                )
+                .body(
+                    createRequestBody(
+                        questionType,
+                        prompt,
+                        allowedEvidenceKeys,
+                        contract
+                    )
+                )
+                .retrieve()
+                .body(
+                    JsonNode.class
+                );
+
+        CandidateText candidate =
+            extractCandidate(
+                response
+            );
+
+        try {
+            return jsonMapper.readValue(
+                candidate.text(),
+                GeminiInsightOutput.class
+            );
+        } catch (Exception e) {
+            logParseFailure(
+                questionType,
+                candidate.metadata(),
+                contract,
+                e
+            );
+
+            if (
+                !retryAttempt
+                    && shouldRetryTruncatedResponse(
+                        questionType,
+                        candidate.metadata(),
+                        e
+                    )
+            ) {
+                throw new TruncatedGeminiResponseException(
+                    candidate.metadata(),
+                    e
+                );
+            }
+
+            throw new BusinessException(
+                ReportErrorCode.REPORT_AI_RESPONSE_INVALID
+            );
+        }
+    }
+
     public String model() {
         return properties.model();
     }
@@ -143,8 +207,43 @@ public class GeminiInsightClient {
     private Map<String, Object> createRequestBody(
         ReportAiInsightQuestionType questionType,
         String prompt,
-        Set<ReportAiEvidenceKey> allowedEvidenceKeys
+        Set<ReportAiEvidenceKey> allowedEvidenceKeys,
+        OutputContract contract
     ) {
+        Map<String, Object> generationConfig =
+            new LinkedHashMap<>();
+
+        generationConfig.put(
+            "temperature",
+            0.2
+        );
+        generationConfig.put(
+            "maxOutputTokens",
+            contract.maxOutputTokens()
+        );
+        generationConfig.put(
+            "responseMimeType",
+            "application/json"
+        );
+        generationConfig.put(
+            "responseSchema",
+            responseSchema(
+                questionType,
+                allowedEvidenceKeys,
+                contract
+            )
+        );
+
+        if (contract.thinkingBudget() != null) {
+            generationConfig.put(
+                "thinkingConfig",
+                Map.of(
+                    "thinkingBudget",
+                    contract.thinkingBudget()
+                )
+            );
+        }
+
         return Map.of(
             "systemInstruction",
             Map.of(
@@ -152,7 +251,7 @@ public class GeminiInsightClient {
                 List.of(
                     Map.of(
                         "text",
-                        systemInstruction()
+                        systemInstruction(contract)
                     )
                 )
             ),
@@ -171,20 +270,13 @@ public class GeminiInsightClient {
                 )
             ),
             "generationConfig",
-            Map.of(
-                "temperature",
-                0.2,
-                "maxOutputTokens",
-                outputContract(questionType).maxOutputTokens(),
-                "responseMimeType",
-                "application/json",
-                "responseSchema",
-                responseSchema(questionType, allowedEvidenceKeys)
-            )
+            generationConfig
         );
     }
 
-    private String systemInstruction() {
+    private String systemInstruction(
+        OutputContract contract
+    ) {
         return """
             너는 음식점 점주를 위한 운영 의사결정 보조 도구다.
             입력으로 주어진 Report 집계값만 근거로 사용한다.
@@ -196,13 +288,14 @@ public class GeminiInsightClient {
             action에는 점주가 실행할 다음 단계를 한 문장으로 작성한다.
             숫자 근거는 evidenceKeys로만 선택한다.
             evidenceKeys는 제공된 enum 값만 사용한다.
-            최대 3개의 짧고 실행 가능한 insight만 반환한다.
-            """;
+            최대 %d개의 짧고 실행 가능한 insight만 반환한다.
+            """.formatted(contract.maxInsights());
     }
 
     private Map<String, Object> responseSchema(
         ReportAiInsightQuestionType questionType,
-        Set<ReportAiEvidenceKey> allowedEvidenceKeys
+        Set<ReportAiEvidenceKey> allowedEvidenceKeys,
+        OutputContract contract
     ) {
         List<String> evidenceKeys =
             allowedEvidenceKeys.stream()
@@ -244,7 +337,7 @@ public class GeminiInsightClient {
                         "minItems",
                         1,
                         "maxItems",
-                        outputContract(questionType).maxInsights(),
+                        contract.maxInsights(),
                         "items",
                         Map.of(
                             "type",
@@ -324,16 +417,25 @@ public class GeminiInsightClient {
             );
         }
 
+        JsonNode usageMetadata =
+            response.path("usageMetadata");
+
         return new CandidateText(
             text,
             new GeminiResponseMetadata(
                 candidate.path("finishReason").asText("UNKNOWN"),
                 text.length(),
-                candidate.path("tokenCount").isNumber()
-                    ? candidate.path("tokenCount").asInt()
+                usageMetadata.path("candidatesTokenCount").isNumber()
+                    ? usageMetadata.path("candidatesTokenCount").asInt()
                     : null,
-                response.path("usageMetadata").path("promptTokenCount").isNumber()
-                    ? response.path("usageMetadata").path("promptTokenCount").asInt()
+                usageMetadata.path("promptTokenCount").isNumber()
+                    ? usageMetadata.path("promptTokenCount").asInt()
+                    : null,
+                usageMetadata.path("thoughtsTokenCount").isNumber()
+                    ? usageMetadata.path("thoughtsTokenCount").asInt()
+                    : null,
+                usageMetadata.path("totalTokenCount").isNumber()
+                    ? usageMetadata.path("totalTokenCount").asInt()
                     : null
             )
         );
@@ -343,24 +445,88 @@ public class GeminiInsightClient {
         ReportAiInsightQuestionType questionType
     ) {
         if (questionType == ReportAiInsightQuestionType.PERIOD_SUMMARY) {
-            return new OutputContract(2, 1024);
+            return new OutputContract(
+                2,
+                2048,
+                512
+            );
         }
-        return new OutputContract(3, 2048);
+
+        return new OutputContract(
+            3,
+            2048,
+            null
+        );
+    }
+
+    private OutputContract periodSummaryRetryContract() {
+        return new OutputContract(
+            2,
+            4096,
+            256
+        );
+    }
+
+    private boolean shouldRetryTruncatedResponse(
+        ReportAiInsightQuestionType questionType,
+        GeminiResponseMetadata metadata,
+        Exception exception
+    ) {
+        return questionType == ReportAiInsightQuestionType.PERIOD_SUMMARY
+            && "MAX_TOKENS".equalsIgnoreCase(metadata.finishReason())
+            && hasUnexpectedEndOfInput(exception);
+    }
+
+    private boolean hasUnexpectedEndOfInput(
+        Throwable throwable
+    ) {
+        Throwable current = throwable;
+
+        while (current != null) {
+            if (
+                "UnexpectedEndOfInputException".equals(
+                    current.getClass().getSimpleName()
+                )
+            ) {
+                return true;
+            }
+            current = current.getCause();
+        }
+
+        return false;
+    }
+
+    private String retryPrompt(
+        String prompt
+    ) {
+        return prompt + """
+
+            재시도 출력 규칙:
+            - JSON 응답을 반드시 끝까지 완성한다.
+            - summary는 최대 2문장으로 작성한다.
+            - insights는 최대 2개만 작성한다.
+            - 각 reason과 action은 각각 1문장으로 작성한다.
+            - evidenceKeys는 판단에 꼭 필요한 항목만 선택한다.
+            """;
     }
 
     private void logParseFailure(
         ReportAiInsightQuestionType questionType,
         GeminiResponseMetadata metadata,
+        OutputContract contract,
         Exception exception
     ) {
         log.warn(
-            "Gemini insight parse failure: questionType={}, failureStage=GEMINI_RESPONSE_PARSE, finishReason={}, candidateTextLength={}, maxOutputTokens={}, candidateTokenCount={}, promptTokenCount={}, exceptionClass={}",
+            "Gemini insight parse failure: questionType={}, failureStage=GEMINI_RESPONSE_PARSE, finishReason={}, candidateTextLength={}, maxOutputTokens={}, thinkingBudget={}, candidatesTokenCount={}, thoughtsTokenCount={}, promptTokenCount={}, totalTokenCount={}, exceptionClass={}",
             questionType,
             metadata.finishReason(),
             metadata.candidateTextLength(),
-            outputContract(questionType).maxOutputTokens(),
+            contract.maxOutputTokens(),
+            contract.thinkingBudget(),
             metadata.candidateTokenCount(),
+            metadata.thoughtsTokenCount(),
             metadata.promptTokenCount(),
+            metadata.totalTokenCount(),
             exception.getClass().getSimpleName()
         );
     }
@@ -375,14 +541,35 @@ public class GeminiInsightClient {
         String finishReason,
         int candidateTextLength,
         Integer candidateTokenCount,
-        Integer promptTokenCount
+        Integer promptTokenCount,
+        Integer thoughtsTokenCount,
+        Integer totalTokenCount
     ) {
     }
 
     private record OutputContract(
         int maxInsights,
-        int maxOutputTokens
+        int maxOutputTokens,
+        Integer thinkingBudget
     ) {
+    }
+
+    private static final class TruncatedGeminiResponseException
+        extends RuntimeException {
+
+        private final GeminiResponseMetadata metadata;
+
+        private TruncatedGeminiResponseException(
+            GeminiResponseMetadata metadata,
+            Throwable cause
+        ) {
+            super(cause);
+            this.metadata = metadata;
+        }
+
+        private GeminiResponseMetadata metadata() {
+            return metadata;
+        }
     }
 
     private void logFailure(
