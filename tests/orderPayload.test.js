@@ -44,11 +44,9 @@ test('주문 합계는 외부 플랫폼 판매가와 수량으로 계산한다',
   assert.equal(total, 22000);
 });
 
-test('외부 플랫폼은 픽업, 완료, 고객 취소만 제어한다', () => {
-  assert.deepEqual(
-    resolveAllowedActions('CREATED'),
-    ['PICKED_UP', 'CANCELED'],
-  );
+test('외부 플랫폼은 매장 픽업 준비 이후에만 배송 상태를 진행한다', () => {
+  assert.deepEqual(resolveAllowedActions('CREATED'), ['CANCELED']);
+  assert.deepEqual(resolveAllowedActions('READY_FOR_PICKUP'), ['PICKED_UP']);
   assert.deepEqual(resolveAllowedActions('PICKED_UP'), ['DELIVERED']);
   assert.deepEqual(resolveAllowedActions('DELIVERED'), []);
   assert.deepEqual(resolveAllowedActions('CANCELED'), []);

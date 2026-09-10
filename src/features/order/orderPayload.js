@@ -34,6 +34,10 @@ export const resolveAllowedActions = (status) => {
     return ['CANCELED'];
   }
 
+  if (status === 'READY_FOR_PICKUP') {
+    return ['PICKED_UP'];
+  }
+
   if (status === 'PICKED_UP') {
     return ['DELIVERED'];
   }
