@@ -17,4 +17,22 @@ public class SimulatorExceptionHandler {
         problemDetail.setTitle("Simulator order not found");
         return problemDetail;
     }
+    @ExceptionHandler(
+            SimulatorInvalidOrderStatusTransitionException.class
+    )
+    public ProblemDetail handleInvalidStatusTransition(
+            SimulatorInvalidOrderStatusTransitionException exception
+    ) {
+        ProblemDetail problemDetail =
+                ProblemDetail.forStatusAndDetail(
+                        HttpStatus.CONFLICT,
+                        exception.getMessage()
+                );
+
+        problemDetail.setTitle(
+                "Invalid simulator order status transition"
+        );
+
+        return problemDetail;
+    }
 }

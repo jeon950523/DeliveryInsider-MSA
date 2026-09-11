@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.simulator.domain.catalog.mapper.ExternalCatalogMapper">
+
+    <select
+        id="findStores"
+        resultType="com.deliveryinsider.simulator.domain.catalog.dto.ExternalStoreResponse"
+    >
+        SELECT
+            provider_type AS platformType,
+            external_store_id AS externalStoreId,
+            store_name AS storeName,
+            enabled
+        FROM external_stores
+        WHERE provider_type = #{platformType}
+          AND enabled = 1
+        ORDER BY id ASC
+    </select>
+
+    <select
+        id="findMenus"
+        resultType="com.deliveryinsider.simulator.domain.catalog.dto.ExternalMenuResponse"
+    >
+        SELECT
+            provider_type AS platformType,
+            external_store_id AS externalStoreId,
+            external_menu_id AS externalMenuId,
+            catalog_key AS catalogKey,
+            menu_name AS menuName,
+            price,
+            enabled
+        FROM external_menus
+        WHERE provider_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+          AND enabled = 1
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+</mapper>
