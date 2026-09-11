@@ -9,17 +9,25 @@ import { useStoreStore } from '../../features/store/stores/useStoreStore.js';
 import {
   isStoreNotFoundError,
 } from '../../features/onboarding/utils/storeOnboarding.js';
+import {
+  resolveOnboardingTarget,
+} from '../../features/onboarding/utils/onboardingPolicy.js';
 
 import BillingView from '../../features/billing/views/BillingView.vue';
+import BillingPaymentSuccessView from '../../features/billing/views/BillingPaymentSuccessView.vue';
+import BillingPaymentFailView from '../../features/billing/views/BillingPaymentFailView.vue';
 import LandingView from '../../features/landing/views/LandingView.vue';
 import Login from '../../features/auth/views/LoginView.vue';
 import Register from '../../features/auth/views/RegisterView.vue';
+import PhoneOnboardingView from '../../features/auth/views/PhoneOnboardingView.vue';
+import OAuthCallbackView from '../../features/auth/views/OAuthCallbackView.vue';
 import StoreOnboardingView from '../../features/onboarding/views/StoreOnboardingView.vue';
 
 import DashboardView from '../../features/dashboard/views/DashboardView.vue';
 import MenusView from '../../features/menu/views/MenusView.vue';
 import StoreView from '../../features/store/views/StoreView.vue';
 import MockDataView from '../../features/mock/views/MockDataView.vue';
+
 import AllReportView from '../../features/report/views/AllReportView.vue';
 import ProfileView from '../../features/profile/views/ProfileView.vue';
 import OrdersView from '../../features/order/views/OrdersView.vue';
@@ -76,6 +84,30 @@ const routes = [
     meta: { isGuestOnly: true, hideLayout: true }
   },
 
+  {
+    path: '/login/oauth2/callback',
+    name: 'oauth-callback',
+    component: OAuthCallbackView,
+    meta: {
+      hideLayout: true,
+      title: '카카오 로그인',
+    },
+  },
+
+
+  {
+    path: '/onboarding/phone',
+    name: 'phone-onboarding',
+    component: PhoneOnboardingView,
+    meta: {
+      isAuthenticated: true,
+      allowWithoutPhoneVerification: true,
+      allowWithoutStore: true,
+      hideLayout: true,
+      title: '휴대폰 인증',
+    },
+  },
+
   /*
    * 신규 사용자 Store Onboarding
    *
@@ -120,7 +152,7 @@ const routes = [
     path: '/menus',
     name: 'menus',
     component: MenusView,
-    meta: { isAuthenticated: true, title: '메뉴 수익 관리' },
+    meta: { isAuthenticated: true, title: '메뉴 관리' },
   },
 
   /*
@@ -134,6 +166,13 @@ const routes = [
     name: 'store',
     component: StoreView,
     meta: { isAuthenticated: true, title: '매장 관리', allowWithoutStore: true },
+  },
+
+  {
+    path: '/mockdata',
+    name: 'mockdata',
+    component: MockDataView,
+    meta: { isAuthenticated: true, title: 'Mock 데이터' },
   },
 
   /*
@@ -156,15 +195,28 @@ const routes = [
     },
   },
 
-  /*
-   * 발표·테스트용 Mock 데이터 화면
-   */
   {
-    path: '/mockdata',
-    name: 'mockdata',
-    component: MockDataView,
-    meta: { isAuthenticated: true, title: 'Mock 데이터 생성 패널' },
+    path: '/billing/payment/success',
+    name: 'billing-payment-success',
+    component: BillingPaymentSuccessView,
+    meta: {
+      isAuthenticated: true,
+      title: '결제 결과 확인',
+      hideLayout: true,
+    },
   },
+
+  {
+    path: '/billing/payment/fail',
+    name: 'billing-payment-fail',
+    component: BillingPaymentFailView,
+    meta: {
+      isAuthenticated: true,
+      title: '결제 실패',
+      hideLayout: true,
+    },
+  },
+
 
   /*
    * 내 정보 화면
@@ -257,25 +309,82 @@ router.beforeEach(async (to) => {
     };
   }
 
+
+  /*
+   * 로그인 사용자는 Store Onboarding보다 먼저 휴대폰 인증을 완료한다.
+   * 휴대폰 인증 API는 SCG JWT가 검증한 X-User-Id를 사용한다.
+   */
+  if (
+    to.meta.isAuthenticated &&
+    authStore.isLoggedIn &&
+    !to.meta.allowWithoutPhoneVerification
+  ) {
+    try {
+      const profile = authStore.userProfile
+        || await authStore.fetchMyProfile();
+
+      if (!profile?.phoneVerifiedAt) {
+        return {
+          name: 'phone-onboarding',
+        };
+      }
+    } catch (error) {
+      if (
+        error?.code === 'AUTH_REQUIRED' ||
+        error?.response?.status === 401
+      ) {
+        return {
+          name: 'login',
+        };
+      }
+
+      console.error(
+        '휴대폰 인증 상태 확인 실패:',
+        error
+      );
+
+      return {
+        name: 'server-error',
+      };
+    }
+  }
+
   /*
    * Store가 필요한 보호 화면.
    *
    * 신규 사용자의 GET /api/stores/me → 404 STORE-001 은
    * 장애가 아니라 정상 Onboarding 상태다.
    */
-  if (
-    to.meta.isAuthenticated &&
-    authStore.isLoggedIn &&
-    !to.meta.allowWithoutStore
-  ) {
+  const shouldCheckStore =
+    to.meta.isAuthenticated
+    && authStore.isLoggedIn
+    && (
+      !to.meta.allowWithoutStore
+      || to.name === 'store-onboarding'
+    );
+
+  if (shouldCheckStore) {
     const storeStore = useStoreStore();
 
     try {
       const myStore = await storeStore.checkMyStore();
+      const onboardingTarget = resolveOnboardingTarget({
+        hasStore: Boolean(myStore),
+      });
 
-      if (!myStore) {
+      if (onboardingTarget === 'store-onboarding') {
+        if (to.name === 'store-onboarding') {
+          return true;
+        }
+
         return {
           name: 'store-onboarding',
+        };
+      }
+
+      if (to.name === 'store-onboarding') {
+        return {
+          name: 'dashboard',
         };
       }
     } catch (error) {

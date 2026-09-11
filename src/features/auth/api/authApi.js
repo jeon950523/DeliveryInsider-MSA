@@ -6,3 +6,10 @@ export const register = (payload) => publicHttpClient.post('/api/auth/register',
 export const logout = () => publicHttpClient.post('/api/auth/logout');
 export const fetchMyProfile = () => httpClient.get('/api/auth/me');
 export const updateMyEmail = (email) => httpClient.patch('/api/auth/me/email', { email });
+
+export const requestPhoneVerification = (phoneNumber) =>
+  httpClient.post('/api/auth/phone-verifications', { phoneNumber });
+export const confirmPhoneVerification = (phoneNumber, code) =>
+  httpClient.post('/api/auth/phone-verifications/confirm', { phoneNumber, code });
+export const fetchPhoneVerificationStatus = () =>
+  httpClient.get('/api/auth/phone-verifications/status');

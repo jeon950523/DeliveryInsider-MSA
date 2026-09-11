@@ -1,137 +1,34 @@
 import { ref, computed } from 'vue';
-import { defineStore } from "pinia";
-import { createStoreLegacy, deleteStoreLegacy, fetchCurrentStore, updateCurrentStore } from '../api/storeApi.js';
+import { defineStore } from 'pinia';
+import { fetchCurrentStore, updateCurrentStore } from '../api/storeApi.js';
+import { isStoreNotFoundError } from '../../onboarding/utils/storeOnboarding.js';
 
-// 매장관리 스토어
-export const useStoreStore = defineStore('store',() => {
-
-  // state
+export const useStoreStore = defineStore('store', () => {
   const currentData = ref();
-  /*
- * 매장 조회 여부
- *
- * false: 아직 /api/stores/me를 조회하지 않음
- * true: 매장 조회를 한 번 완료함
- */
-const isStoreChecked = ref(false);
-
-/*
- * 매장이 실제로 있는지 여부
- */
-const hasStore = computed(() => {
-  return !!currentData.value;
-});
-
-  // 현재 매장정보 표시용 콜백
+  const isStoreChecked = ref(false);
+  const hasStore = computed(() => Boolean(currentData.value));
+  let version = 0;
   const currentStore = async () => {
+    const request = ++version;
     try {
-      const url = '/api/stores/me'; // ✅ 수정됨 (store -> stores)
       const result = await fetchCurrentStore();
-
+      if (!result.data?.data?.id) throw new Error('매장 조회 응답을 확인할 수 없습니다.');
+      if (request !== version) return currentData.value;
       currentData.value = result.data.data;
-       isStoreChecked.value = true;
+      isStoreChecked.value = true;
       return currentData.value;
-
     } catch (error) {
-      const status = error.response?.status;
-      const responseData = error.response?.data;
-      
-      if( responseData?.code === 'E31' &&
-      status === 404) 
-      {
+      if (request !== version) throw error;
       currentData.value = null;
-      isStoreChecked.value = true;
-      return null;
-      }
-      isStoreChecked.value = true;
-      console.error(error);
+      // 매장 없음만 캐시한다. 통신 장애/403/500을 미등록으로 확정하지 않는다.
+      isStoreChecked.value = isStoreNotFoundError(error);
+      if (isStoreChecked.value) return null;
       throw error;
-      
     }
-  }
-  /*
- * 매장 존재 여부 확인용 함수
- *
- * 라우터 가드와 로그인 성공 후 이동 분기에서 사용한다.
- * 이미 조회한 적이 있으면 다시 API를 호출하지 않는다.
- * force=true면 강제로 다시 조회한다.
- */
-const checkMyStore = async (force = false) => {
-  if (
-    isStoreChecked.value &&
-    !force
-  ) {
-    return currentData.value;
-  }
-
-  return await currentStore();
-};
- 
-  // 매장등록 콜백
-  const storeForm = async (myStoreRegistration) => {
-    try {
-      const url = '/api/stores/newstore'; // ✅ 수정됨 (store -> stores, newStore -> newstore)
-      const res = await createStoreLegacy(myStoreRegistration);
-      currentData.value = res.data.data;
-      isStoreChecked.value = true;
-      return currentData.value;
-    } catch (error) {
-      console.error(error);
-      alert("매장 등록에 실패했습니다.");
-       throw error;
-    }
-  }
-
-  // 현재 매장 삭제 콜백
-  const deleteStore = async () => {
-    try {
-      const url = `/api/stores/me`; // ✅ 수정됨 (store -> stores)
-      const res = await deleteStoreLegacy();
-
-      currentData.value = null;
-      isStoreChecked.value = true;
-    } catch (error) {
-      console.error(error);
-      alert("매장 삭제에 실패했습니다.");
-       throw error;
-    }
-  }
-  /*
- * 로그아웃 시 매장 상태 초기화
- */
-const clearStoreState = () => {
-  currentData.value = undefined;
-  isStoreChecked.value = false;
-};
-
-  // 현재 매장 수정 콜백
-  const updateStore = async (myStoreUpdate) => {
-    try {
-      const url = `/api/stores/me`; // ✅ 수정됨 (store -> stores)
-      const res = await updateCurrentStore(myStoreUpdate);
-
-      // 업데이트 후 최신 매장정보를 다시 불러옵니다.
-    return await currentStore();
-    } catch (error) {
-      console.error(error);
-      alert("매장 정보 수정에 실패했습니다.");
-       throw error;
-    }
-  }
-
-  return {
-    // state
-    currentData,
-    isStoreChecked,
-    hasStore,
-
-    // actions
-    currentStore,
-    checkMyStore,
-    storeForm,
-    deleteStore,
-    updateStore,
-    clearStoreState
-  }
+  };
+  const checkMyStore = (force = false) => isStoreChecked.value && !force ? Promise.resolve(currentData.value) : currentStore();
+  const clearStoreState = () => { version++; currentData.value = undefined; isStoreChecked.value = false; };
+  const updateStore = async (payload) => { await updateCurrentStore(payload); return currentStore(); };
+  return { currentData, isStoreChecked, hasStore, currentStore, checkMyStore, updateStore, clearStoreState };
 });
 

@@ -62,7 +62,7 @@ const getStatusLabel = (status) => ({
   COOKING: '조리중',
   READY_FOR_PICKUP: '픽업대기',
   DELIVERING: '배달중',
-  COMPLETED: '완료',
+  COMPLETED: '배달 완료',
   CANCELED: '취소',
 }[status] || status || '-');
 

@@ -2,11 +2,30 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useReportStore } from '../stores/useReportStore.js';
+import { useReportAiInsightStore } from '../stores/useReportAiInsightStore.js';
+import ReportAiInsightPanel from '../components/ReportAiInsightPanel.vue';
+import { fetchBillingFeatures } from '../../billing/api/billingApi.js';
+import {
+  hasPremiumFeature,
+  normalizePremiumFeatures,
+  premiumFeatureCodes,
+} from '../../billing/utils/premiumFeatures.js';
 import { formatDurationSeconds } from '../../../shared/utils/timeFormatters.js';
 
 const router = useRouter();
 const route = useRoute();
 const reportStore = useReportStore();
+const reportAiStore = useReportAiInsightStore();
+const premiumFeatures = ref({});
+const showExportPremiumGate = ref(false);
+const canUseAi = computed(() => hasPremiumFeature(
+  premiumFeatures.value,
+  premiumFeatureCodes.AI_REPORT_INSIGHT,
+));
+const canUseExport = computed(() => hasPremiumFeature(
+  premiumFeatures.value,
+  premiumFeatureCodes.REPORT_EXPORT,
+));
 
 /*
  * 날짜 input에 넣기 위한 yyyy-MM-dd 변환 함수
@@ -57,7 +76,7 @@ const statusNames = {
   COOKING: '조리중',
   READY_FOR_PICKUP: '픽업대기',
   DELIVERING: '배달중',
-  COMPLETED: '완료',
+  COMPLETED: '배달 완료',
   CANCELED: '취소',
   REFUNDED: '환불',
 };
@@ -387,8 +406,21 @@ const applyRouteQueryToReport = () => {
 // ==========================================
 const searchReports = async () => {
   salesCurrentPage.value = 1;
+  reportAiStore.clear();
   await reportStore.findReports(filters.value);
 };
+
+const loadPremiumFeatures = async () => {
+  try {
+    const response = await fetchBillingFeatures();
+    premiumFeatures.value = normalizePremiumFeatures(response.data);
+  } catch {
+    // 권한 조회 실패를 유료 기능 허용으로 해석하지 않는다.
+    premiumFeatures.value = {};
+  }
+};
+
+const moveToBilling = () => router.push({ name: 'billing' });
 
 const clearFilters = async () => {
   filters.value = {
@@ -404,6 +436,12 @@ const clearFilters = async () => {
 };
 
 const exportExcel = async (type = '전체') => {
+  if (!canUseExport.value) {
+    showExportPremiumGate.value = true;
+    return;
+  }
+
+  showExportPremiumGate.value = false;
   const exportFilters = {
     ...filters.value,
   };
@@ -543,9 +581,12 @@ const getCancelDetail = (reason) => {
   return reason.split('·').slice(1).join('·').trim();
 };
 
-onMounted(() => {
+onMounted(async () => {
   applyRouteQueryToReport();
-  searchReports();
+  await Promise.allSettled([
+    searchReports(),
+    loadPremiumFeatures(),
+  ]);
 });
 </script>
 
@@ -562,6 +603,23 @@ onMounted(() => {
         <button type="button" class="primary-button" @click="activeTab = 'export'">필터/엑셀 내보내기</button>
       </div>
     </header>
+
+    <section
+      v-if="showExportPremiumGate && !canUseExport"
+      class="info-banner"
+      data-testid="export-premium-gate"
+    >
+      <strong>CSV 내보내기는 Standard 기능입니다.</strong>
+      <span>기본 리포트 조회는 계속 이용할 수 있습니다.</span>
+      <button type="button" class="primary-button" @click="moveToBilling">Standard 플랜 보기</button>
+    </section>
+
+    <ReportAiInsightPanel
+      :filters="filters"
+      :can-use-ai="canUseAi"
+      :has-loaded="reportStore.hasLoaded"
+      @request-billing="moveToBilling"
+    />
 
     <div class="tabs-mock report-tabs report-tabs-under-title">
       <button class="tab" :class="{ active: activeTab === 'sales' }" @click="activeTab = 'sales'">매출 리포트</button>
@@ -991,7 +1049,7 @@ onMounted(() => {
             <label>상태</label>
             <select v-model="filters.status">
               <option value="">전체</option>
-              <option value="COMPLETED">완료</option>
+              <option value="COMPLETED">배달 완료</option>
               <option value="CANCELED">취소</option>
             </select>
           </div>

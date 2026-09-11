@@ -6,6 +6,12 @@ export const fetchBillingPlans = () =>
 export const fetchCurrentSubscription = () =>
   httpClient.get('/api/billing/subscription');
 
+export const fetchBillingFeatures = () =>
+  httpClient.get(
+    '/api/billing/features',
+    { skipGlobalErrorRedirect: true }
+  );
+
 export const createSubscription = (planCode) =>
   httpClient.post(
     '/api/billing/subscription',

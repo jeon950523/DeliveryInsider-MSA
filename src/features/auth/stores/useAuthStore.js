@@ -6,6 +6,9 @@ import {
   logout as logoutApi,
   register as registerApi,
   updateMyEmail as updateMyEmailApi,
+  requestPhoneVerification as requestPhoneVerificationApi,
+  confirmPhoneVerification as confirmPhoneVerificationApi,
+  fetchPhoneVerificationStatus as fetchPhoneVerificationStatusApi,
 } from '../api/authApi.js';
 import { reissueAccessToken } from '../../../shared/api/httpClient.js';
 import {
@@ -107,6 +110,28 @@ const reissue = async () => {
     }
   };
 
+
+  const fetchPhoneVerificationStatus = async () => {
+    const response = await fetchPhoneVerificationStatusApi();
+    return response.data.data;
+  };
+
+  const requestPhoneVerification = async (phoneNumber) => {
+    const response = await requestPhoneVerificationApi(phoneNumber);
+    return response.data.data;
+  };
+
+  const confirmPhoneVerification = async (phoneNumber, code) => {
+    const response = await confirmPhoneVerificationApi(phoneNumber, code);
+    const verification = response.data.data;
+
+    if (verification?.verified) {
+      await fetchMyProfile();
+    }
+
+    return verification;
+  };
+
   const updateMyEmail = async (email) => {
     try {
       const response = await updateMyEmailApi(email);
@@ -131,5 +156,8 @@ const reissue = async () => {
     registration,
     fetchMyProfile,
     updateMyEmail,
+    fetchPhoneVerificationStatus,
+    requestPhoneVerification,
+    confirmPhoneVerification,
   };
 });
