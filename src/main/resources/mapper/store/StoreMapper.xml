@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.store.domain.store.mapper.StoreMapper">
+
+    <resultMap
+            id="storeResultMap"
+            type="com.deliveryinsider.store.domain.store.entity.Store">
+
+        <id column="id" property="id" />
+        <result column="event_version" property="eventVersion" />
+
+        <result column="user_id" property="userId" />
+        <result column="store_name" property="storeName" />
+        <result column="business_registration_number"
+                property="businessRegistrationNumber" />
+        <result column="business_verification_id"
+                property="businessVerificationId" />
+
+        <result column="phone" property="phone" />
+        <result column="operation_status" property="operationStatus" />
+
+        <result column="address" property="address" />
+        <result column="address_detail" property="addressDetail" />
+
+        <result column="industry_type" property="industryType" />
+        <result column="minimum_order_amount" property="minimumOrderAmount" />
+
+        <result column="open_time" property="openTime" />
+        <result column="close_time" property="closeTime" />
+
+        <result column="deletion_request_id"
+                property="deletionRequestId" />
+
+        <result column="deletion_requested_at"
+                property="deletionRequestedAt" />
+
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+        <result column="deleted_at" property="deletedAt" />
+
+    </resultMap>
+
+    <!-- 로그인한 유저의 활성 매장 조회 -->
+    <select id="findByUserId" resultMap="storeResultMap">
+        SELECT
+            id, event_version,
+            user_id,
+            store_name,
+            phone,
+            business_registration_number,
+            business_verification_id,
+            operation_status,
+            address,
+            address_detail,
+            industry_type,
+            minimum_order_amount,
+            open_time,
+            close_time,
+            deletion_request_id,
+            deletion_requested_at,
+            created_at,
+            updated_at,
+            deleted_at
+        FROM stores
+        WHERE user_id = #{userId}
+          AND deleted_at IS NULL
+    </select>
+<!-- 스냅샷용   -->
+    <select id="findById" resultMap="storeResultMap">
+        SELECT
+            id, event_version,
+            user_id,
+            store_name,
+            phone,
+            business_registration_number,
+            business_verification_id,
+            operation_status,
+            address,
+            address_detail,
+            industry_type,
+            minimum_order_amount,
+            open_time,
+            close_time,
+            deletion_request_id,
+            deletion_requested_at,
+            created_at,
+            updated_at,
+            deleted_at
+        FROM stores
+        WHERE id = #{id}
+    </select>
+
+
+    <select
+            id="existsByBusinessRegistrationNumber"
+            resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM stores
+            WHERE business_registration_number = #{businessRegistrationNumber}
+              AND deleted_at IS NULL
+        )
+    </select>
+
+    <insert
+            id="insert"
+            parameterType="com.deliveryinsider.store.domain.store.entity.Store"
+            useGeneratedKeys="true"
+            keyProperty="id">
+        INSERT INTO stores (
+            user_id,
+            store_name,
+            phone,
+            business_registration_number,
+            business_verification_id,
+            operation_status,
+            address,
+            address_detail,
+            industry_type,
+            minimum_order_amount,
+            open_time,
+            close_time,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{userId},
+            #{storeName},
+            #{phone},
+            #{businessRegistrationNumber},
+            #{businessVerificationId},
+            #{operationStatus},
+            #{address},
+            #{addressDetail},
+            #{industryType},
+            #{minimumOrderAmount},
+            #{openTime},
+            #{closeTime},
+            NOW(6),
+            NOW(6)
+        )
+    </insert>
+
+    <!-- 매장 부분 수정 -->
+    <update id="update" parameterType="com.deliveryinsider.store.domain.store.entity.Store">
+        UPDATE stores
+        <set>
+            <if test="storeName != null">store_name = #{storeName},</if>
+            <if test="phone != null">phone = #{phone},</if>
+            <if test="operationStatus != null">operation_status = #{operationStatus},</if>
+            <if test="address != null">address = #{address},</if>
+            <if test="addressDetail != null">address_detail = #{addressDetail},</if>
+            <if test="industryType != null">industry_type = #{industryType},</if>
+            <if test="minimumOrderAmount != null">minimum_order_amount = #{minimumOrderAmount},</if>
+            <if test="openTime != null">open_time = #{openTime},</if>
+            <if test="closeTime != null">close_time = #{closeTime},</if>
+            event_version = event_version + 1, updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+        AND user_id = #{userId}
+        AND deleted_at IS NULL
+    </update>
+
+</mapper>
