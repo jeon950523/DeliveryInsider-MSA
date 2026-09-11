@@ -3,6 +3,7 @@ package com.deliveryinsider.platform.domain.integration;
 import com.deliveryinsider.platform.domain.catalog.entity.MenuCatalogProjection;
 import com.deliveryinsider.platform.domain.catalog.mapper.MenuCatalogProjectionMapper;
 import com.deliveryinsider.platform.domain.catalog.model.MenuCatalogStatus;
+import com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping;
 import com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting;
 import com.deliveryinsider.platform.domain.mapping.mapper.PlatformMenuMappingMapper;
 import com.deliveryinsider.platform.domain.provider.PlatformType;
@@ -213,6 +214,36 @@ class PlatformIntegrationServiceTest {
         assertThat(result.getExternalMenuId()).isEqualTo("external-menu");
         verify(mapper).insertMenu(result);
         verify(inbox).requeueBlockedForMenuResolution();
+    }
+
+    @Test void creatingAndConnectingAnExternalMenuCreatesOneOwnedMenuAndStoresItsMapping() {
+        existing();
+        var external = new ExternalMenuResponse(PlatformType.BAEMIN, "external-1", "external-new", "새 외부 메뉴", 12000, true);
+        when(simulatorCatalog.findMenus(PlatformType.BAEMIN, "external-1")).thenReturn(List.of(external));
+        when(store.createMenu(eq(1L), any())).thenReturn(new PlatformStoreClient.CreatedMenu(21L, "새 외부 메뉴", 12000));
+        when(menuMappings.findByExternalIdentity(PlatformType.BAEMIN, "external-1", "external-new"))
+            .thenReturn(Optional.empty());
+        when(mapper.findMenu(1L, PlatformType.BAEMIN, 21L)).thenReturn(Optional.empty());
+
+        PlatformMenuMapping result = service.createAndConnectMenu(
+            10L,
+            PlatformType.BAEMIN,
+            "external-new",
+            new ExternalMenuConnectionRequest.CreateAndConnect(7000, 1000, 15)
+        );
+
+        assertThat(result.getStoreId()).isEqualTo(1L);
+        assertThat(result.getExternalStoreId()).isEqualTo("external-1");
+        assertThat(result.getExternalMenuId()).isEqualTo("external-new");
+        assertThat(result.getMenuId()).isEqualTo(21L);
+        verify(store).createMenu(eq(1L), argThat(request ->
+            request.menuName().equals("새 외부 메뉴")
+                && request.menuPrice().equals(12000)
+                && request.menuCost().equals(7000)
+                && request.packagingFee().equals(1000)
+                && request.expectedCookingTime().equals(15)
+        ));
+        verify(mapper).insertMenu(result);
     }
 
     @Test
