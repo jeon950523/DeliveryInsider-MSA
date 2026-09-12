@@ -16,7 +16,10 @@ const save = async (platform) => { if (await store.save(platform, { ...drafts[pl
 const toggle = async (platform) => { if (await store.toggle(platform, !stored(platform).enabled)) sync(platform); };
 const refresh = async (platform) => { await store.refreshStatus(platform); };
 const saveMenu = async (platform) => { const draft = menuDrafts[platform]; await store.saveMapping(platform, Number(draft.menuId), { externalMenuId: draft.externalMenuId, enabled: draft.enabled }); };
-const loadMenuConnection = async (platform) => { await Promise.all([store.loadMappings(platform), store.loadUnmappedMenus(platform)]); };
+const loadMenuConnection = async (platform) => {
+  await store.loadMappings(platform);
+  await store.loadUnmappedMenus(platform);
+};
 const connectExternalMenu = async (platform, externalMenuId) => { const draft = externalMenuDrafts[platform]; await store.connectExternalMenu(platform, externalMenuId, Number(draft.menuId)); };
 const createAndConnectExternalMenu = async (platform, externalMenuId) => { const { menuCost, packagingFee, expectedCookingTime } = externalMenuDrafts[platform]; await store.createAndConnectExternalMenu(platform, externalMenuId, { menuCost: Number(menuCost), packagingFee: Number(packagingFee), expectedCookingTime: Number(expectedCookingTime) }); };
 const editMenu = (platform, mapping) => Object.assign(menuDrafts[platform], { menuId: String(mapping.menuId), externalMenuId: mapping.externalMenuId, enabled: mapping.enabled });
