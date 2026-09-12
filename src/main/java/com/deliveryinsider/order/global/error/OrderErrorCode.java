@@ -34,6 +34,12 @@ public enum OrderErrorCode implements ErrorCode {
         "Store Service 연결에 실패했습니다."
     ),
 
+    STORE_BUSINESS_HOURS_INVALID(
+        "ORDER-012",
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Store Service의 영업시간 정보가 올바르지 않습니다."
+    ),
+
     OPERATION_STATUS_PROVIDER_CONTROLLED(
         "ORDER-006",
         HttpStatus.CONFLICT,

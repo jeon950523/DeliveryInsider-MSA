@@ -25,7 +25,9 @@ class OrderOperationServiceTest {
         ).thenReturn(
             new CurrentStoreResponse(
                 3L,
-                "fixture-store"
+                "fixture-store",
+                "09:00",
+                "18:00"
             )
         );
 

@@ -233,13 +233,10 @@
         WHERE o.store_id = #{storeId}
 
           AND o.ordered_at
-            >= CURRENT_DATE()
+            >= #{businessStartAt}
 
           AND o.ordered_at
-            &lt; DATE_ADD(
-                      CURRENT_DATE(),
-                      INTERVAL 1 DAY
-                 )
+            &lt; #{businessEndAt}
 
         ORDER BY
 

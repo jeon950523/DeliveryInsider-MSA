@@ -19,6 +19,7 @@ import com.deliveryinsider.order.domain.order.read.OrderTodayReadRow;
 import com.deliveryinsider.order.global.error.BusinessException;
 import com.deliveryinsider.order.global.error.OrderErrorCode;
 import com.deliveryinsider.order.integration.store.CurrentStoreClient;
+import com.deliveryinsider.order.integration.store.dto.CurrentStoreResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -51,13 +52,13 @@ public class OrderReadService {
     public List<TodayOrderResponse> findToday(
         Long userId
     ) {
-        Long storeId =
-            resolveStoreId(
+        CurrentStoreResponse store =
+            resolveStore(
                 userId
             );
 
         return findTodayRows(
-            storeId
+            store
         )
             .stream()
             .map(
@@ -70,14 +71,14 @@ public class OrderReadService {
     findOperationSummary(
         Long userId
     ) {
-        Long storeId =
-            resolveStoreId(
+        CurrentStoreResponse store =
+            resolveStore(
                 userId
             );
 
         List<OrderTodayReadRow> orders =
             findTodayRows(
-                storeId
+                store
             );
 
         int completedCount =
@@ -256,9 +257,9 @@ public class OrderReadService {
         Long orderId
     ) {
         Long storeId =
-            resolveStoreId(
+            resolveStore(
                 userId
-            );
+            ).storeId();
 
         OrderEntity order =
             orderMapper
@@ -614,23 +615,31 @@ public class OrderReadService {
             .sum();
     }
 
-    private Long resolveStoreId(
+    private CurrentStoreResponse resolveStore(
         Long userId
     ) {
         return currentStoreClient
             .findByUserId(
                 userId
-            )
-            .storeId();
+            );
     }
 
     private List<OrderTodayReadRow>
     findTodayRows(
-        Long storeId
+        CurrentStoreResponse store
     ) {
+        BusinessWindow window =
+            BusinessWindowResolver.resolve(
+                LocalDateTime.now(clock),
+                store.openTime(),
+                store.closeTime()
+            );
+
         return orderReadMapper
             .findTodayByStoreId(
-                storeId
+                store.storeId(),
+                window.businessStartAt(),
+                window.businessEndAt()
             );
     }
 
