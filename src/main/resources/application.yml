@@ -74,3 +74,4 @@ store:
 catalog:
   outbox:
     enabled: ${STORE_OUTBOX_ENABLED:true}
+    topic: ${STORE_EVENT_TOPIC:${KAFKA_TOPIC_PREFIX:}store.events}

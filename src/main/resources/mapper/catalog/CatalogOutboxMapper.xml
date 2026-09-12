@@ -6,7 +6,7 @@
  </select>
  <insert id="insert">
   INSERT INTO outbox_events(event_id, aggregate_type, aggregate_id, event_version, topic, kafka_key, payload_json, created_at)
-  VALUES(#{event.eventId}, #{event.aggregateType}, #{event.aggregateId}, #{event.eventVersion}, 'store.events',
+  VALUES(#{event.eventId}, #{event.aggregateType}, #{event.aggregateId}, #{event.eventVersion}, #{topic},
    CONCAT(#{event.aggregateType}, ':', #{event.aggregateId}), #{payload}, UTC_TIMESTAMP(6))
  </insert>
  <select id="findClaimable" resultType="com.deliveryinsider.store.domain.catalog.CatalogOutboxItem">

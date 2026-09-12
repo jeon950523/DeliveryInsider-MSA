@@ -10,7 +10,11 @@ import java.util.List;
 @Mapper
 public interface CatalogOutboxMapper {
     Menu findMenu(@Param("menuId") long menuId, @Param("storeId") long storeId);
-    int insert(@Param("event") EventEnvelope<?> event, @Param("payload") String payload);
+    int insert(
+        @Param("event") EventEnvelope<?> event,
+        @Param("payload") String payload,
+        @Param("topic") String topic
+    );
     List<CatalogOutboxItem> findClaimable(@Param("limit") int limit);
     int claim(@Param("id") long id, @Param("worker") String worker);
     int published(@Param("id") long id, @Param("worker") String worker);
