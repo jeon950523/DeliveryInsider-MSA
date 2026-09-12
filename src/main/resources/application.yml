@@ -1,6 +1,8 @@
 server:
   port: ${APP_PORT:8092}
 spring:
+  config:
+    import: optional:file:./.env[.properties]
   application:
     name: baef-p2-store
   datasource:
@@ -17,6 +19,9 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
@@ -56,3 +61,16 @@ mybatis:
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
+
+integration:
+  nts:
+    base-url: ${NTS_BASE_URL:https://api.odcloud.kr}
+    service-key: ${NTS_SERVICE_KEY:}
+
+store:
+  onboarding:
+    verification-ttl-minutes: ${BUSINESS_VERIFICATION_TTL_MINUTES:30}
+
+catalog:
+  outbox:
+    enabled: ${STORE_OUTBOX_ENABLED:true}

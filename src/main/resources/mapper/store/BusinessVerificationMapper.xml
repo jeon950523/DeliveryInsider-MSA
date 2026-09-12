@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.store.domain.store.mapper.BusinessVerificationMapper">
+
+    <resultMap
+            id="businessVerificationResultMap"
+            type="com.deliveryinsider.store.domain.store.entity.BusinessVerification">
+
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="business_registration_number" property="businessRegistrationNumber"/>
+        <result column="representative_name" property="representativeName"/>
+        <result column="opening_date" property="openingDate"/>
+        <result column="business_status_code" property="businessStatusCode"/>
+        <result column="business_status_name" property="businessStatusName"/>
+        <result column="verified_at" property="verifiedAt"/>
+        <result column="expires_at" property="expiresAt"/>
+        <result column="consumed_at" property="consumedAt"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO business_verifications (
+            id,
+            user_id,
+            business_registration_number,
+            representative_name,
+            opening_date,
+            business_status_code,
+            business_status_name,
+            verified_at,
+            expires_at,
+            consumed_at,
+            created_at
+        ) VALUES (
+            #{id},
+            #{userId},
+            #{businessRegistrationNumber},
+            #{representativeName},
+            #{openingDate},
+            #{businessStatusCode},
+            #{businessStatusName},
+            #{verifiedAt},
+            #{expiresAt},
+            NULL,
+            NOW(6)
+        )
+    </insert>
+
+    <select
+            id="findReusableVerified"
+            resultMap="businessVerificationResultMap">
+        SELECT
+            id,
+            user_id,
+            business_registration_number,
+            representative_name,
+            opening_date,
+            business_status_code,
+            business_status_name,
+            verified_at,
+            expires_at,
+            consumed_at,
+            created_at
+        FROM business_verifications
+        WHERE user_id = #{userId}
+          AND business_registration_number = #{businessRegistrationNumber}
+          AND representative_name = #{representativeName}
+          AND opening_date = #{openingDate}
+          AND business_status_code = '01'
+          AND expires_at &gt; #{now}
+          AND consumed_at IS NULL
+        ORDER BY expires_at DESC, created_at DESC
+        LIMIT 1
+    </select>
+
+    <select
+            id="findByIdForUpdate"
+            resultMap="businessVerificationResultMap">
+        SELECT
+            id,
+            user_id,
+            business_registration_number,
+            representative_name,
+            opening_date,
+            business_status_code,
+            business_status_name,
+            verified_at,
+            expires_at,
+            consumed_at,
+            created_at
+        FROM business_verifications
+        WHERE id = #{id}
+        FOR UPDATE
+    </select>
+
+    <update id="markConsumed">
+        UPDATE business_verifications
+        SET consumed_at = #{consumedAt}
+        WHERE id = #{id}
+          AND user_id = #{userId}
+          AND consumed_at IS NULL
+    </update>
+
+</mapper>
