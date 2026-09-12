@@ -70,6 +70,11 @@ store-client:
   internal-api-key: ${INTERNAL_API_KEY:}
   connect-timeout: ${STORE_CLIENT_CONNECT_TIMEOUT:2s}
   read-timeout: ${STORE_CLIENT_READ_TIMEOUT:3s}
+platform-client:
+  base-url: ${PLATFORM_SERVICE_URL:http://localhost:8093}
+  internal-api-key: ${INTERNAL_API_KEY:}
+  connect-timeout: ${PLATFORM_CLIENT_CONNECT_TIMEOUT:2s}
+  read-timeout: ${PLATFORM_CLIENT_READ_TIMEOUT:3s}
 billing-client:
   base-url: ${BILLING_SERVICE_URL:http://localhost:8097}
   internal-api-key: ${INTERNAL_API_KEY:}

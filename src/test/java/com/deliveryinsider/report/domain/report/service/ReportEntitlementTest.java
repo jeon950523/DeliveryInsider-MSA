@@ -54,7 +54,9 @@ class ReportEntitlementTest {
         ReportReadService service =
             new ReportReadService(
                 currentStoreClient,
-                reportReadMapper
+                reportReadMapper,
+                mock(com.deliveryinsider.report.integration.platform.PlatformFinancialClient.class),
+                new ReportMenuProfitCalculator()
             );
 
         service.getSummary(

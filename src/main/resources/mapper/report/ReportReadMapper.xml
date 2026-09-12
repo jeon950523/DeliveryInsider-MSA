@@ -625,6 +625,46 @@
         ORDER BY d.reportDate ASC
 
     </select>
+
+    <select id="findMenuProfitItems"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportMenuProfitItemProjection">
+        SELECT
+            ro.order_id AS orderId,
+            ro.platform_type AS platformType,
+            ro.external_store_id AS externalStoreId,
+            ro.provider_financial_data_status AS financialDataStatus,
+            ro.gross_order_amount AS orderGrossAmount,
+            ri.menu_id AS menuId,
+            ri.menu_name AS menuName,
+            ri.quantity AS quantity,
+            COALESCE(ri.ordered_unit_price * ri.quantity, 0) AS grossSales,
+            COALESCE(ri.menu_cost * ri.quantity, 0) AS costOfGoods,
+            COALESCE(ri.packaging_cost * ri.quantity, 0) AS packagingCost
+        FROM report_orders ro
+        INNER JOIN report_order_items ri ON ri.order_id = ro.order_id
+        WHERE ro.store_id = #{storeId}
+          AND ro.status = 'DELIVERED'
+        <if test="from != null">AND ro.ordered_at <![CDATA[ >= ]]> #{from}</if>
+        <if test="to != null">AND ro.ordered_at <![CDATA[ <= ]]> #{to}</if>
+        <if test="platformType != null and platformType != ''">AND ro.platform_type = #{platformType}</if>
+        ORDER BY ro.order_id ASC, ri.menu_id ASC, ri.menu_name ASC
+    </select>
+
+    <select id="findMenuProfitCharges"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportMenuProfitChargeProjection">
+        SELECT
+            rc.order_id AS orderId,
+            rc.charge_type AS chargeType,
+            rc.amount AS amount
+        FROM report_order_charges rc
+        INNER JOIN report_orders ro ON ro.order_id = rc.order_id
+        WHERE ro.store_id = #{storeId}
+          AND ro.status = 'DELIVERED'
+        <if test="from != null">AND ro.ordered_at <![CDATA[ >= ]]> #{from}</if>
+        <if test="to != null">AND ro.ordered_at <![CDATA[ <= ]]> #{to}</if>
+        <if test="platformType != null and platformType != ''">AND ro.platform_type = #{platformType}</if>
+        ORDER BY rc.order_id ASC, rc.charge_type ASC
+    </select>
     <select
             id="findProcessingTimeSummary"
             resultType="com.deliveryinsider.report.domain.report.projection.ReportProcessingTimeProjection">

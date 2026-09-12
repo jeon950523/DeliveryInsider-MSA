@@ -2,6 +2,7 @@ package com.deliveryinsider.report.domain.report.service;
 
 import com.deliveryinsider.report.domain.report.mapper.ReportReadMapper;
 import com.deliveryinsider.report.domain.report.projection.ReportSummaryProjection;
+import com.deliveryinsider.report.domain.report.projection.ReportMenuProfitItemProjection;
 import com.deliveryinsider.report.domain.report.request.ReportDailyTrendRequest;
 import com.deliveryinsider.report.domain.report.request.ReportOrderSearchRequest;
 import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
@@ -10,10 +11,13 @@ import com.deliveryinsider.report.domain.report.response.ReportMenuPerformanceRe
 import com.deliveryinsider.report.domain.report.response.ReportOrderPageResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderResponse;
 import com.deliveryinsider.report.domain.report.response.ReportSummaryResponse;
+import com.deliveryinsider.report.domain.report.response.ReportMenuEstimatedProfitResponse;
 import com.deliveryinsider.report.global.error.BusinessException;
 import com.deliveryinsider.report.global.error.ReportErrorCode;
 import com.deliveryinsider.report.integration.store.CurrentStoreClient;
 import com.deliveryinsider.report.integration.store.CurrentStoreResponse;
+import com.deliveryinsider.report.integration.platform.PlatformAdSpendResponse;
+import com.deliveryinsider.report.integration.platform.PlatformFinancialClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +25,9 @@ import com.deliveryinsider.report.domain.report.projection.ReportPlatformProcess
 import com.deliveryinsider.report.domain.report.projection.ReportProcessingTimeProjection;
 import com.deliveryinsider.report.domain.report.response.ReportProcessingTimeResponse;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Set;
 
@@ -55,6 +62,8 @@ public class ReportReadService {
 
     private final CurrentStoreClient currentStoreClient;
     private final ReportReadMapper reportReadMapper;
+    private final PlatformFinancialClient platformFinancialClient;
+    private final ReportMenuProfitCalculator menuProfitCalculator;
 
     @Transactional(readOnly = true)
     public ReportSummaryResponse getSummary(
@@ -186,6 +195,60 @@ public class ReportReadService {
     }
 
     @Transactional(readOnly = true)
+    public List<ReportMenuEstimatedProfitResponse> getMenuEstimatedProfit(
+        Long userId,
+        LocalDateTime from,
+        LocalDateTime to,
+        String platformType
+    ) {
+        validateRangeAndPlatform(from, to, platformType);
+        CurrentStoreResponse store = resolveStore(userId);
+
+        List<ReportMenuProfitItemProjection> items = reportReadMapper
+            .findMenuProfitItems(store.storeId(), from, to, platformType);
+
+        if (items.isEmpty()) {
+            return List.of();
+        }
+
+        Map<ReportMenuProfitCalculator.ProviderStoreKey,
+            ReportMenuProfitCalculator.AdSpend> adSpendByScope = new LinkedHashMap<>();
+
+        for (ReportMenuProfitItemProjection item : items) {
+            ReportMenuProfitCalculator.ProviderStoreKey scope =
+                new ReportMenuProfitCalculator.ProviderStoreKey(
+                    item.getPlatformType(), item.getExternalStoreId());
+            if (adSpendByScope.containsKey(scope)) {
+                continue;
+            }
+
+            PlatformAdSpendResponse response = platformFinancialClient.findAdSpend(
+                store.storeId(),
+                scope.platformType(),
+                scope.externalStoreId(),
+                toDate(from),
+                toDate(to)
+            );
+
+            long amount = response.spends().stream()
+                .mapToLong(PlatformAdSpendResponse.Spend::spendAmount)
+                .sum();
+            adSpendByScope.put(
+                scope,
+                new ReportMenuProfitCalculator.AdSpend(response.available(), amount)
+            );
+        }
+
+        return menuProfitCalculator.calculate(
+            items,
+            reportReadMapper.findMenuProfitCharges(
+                store.storeId(), from, to, platformType
+            ),
+            adSpendByScope
+        );
+    }
+
+    @Transactional(readOnly = true)
     public List<ReportDailyTrendResponse> getDailyTrend(
         Long userId,
         ReportDailyTrendRequest request
@@ -277,6 +340,10 @@ public class ReportReadService {
         return new BusinessException(
             ReportErrorCode.REPORT_QUERY_INVALID
         );
+    }
+
+    private LocalDate toDate(LocalDateTime value) {
+        return value == null ? null : value.toLocalDate();
     }
     private CurrentStoreResponse resolveStore(
         Long userId

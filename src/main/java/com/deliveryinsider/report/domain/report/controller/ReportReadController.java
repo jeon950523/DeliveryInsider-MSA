@@ -138,6 +138,25 @@ public class ReportReadController {
         );
     }
 
+    @GetMapping("/menus/estimated-profit")
+    public List<ReportMenuEstimatedProfitResponse> getMenuEstimatedProfit(
+        @RequestHeader("X-User-Id") Long userId,
+        @RequestParam(required = false)
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+        LocalDateTime from,
+        @RequestParam(required = false)
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+        LocalDateTime to,
+        @RequestParam(required = false) String platformType
+    ) {
+        return reportReadService.getMenuEstimatedProfit(
+            userId,
+            from,
+            to,
+            platformType
+        );
+    }
+
     @GetMapping("/daily")
     public List<ReportDailyTrendResponse> getDailyTrend(
         @RequestHeader("X-User-Id")

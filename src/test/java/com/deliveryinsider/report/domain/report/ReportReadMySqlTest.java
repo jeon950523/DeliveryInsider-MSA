@@ -140,7 +140,9 @@ class ReportReadMySqlTest {
         mvc = MockMvcBuilders.standaloneSetup(new ReportReadController(
                 new ReportReadService(
                     storeClient,
-                    mapper
+                    mapper,
+                    mock(com.deliveryinsider.report.integration.platform.PlatformFinancialClient.class),
+                    new com.deliveryinsider.report.domain.report.service.ReportMenuProfitCalculator()
                 ), mock(com.deliveryinsider.report.domain.report.service.ReportAiInsightService.class)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
