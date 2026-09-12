@@ -27,7 +27,9 @@ public class InternalStoreQueryController {
         return ResponseEntity.ok(
             new InternalStoreSummaryResponse(
                 store.id(),
-                store.storeName()
+                store.storeName(),
+                store.openTime(),
+                store.closeTime()
             )
         );
     }
