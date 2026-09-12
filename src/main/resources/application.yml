@@ -1,11 +1,21 @@
 server:
-  port: 8100
+  port: 8101
 
 spring:
   application:
     name: baef-p2-external-platform-simulator
   config:
     import: optional:file:./.env[.properties]
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:baef_external_platform}?createDatabaseIfNotExist=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: ${SIMULATOR_SQL_INIT_MODE:always}
+      schema-locations: classpath:db/schema.sql
+      data-locations: classpath:db/seed.sql
 
 management:
   endpoints:
@@ -16,7 +26,22 @@ management:
 provider:
   baemin:
     webhook-secret: ${BAEMIN_WEBHOOK_SECRET:}
+  coupang-eats:
+    webhook-secret: ${COUPANG_EATS_WEBHOOK_SECRET:}
+  yogiyo:
+    webhook-secret: ${YOGIYO_WEBHOOK_SECRET:}
+  ddangyo:
+    webhook-secret: ${DDANGYO_WEBHOOK_SECRET:}
 
 deliveryinsider:
   webhook:
-    base-url: ${DELIVERYINSIDER_WEBHOOK_BASE_URL:http://localhost:8080}
+    base-url: ${DELIVERYINSIDER_WEBHOOK_BASE_URL:http://localhost:8090}
+
+mybatis:
+  mapper-locations: classpath:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+simulator:
+  persistence:
+    mode: ${SIMULATOR_PERSISTENCE_MODE:mysql}

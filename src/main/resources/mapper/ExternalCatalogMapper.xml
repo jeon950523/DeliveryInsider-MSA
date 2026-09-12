@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.simulator.domain.catalog.mapper.ExternalCatalogMapper">
+
+    <select
+        id="findStores"
+        resultType="com.deliveryinsider.simulator.domain.catalog.dto.ExternalStoreResponse"
+    >
+        SELECT
+            provider_type AS platformType,
+            external_store_id AS externalStoreId,
+            store_name AS storeName,
+            enabled
+        FROM external_stores
+        WHERE provider_type = #{platformType}
+          AND enabled = 1
+        ORDER BY id ASC
+    </select>
+
+    <select
+        id="findMenus"
+        resultType="com.deliveryinsider.simulator.domain.catalog.dto.ExternalMenuResponse"
+    >
+        SELECT
+            provider_type AS platformType,
+            external_store_id AS externalStoreId,
+            external_menu_id AS externalMenuId,
+            catalog_key AS catalogKey,
+            menu_name AS menuName,
+            price,
+            enabled
+        FROM external_menus
+        WHERE provider_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+          AND enabled = 1
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <select
+        id="findStore"
+        resultType="com.deliveryinsider.simulator.domain.catalog.dto.ExternalStoreResponse"
+    >
+        SELECT
+            provider_type AS platformType,
+            external_store_id AS externalStoreId,
+            store_name AS storeName,
+            enabled
+        FROM external_stores
+        WHERE provider_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+        LIMIT 1
+    </select>
+
+    <select
+        id="findMenu"
+        resultType="com.deliveryinsider.simulator.domain.catalog.dto.ExternalMenuResponse"
+    >
+        SELECT
+            provider_type AS platformType,
+            external_store_id AS externalStoreId,
+            external_menu_id AS externalMenuId,
+            catalog_key AS catalogKey,
+            menu_name AS menuName,
+            price,
+            enabled
+        FROM external_menus
+        WHERE provider_type = #{platformType}
+          AND external_menu_id = #{externalMenuId}
+        LIMIT 1
+    </select>
+
+    <insert id="insertStore">
+        INSERT INTO external_stores (
+            provider_type,
+            external_store_id,
+            store_name,
+            enabled
+        )
+        VALUES (
+            #{platformType},
+            #{request.externalStoreId},
+            #{request.storeName},
+            #{request.enabled}
+        )
+    </insert>
+
+    <insert id="insertMenu">
+        INSERT INTO external_menus (
+            provider_type,
+            external_store_id,
+            external_menu_id,
+            catalog_key,
+            menu_name,
+            price,
+            enabled,
+            sort_order
+        )
+        VALUES (
+            #{platformType},
+            #{externalStoreId},
+            #{request.externalMenuId},
+            #{request.catalogKey},
+            #{request.menuName},
+            #{request.price},
+            #{request.enabled},
+            #{request.sortOrder}
+        )
+    </insert>
+
+</mapper>
