@@ -22,8 +22,8 @@ public class ReportOrderEventListener {
         projectionService;
 
     @KafkaListener(
-        topics = "${report.kafka.order-event-topic:order.events}",
-        groupId = "${report.kafka.order-consumer-group:report-order-event-group}",
+        topics = "${report.kafka.order-event-topic}",
+        groupId = "${report.kafka.order-consumer-group}",
         containerFactory =
             "reportOrderEventKafkaListenerContainerFactory"
     )
