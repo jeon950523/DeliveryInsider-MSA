@@ -16,6 +16,10 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  hasSelectedStore: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(['change-status', 'refresh']);
@@ -58,7 +62,7 @@ const hasOrders = computed(() => props.orders.length > 0);
         <span class="eyebrow">RECENT ORDERS</span>
         <h2>최근 주문</h2>
       </div>
-      <button type="button" class="secondary-button" @click="emit('refresh')">
+      <button type="button" class="secondary-button" :disabled="!hasSelectedStore" @click="emit('refresh')">
         새로고침
       </button>
     </div>
@@ -115,7 +119,9 @@ const hasOrders = computed(() => props.orders.length > 0);
     </div>
 
     <div v-else class="empty-state">
-      아직 생성한 주문이 없습니다.
+      {{ hasSelectedStore
+        ? '선택한 외부 매장에 아직 생성한 주문이 없습니다.'
+        : '외부 매장을 선택하면 최근 주문을 조회합니다.' }}
     </div>
   </section>
 </template>

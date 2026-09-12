@@ -21,7 +21,8 @@ import {
 
 const selectedProvider = ref('BAEMIN');
 const stores = ref([]);
-const selectedStoreId = ref('');
+// This is the only Store identity used by display, catalog, menu provision, orders, and recent orders.
+const selectedExternalStoreId = ref('');
 const menus = ref([]);
 const quantities = ref({});
 const recentOrders = ref([]);
@@ -30,12 +31,16 @@ const customerRequest = ref('문 앞에 놓아주세요.');
 const isLoadingCatalog = ref(false);
 const isCreating = ref(false);
 const isCreatingMenu = ref(false);
+const newMenuExternalId = ref('');
+const newMenuCatalogKey = ref('');
 const newMenuName = ref('');
 const newMenuPrice = ref('');
+const newMenuSortOrder = ref(0);
 const changingOrderId = ref('');
 const isBackendAvailable = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
+let selectionGeneration = 0;
 
 const selectedProviderLabel = computed(() => {
   return PROVIDERS.find((provider) => provider.type === selectedProvider.value)?.label
@@ -56,6 +61,12 @@ const menuNameMap = computed(() => {
     menus.value.map((menu) => [menu.externalMenuId, menu.menuName]),
   );
 });
+
+const hasSelectedExternalStore = computed(() => Boolean(selectedExternalStoreId.value));
+const isSelectionLocked = computed(() => isLoadingCatalog.value
+  || isCreating.value
+  || isCreatingMenu.value
+  || Boolean(changingOrderId.value));
 
 const clearMessageLater = () => {
   window.setTimeout(() => {
@@ -86,40 +97,122 @@ const initializeQuantities = () => {
   );
 };
 
+const resetMenuProvisionDraft = () => {
+  newMenuExternalId.value = '';
+  newMenuCatalogKey.value = '';
+  newMenuName.value = '';
+  newMenuPrice.value = '';
+  newMenuSortOrder.value = 0;
+};
+
+const resetStoreScopedState = () => {
+  menus.value = [];
+  quantities.value = {};
+  recentOrders.value = [];
+  resetMenuProvisionDraft();
+};
+
+const isCurrentScope = (provider, externalStoreId, generation) => {
+  return generation === selectionGeneration
+    && provider === selectedProvider.value
+    && externalStoreId === selectedExternalStoreId.value;
+};
+
+const loadStoreScope = async (provider, externalStoreId, generation) => {
+  if (!externalStoreId) {
+    return;
+  }
+
+  const [catalog, orders] = await Promise.all([
+    fetchExternalMenus(provider, externalStoreId),
+    fetchRecentOrders(provider, externalStoreId, 20),
+  ]);
+
+  if (!isCurrentScope(provider, externalStoreId, generation)) {
+    return;
+  }
+
+  menus.value = catalog;
+  initializeQuantities();
+  recentOrders.value = orders;
+};
+
 const loadRecentOrders = async () => {
+  const provider = selectedProvider.value;
+  const externalStoreId = selectedExternalStoreId.value;
+  const generation = selectionGeneration;
+
+  if (!externalStoreId) {
+    recentOrders.value = [];
+    return;
+  }
+
   try {
-    recentOrders.value = await fetchRecentOrders(selectedProvider.value, 20);
+    const orders = await fetchRecentOrders(provider, externalStoreId, 20);
+    if (isCurrentScope(provider, externalStoreId, generation)) {
+      recentOrders.value = orders;
+    }
   } catch (error) {
-    setError(error, '최근 주문을 불러오지 못했습니다.');
+    if (isCurrentScope(provider, externalStoreId, generation)) {
+      setError(error, '최근 주문을 불러오지 못했습니다.');
+    }
   }
 };
 
 const loadCatalog = async () => {
+  const provider = selectedProvider.value;
+  const generation = ++selectionGeneration;
+
   isLoadingCatalog.value = true;
   errorMessage.value = '';
+  successMessage.value = '';
+  stores.value = [];
+  selectedExternalStoreId.value = '';
+  resetStoreScopedState();
 
   try {
-    stores.value = await fetchExternalStores(selectedProvider.value);
-    selectedStoreId.value = stores.value[0]?.externalStoreId || '';
+    const providerStores = await fetchExternalStores(provider);
+    if (generation !== selectionGeneration || provider !== selectedProvider.value) {
+      return;
+    }
 
-    menus.value = selectedStoreId.value
-      ? await fetchExternalMenus(
-        selectedProvider.value,
-        selectedStoreId.value,
-      )
-      : [];
-
-    initializeQuantities();
-    await loadRecentOrders();
+    stores.value = providerStores;
+    selectedExternalStoreId.value = providerStores[0]?.externalStoreId || '';
+    await loadStoreScope(provider, selectedExternalStoreId.value, generation);
   } catch (error) {
-    stores.value = [];
-    selectedStoreId.value = '';
-    menus.value = [];
-    quantities.value = {};
-    recentOrders.value = [];
-    setError(error, '외부 플랫폼 카탈로그를 불러오지 못했습니다.');
+    if (generation === selectionGeneration) {
+      stores.value = [];
+      selectedExternalStoreId.value = '';
+      resetStoreScopedState();
+      setError(error, '외부 플랫폼 카탈로그를 불러오지 못했습니다.');
+    }
   } finally {
-    isLoadingCatalog.value = false;
+    if (generation === selectionGeneration) {
+      isLoadingCatalog.value = false;
+    }
+  }
+};
+
+const selectStore = async () => {
+  const provider = selectedProvider.value;
+  const externalStoreId = selectedExternalStoreId.value;
+  const generation = ++selectionGeneration;
+
+  isLoadingCatalog.value = true;
+  errorMessage.value = '';
+  successMessage.value = '';
+  resetStoreScopedState();
+
+  try {
+    await loadStoreScope(provider, externalStoreId, generation);
+  } catch (error) {
+    if (isCurrentScope(provider, externalStoreId, generation)) {
+      setError(error, '선택한 외부 매장의 카탈로그를 불러오지 못했습니다.');
+    }
+  } finally {
+    if (generation === selectionGeneration) {
+      isLoadingCatalog.value = false;
+    }
   }
 };
 
@@ -132,7 +225,10 @@ const changeQuantity = (externalMenuId, delta) => {
 };
 
 const createOrder = async () => {
-  if (!selectedStoreId.value || selectedItemCount.value === 0) {
+  const provider = selectedProvider.value;
+  const externalStoreId = selectedExternalStoreId.value;
+
+  if (!externalStoreId || selectedItemCount.value === 0) {
     return;
   }
 
@@ -142,7 +238,7 @@ const createOrder = async () => {
 
   try {
     const payload = createOrderPayload({
-      externalStoreId: selectedStoreId.value,
+      externalStoreId,
       menus: menus.value,
       quantities: quantities.value,
       deliveryAddress: deliveryAddress.value,
@@ -150,7 +246,7 @@ const createOrder = async () => {
     });
 
     const result = await createExternalOrder(
-      selectedProvider.value,
+      provider,
       payload,
     );
 
@@ -166,21 +262,31 @@ const createOrder = async () => {
 };
 
 const createMenu = async () => {
-  if (!selectedStoreId.value || !newMenuName.value.trim() || Number(newMenuPrice.value) < 0) return;
+  const provider = selectedProvider.value;
+  const externalStoreId = selectedExternalStoreId.value;
+
+  if (!externalStoreId || !newMenuExternalId.value.trim() || !newMenuCatalogKey.value.trim()
+    || !newMenuName.value.trim() || Number(newMenuPrice.value) < 0 || Number(newMenuSortOrder.value) < 0) return;
   isCreatingMenu.value = true; errorMessage.value = ''; successMessage.value = '';
   try {
-    const menu = await createExternalMenu(selectedProvider.value, selectedStoreId.value, {
-      menuName: newMenuName.value.trim(), price: Number(newMenuPrice.value),
+    const menu = await createExternalMenu(provider, externalStoreId, {
+      externalMenuId: newMenuExternalId.value.trim(),
+      catalogKey: newMenuCatalogKey.value.trim(),
+      menuName: newMenuName.value.trim(),
+      price: Number(newMenuPrice.value),
+      enabled: true,
+      sortOrder: Number(newMenuSortOrder.value),
     });
-    newMenuName.value = ''; newMenuPrice.value = '';
+    resetMenuProvisionDraft();
     successMessage.value = `${menu.externalMenuId} 메뉴를 등록했습니다.`;
-    menus.value = await fetchExternalMenus(selectedProvider.value, selectedStoreId.value);
-    initializeQuantities(); clearMessageLater();
+    await loadStoreScope(provider, externalStoreId, selectionGeneration);
+    clearMessageLater();
   } catch (error) { setError(error, '외부 메뉴를 등록하지 못했습니다.'); }
   finally { isCreatingMenu.value = false; }
 };
 
 const changeOrderStatus = async (order, status) => {
+  const provider = selectedProvider.value;
   changingOrderId.value = order.externalOrderId;
   errorMessage.value = '';
   successMessage.value = '';
@@ -199,7 +305,7 @@ const changeOrderStatus = async (order, status) => {
       };
 
     await changeExternalOrderStatus(
-      selectedProvider.value,
+      provider,
       order.externalOrderId,
       payload,
     );
@@ -245,7 +351,7 @@ onMounted(async () => {
     <main class="page-container">
       <ProviderTabs
         v-model="selectedProvider"
-        :disabled="isLoadingCatalog || isCreating"
+        :disabled="isSelectionLocked"
       />
 
       <section class="provider-overview">
@@ -255,7 +361,7 @@ onMounted(async () => {
         </div>
         <div>
           <span>외부 매장</span>
-          <strong>{{ selectedStoreId || '-' }}</strong>
+          <strong>{{ selectedExternalStoreId || '-' }}</strong>
         </div>
         <div>
           <span>메뉴 데이터</span>
@@ -263,16 +369,30 @@ onMounted(async () => {
         </div>
         <div>
           <span>최근 주문</span>
-          <strong>{{ recentOrders.length }}건</strong>
+          <strong>{{ hasSelectedExternalStore ? `${recentOrders.length}건` : '-' }}</strong>
         </div>
+      </section>
+
+      <section class="panel store-select-panel">
+        <label for="external-store-select">외부 매장</label>
+        <select id="external-store-select" v-model="selectedExternalStoreId" :disabled="isSelectionLocked" @change="selectStore">
+          <option value="" disabled>외부 매장을 선택하세요</option>
+          <option v-for="externalStore in stores" :key="externalStore.externalStoreId" :value="externalStore.externalStoreId">
+            {{ externalStore.externalStoreId }} / {{ externalStore.storeName }}
+          </option>
+        </select>
+        <p>이 화면은 8101 Simulator Backend만 호출합니다.</p>
       </section>
 
       <section class="panel menu-create-panel">
         <div class="panel-heading"><div><span class="eyebrow">EXTERNAL MENU</span><h2>메뉴 등록</h2></div><small>선택된 Provider / Store에만 등록됩니다.</small></div>
         <form class="menu-create-form" @submit.prevent="createMenu">
-          <label>메뉴명<input v-model="newMenuName" maxlength="160" required :disabled="isCreatingMenu"></label>
-          <label>판매가<input v-model.number="newMenuPrice" type="number" min="0" step="1" required :disabled="isCreatingMenu"></label>
-          <button type="submit" :disabled="isCreatingMenu || !selectedStoreId">{{ isCreatingMenu ? '등록 중...' : '+ 메뉴 등록' }}</button>
+          <label>외부 메뉴 ID<input v-model.trim="newMenuExternalId" maxlength="120" placeholder="예: DI-E2E-MENU-01" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <label>카탈로그 키<input v-model.trim="newMenuCatalogKey" maxlength="120" placeholder="예: DI_E2E_MENU_01" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <label>메뉴명<input v-model="newMenuName" maxlength="160" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <label>판매가<input v-model.number="newMenuPrice" type="number" min="0" step="1" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <label>정렬 순서<input v-model.number="newMenuSortOrder" type="number" min="0" step="1" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <button type="submit" :disabled="isSelectionLocked || !hasSelectedExternalStore">{{ isCreatingMenu ? '등록 중...' : '+ 메뉴 등록' }}</button>
         </form>
       </section>
 
@@ -289,17 +409,18 @@ onMounted(async () => {
         <MenuCatalog
           :menus="menus"
           :quantities="quantities"
-          :disabled="isLoadingCatalog || isCreating"
+          :disabled="isSelectionLocked"
+          :has-selected-store="hasSelectedExternalStore"
           @change-quantity="changeQuantity"
         />
 
         <OrderComposer
           v-model:delivery-address="deliveryAddress"
           v-model:customer-request="customerRequest"
-          :external-store-id="selectedStoreId"
+          :external-store-id="selectedExternalStoreId"
           :total-amount="totalAmount"
           :selected-item-count="selectedItemCount"
-          :disabled="isLoadingCatalog || isCreating"
+          :disabled="isSelectionLocked"
           @submit="createOrder"
         />
       </section>
@@ -308,6 +429,7 @@ onMounted(async () => {
         :orders="recentOrders"
         :menu-name-map="menuNameMap"
         :disabled-order-id="changingOrderId"
+        :has-selected-store="hasSelectedExternalStore"
         @change-status="changeOrderStatus"
         @refresh="loadRecentOrders"
       />

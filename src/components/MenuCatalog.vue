@@ -12,6 +12,10 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  hasSelectedStore: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(['change-quantity']);
@@ -63,7 +67,9 @@ const formatMoney = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원
     </div>
 
     <div v-else class="empty-state">
-      현재 선택한 플랫폼에 주문 가능한 메뉴가 없습니다.
+      {{ hasSelectedStore
+        ? '선택한 외부 매장에 주문 가능한 메뉴가 없습니다.'
+        : '외부 매장을 선택하면 메뉴를 조회합니다.' }}
     </div>
   </section>
 </template>

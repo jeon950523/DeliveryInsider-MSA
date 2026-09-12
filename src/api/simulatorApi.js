@@ -29,16 +29,16 @@ export const fetchExternalMenus = async (platformType, externalStoreId) => {
 
 export const createExternalMenu = async (platformType, externalStoreId, payload) => {
   const response = await simulatorApi.post(
-    `/api/catalog/providers/${platformType}/stores/${externalStoreId}/menus`,
+    `/api/control/providers/${platformType}/stores/${externalStoreId}/menus`,
     payload,
   );
   return response.data;
 };
 
-export const fetchRecentOrders = async (platformType, limit = 20) => {
+export const fetchRecentOrders = async (platformType, externalStoreId, limit = 20) => {
   const response = await simulatorApi.get(
     `/api/control/providers/${platformType}/orders`,
-    { params: { limit } },
+    { params: { externalStoreId, limit } },
   );
   return response.data;
 };
