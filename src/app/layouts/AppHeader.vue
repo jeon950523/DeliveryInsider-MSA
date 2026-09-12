@@ -21,6 +21,7 @@ const isNotiOpen = ref(false)
 const dropdownContainer = ref(null)
 const notifications = ref([])
 const isNotificationLoading = ref(false)
+const notificationError = ref('')
 
 const DISMISSED_NOTIFICATION_STORAGE_KEY = 'deliveryinsider.dismissedHeaderNotifications.v2'
 const ACTIVE_ORDER_STATUSES = ['WAITING', 'COOKING', 'READY_FOR_PICKUP', 'DELIVERING']
@@ -171,6 +172,7 @@ const findHeaderNotifications = async () => {
 
   try {
     isNotificationLoading.value = true
+    notificationError.value = ''
 
     const result = await fetchTodayOrders()
     if (!active || request !== requestVersion || !authStore.isLoggedIn) return
@@ -178,7 +180,10 @@ const findHeaderNotifications = async () => {
 
     notifications.value = buildNotificationsFromOrders(todayOrders)
   } catch (error) {
-    if (active && request === requestVersion) notifications.value = []
+    if (active && request === requestVersion) {
+      notifications.value = []
+      notificationError.value = '알림을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
+    }
   } finally {
     if (active && request === requestVersion) isNotificationLoading.value = false
   }
@@ -252,9 +257,14 @@ const logout = async () => {
           <div v-if="isNotificationLoading" class="notification-empty">
             알림을 불러오는 중입니다.
           </div>
+
+          <div v-else-if="notificationError" class="notification-empty notification-error" role="alert">
+            <span>{{ notificationError }}</span>
+            <button type="button" @click="findHeaderNotifications">다시 시도</button>
+          </div>
           
           <button 
-            v-for="(noti, index) in notifications" 
+            v-for="(noti, index) in notificationError ? [] : notifications"
             :key="`${noti.title}-${index}`"
             type="button" 
             class="notification-item" 
@@ -264,7 +274,7 @@ const logout = async () => {
             <small>{{ noti.description }}</small>
           </button>
 
-          <div v-if="!isNotificationLoading && !notifications.length" class="notification-empty">
+          <div v-if="!isNotificationLoading && !notificationError && !notifications.length" class="notification-empty">
             새로운 알림이 없습니다.
           </div>
         </div>
@@ -463,4 +473,8 @@ const logout = async () => {
   font-size: 14px;
   font-weight: 600;
 }
+
+.notification-error { color: #b42318; }
+.notification-error span { display: block; }
+.notification-error button { margin-top: 10px; border: 0; border-radius: 8px; padding: 7px 12px; background: #fee4e2; color: #912018; font-weight: 800; cursor: pointer; }
 </style>
