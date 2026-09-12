@@ -1,0 +1,14 @@
+.git
+.gradle
+.idea
+*.iml
+.env
+.env.*
+src
+gradle
+gradlew
+gradlew.bat
+build/*
+!build/libs/
+build/libs/*
+!build/libs/app.jar
