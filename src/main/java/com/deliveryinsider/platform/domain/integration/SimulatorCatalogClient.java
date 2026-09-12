@@ -54,6 +54,22 @@ public class SimulatorCatalogClient {
         }
     }
 
+    public List<ExternalStoreResponse> findStores(PlatformType platformType) {
+        try {
+            ExternalStoreResponse[] result = client(platformType).get().uri(
+                "/api/catalog/providers/{platformType}/stores", platformType
+            ).retrieve().body(ExternalStoreResponse[].class);
+            return result == null ? List.of() : List.of(result);
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().value() == 404) return List.of();
+            throw new BusinessException(PlatformIntegrationError.EXTERNAL_CATALOG_UNAVAILABLE, e);
+        } catch (ResourceAccessException e) {
+            throw new BusinessException(PlatformIntegrationError.EXTERNAL_CATALOG_UNAVAILABLE, e);
+        } catch (RestClientException e) {
+            throw new BusinessException(PlatformIntegrationError.EXTERNAL_CATALOG_UNAVAILABLE, e);
+        }
+    }
+
     private RestClient client(PlatformType platformType) {
         String baseUrl = Objects.requireNonNull(baseUrls.get(platformType));
         var factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build());

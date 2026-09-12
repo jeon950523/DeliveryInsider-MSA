@@ -13,6 +13,14 @@ public interface PlatformIntegrationMapper {
     List<StorePlatformSetting> findAll(@Param("storeId") long storeId);
     Optional<StorePlatformSetting> findOne(@Param("storeId") long storeId, @Param("platformType") PlatformType platformType);
     Optional<StorePlatformSetting> findForUpdate(@Param("storeId") long storeId, @Param("platformType") PlatformType platformType);
+    Optional<StorePlatformSetting> findActiveByExternalStoreId(
+        @Param("platformType") PlatformType platformType,
+        @Param("externalStoreId") String externalStoreId
+    );
+    Optional<StorePlatformSetting> findActiveByExternalStoreIdForUpdate(
+        @Param("platformType") PlatformType platformType,
+        @Param("externalStoreId") String externalStoreId
+    );
     void insert(StorePlatformSetting setting);
     int update(StorePlatformSetting setting);
     void moveMenuMappings(@Param("storeId") long storeId, @Param("platformType") PlatformType platformType,
