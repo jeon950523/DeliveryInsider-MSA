@@ -9,6 +9,7 @@ import { useDashboardStore } from '../features/dashboard/stores/useDashboardStor
 import { createCoalescedRefresh } from '../features/notification/utils/orderConnection.js';
 import AppSidebar from './layouts/AppSidebar.vue';
 import AppHeader from './layouts/AppHeader.vue'; 
+import GuidedTutorial from '../features/onboarding/components/GuidedTutorial.vue';
 
 const isSidebarOpen = ref(true);
 const route = useRoute();
@@ -18,6 +19,7 @@ const store = useStoreStore();
 const orders = useOrderStore();
 const realtime = useOrderRealtimeStore();
 const dashboard = useDashboardStore();
+const tutorial = ref(null);
 
 const newOrderNoticeCount = ref(0);
 const newOrderNoticeLastOrderId = ref(null);
@@ -107,12 +109,18 @@ onBeforeUnmount(() => {
         v-if="!$route.meta.hideLayout"
         class="header-area" 
         @toggle-menu="isSidebarOpen = !isSidebarOpen" 
+        @open-guide="tutorial?.start()"
       />
       
       <main class="page-area" :class="{ 'no-padding': $route.meta.hideLayout }">
         <RouterView />
       </main>
     </div>
+
+    <GuidedTutorial
+      v-if="!$route.meta.hideLayout"
+      ref="tutorial"
+    />
     
     <aside
       v-if="isNewOrderNoticeVisible"

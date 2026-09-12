@@ -10,6 +10,7 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const realtime = useOrderRealtimeStore()
+const emit = defineEmits(['open-guide'])
 let active = true
 let requestVersion = 0
 const refreshQueue = createCoalescedRefresh(() => findHeaderNotifications())
@@ -270,6 +271,12 @@ const logout = async () => {
       </div>
 
       <!-- 직관적인 외부 액션 버튼 -->
+      <button
+        type="button"
+        class="header-action-button"
+        data-tour="guide-entry"
+        @click="emit('open-guide')"
+      >사용 가이드</button>
       <button type="button" class="header-action-button" @click="router.push('/profile')">내 정보</button>
       <button type="button" class="header-action-button logout" @click="logout">로그아웃</button>
 

@@ -599,7 +599,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="report-page page-section">
+  <section class="report-page page-section" data-tour="report-overview">
     <header class="page-header report-page-header">
       <div>
         <span class="category-text">OPERATION REPORT</span>
@@ -623,6 +623,7 @@ onMounted(async () => {
     </section>
 
     <ReportAiInsightPanel
+      data-tour="ai-insights"
       :filters="filters"
       :can-use-ai="canUseAi"
       :has-loaded="reportStore.hasLoaded"

@@ -433,7 +433,7 @@ const handleOperationSubmit = async () => {
     <p v-if="saveError" role="alert">{{ saveError }}</p>
     <div class="tabs-mock">
       <button class="tab" :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">기본정보</button>
-      <button class="tab" :class="{ active: activeTab === 'platform' }" @click="activeTab = 'platform'">플랫폼 연결 설정</button>
+      <button data-tour="platform-settings" class="tab" :class="{ active: activeTab === 'platform' }" @click="activeTab = 'platform'">플랫폼 연결 설정</button>
       <button class="tab" :class="{ active: activeTab === 'operation' }" @click="activeTab = 'operation'">운영 설정</button>
     </div>
 

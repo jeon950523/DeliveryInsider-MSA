@@ -1021,7 +1021,7 @@ const submitRefund = async () => {
 </script>
 
 <template>
-  <div class="orders-view">
+  <div class="orders-view" data-tour="order-management">
     <p v-if="orderStore.errorMessage" role="alert">{{ orderStore.errorMessage }}</p>
     <header class="page-header">
       <div>
