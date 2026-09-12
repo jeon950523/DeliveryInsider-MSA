@@ -24,7 +24,7 @@ public class BillingOutboxWriter {
     private final OutboxEventMapper outboxEventMapper;
     private final JsonMapper jsonMapper;
 
-    @Value("${billing.kafka.topic:billing.events}")
+    @Value("${billing.kafka.topic}")
     private String billingEventsTopic;
 
     public void appendSubscriptionActivated(

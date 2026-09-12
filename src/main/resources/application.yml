@@ -82,7 +82,7 @@ billing:
       batch-size: ${BILLING_SUBSCRIPTION_EXPIRATION_BATCH_SIZE:50}
     past-due-recovery-days: ${BILLING_PAST_DUE_RECOVERY_DAYS:7}
   kafka:
-    topic: ${BILLING_EVENTS_TOPIC:billing.events}
+    topic: ${BILLING_EVENTS_TOPIC:${KAFKA_TOPIC_PREFIX:}billing.events}
   payment:
     reconciliation:
       fixed-delay-ms: ${BILLING_PAYMENT_RECONCILIATION_DELAY_MS:5000}
