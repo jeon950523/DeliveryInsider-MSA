@@ -1,10 +1,11 @@
 <script setup>
 import { onBeforeMount, reactive, ref, computed, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useMenuStore } from '../stores/useMenuStore.js';
 
 const store = useMenuStore();
 const route = useRoute();
+const router = useRouter();
 
 // 탭 상태 관리 (base: 메뉴 기준정보, platform: 플랫폼 수수료 기준 단품 수익 비교, loss: 숨은 손실 메뉴)
 const activeMenuTab = ref('base');
@@ -83,6 +84,13 @@ const openAddModal = () => {
   selectedMenuId.value = null;
   Object.keys(formData).forEach(key => formData[key] = '');
   isModalOpen.value = true;
+};
+
+const goToPlatformMenuConnection = () => {
+  router.push({
+    path: '/store',
+    query: { tab: 'platform' },
+  });
 };
 
 const openEditModal = (menu) => {
@@ -318,6 +326,14 @@ const platformCandidateMenus = computed(() => {
 
 const platformPolicies = computed(() => {
   return referencePlatformPolicies;
+});
+
+const hasRegisteredMenus = computed(() => {
+  return enrichedMenus.value.length > 0;
+});
+
+const shouldShowMenuRegistrationOnboarding = computed(() => {
+  return store.isMenuListLoaded && !hasRegisteredMenus.value;
 });
 
 const selectedCompareMenu = computed(() => {
@@ -766,7 +782,24 @@ const restoreDismissedLossMenu = async (menu) => {
           </thead>
           <tbody>
             <tr v-if="filteredBaseMenus.length === 0">
-              <td colspan="9" class="empty-state">조건에 맞는 메뉴가 없습니다.</td>
+              <td colspan="9" class="empty-state">
+                <template v-if="shouldShowMenuRegistrationOnboarding">
+                  <strong>등록된 메뉴가 없습니다.</strong>
+                  <p>외부 주문을 정상 처리하고 수익을 분석하려면 먼저 메뉴를 등록하고 플랫폼 메뉴와 연결해 주세요.</p>
+                  <div class="menu-empty-actions">
+                    <button type="button" class="primary-button" @click="openAddModal">메뉴 등록</button>
+                    <button type="button" class="sub-button" @click="goToPlatformMenuConnection">메뉴 등록/연결</button>
+                  </div>
+                </template>
+                <template v-else-if="store.menuListError">
+                  <strong>메뉴 목록을 불러오지 못했습니다.</strong>
+                  <p>{{ store.menuListError }}</p>
+                  <div class="menu-empty-actions">
+                    <button type="button" class="sub-button" @click="store.fetchMenus">다시 조회</button>
+                  </div>
+                </template>
+                <template v-else>조건에 맞는 메뉴가 없습니다.</template>
+              </td>
             </tr>
             <tr
               v-else
@@ -1344,6 +1377,27 @@ const restoreDismissedLossMenu = async (menu) => {
   padding: 60px !important;
   color: #9ca3af;
   font-size: 16px;
+}
+
+.empty-state strong {
+  display: block;
+  color: #334155;
+  font-size: 18px;
+}
+
+.empty-state p {
+  max-width: 560px;
+  margin: 12px auto 0;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.menu-empty-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
 }
 
 /* 탭 2: 플랫폼 수수료 비교 */

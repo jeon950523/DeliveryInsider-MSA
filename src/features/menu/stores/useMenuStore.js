@@ -1,23 +1,40 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { createMenu as createMenuApi, deleteMenu as deleteMenuApi, dismissLossMenu as dismissLossMenuApi, fetchLossDismissals as fetchLossDismissalsApi, fetchMenuMarginAnalysisLegacy, fetchMenus as fetchMenusApi, restoreLossMenu as restoreLossMenuApi, updateMenu as updateMenuApi } from '../api/menuApi.js';
+import { createMenu as createMenuApi, deleteMenu as deleteMenuApi, dismissLossMenu as dismissLossMenuApi, fetchLossDismissals as fetchLossDismissalsApi, fetchMenus as fetchMenusApi, restoreLossMenu as restoreLossMenuApi, updateMenu as updateMenuApi } from '../api/menuApi.js';
 
 export const useMenuStore = defineStore('menu', () => {
   const menuList = ref([]);
   const lossDismissals = ref([]);
+  const isMenuListLoaded = ref(false);
+  const menuListError = ref('');
+
+  const requireMenuList = (result) => {
+    const menus = result?.data?.data;
+
+    if (!Array.isArray(menus)) {
+      throw new TypeError('메뉴 목록 응답 형식이 올바르지 않습니다.');
+    }
+
+    return menus;
+  };
 // 2. 액션 (Actions)
-  // [조회] 메뉴 목록 및 마진 분석 데이터 불러오기 (GET)
+  // [조회] 현재 매장의 내부 메뉴 목록을 불러온다.
   const fetchMenus = async () => {
+    isMenuListLoaded.value = false;
+    menuListError.value = '';
+
     try {
-      // 백엔드의 MenuController에 작성된 마진 분석 전용 API 주소
-      const url = '/api/menus/margin-analysis'; 
-      const result = await fetchMenuMarginAnalysisLegacy();
+      const result = await fetchMenusApi();
       
       // 서버에서 준 데이터를 상태(State)에 저장
-      menuList.value = result.data.data || [];
+      menuList.value = requireMenuList(result);
+      isMenuListLoaded.value = true;
+      return menuList.value;
     } catch (error) {
       console.warn("메뉴 목록을 불러오지 못했습니다.", error);
-      menuList.value = []; // 에러 시 빈 배열로 초기화하여 화면 깨짐 방지
+      menuList.value = [];
+      menuListError.value = '메뉴 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      return [];
     }
   };
 
@@ -60,15 +77,21 @@ export const useMenuStore = defineStore('menu', () => {
 
   // 내 활성 메뉴 조회
   const getAllMenus = async () => {
+    isMenuListLoaded.value = false;
+    menuListError.value = '';
+
     try {
-      const url = '/api/menus'; 
       const result = await fetchMenusApi();
       
       // 서버에서 준 데이터를 상태(State)에 저장
-      menuList.value = result.data.data || [];
+      menuList.value = requireMenuList(result);
+      isMenuListLoaded.value = true;
+      return menuList.value;
     } catch (error) {
       console.warn("메뉴 목록을 불러오지 못했습니다.", error);
-      menuList.value = []; // 에러 시 빈 배열로 초기화하여 화면 깨짐 방지
+      menuList.value = [];
+      menuListError.value = '메뉴 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      return [];
     }
   };
 
@@ -122,6 +145,8 @@ export const useMenuStore = defineStore('menu', () => {
     // state
     menuList,
     lossDismissals,
+    isMenuListLoaded,
+    menuListError,
     
     // actions
     fetchMenus,

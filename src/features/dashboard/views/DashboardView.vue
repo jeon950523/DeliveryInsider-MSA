@@ -8,7 +8,10 @@ import {
   formatKstTime,
   getCurrentStageLabel,
 } from '../../../shared/utils/timeFormatters.js';
-import { fetchIntegrations } from '../../platform/connection/api/platformIntegrationApi.js';
+import {
+  fetchIntegrations,
+  fetchOwnedMenus,
+} from '../../platform/connection/api/platformIntegrationApi.js';
 
 const router = useRouter();
 const dashboardStore = useDashboardStore();
@@ -19,6 +22,7 @@ const nowTick = ref(new Date());
 let elapsedTimer = null;
 const platformConnectionChecked = ref(false);
 const hasActivePlatformConnection = ref(false);
+const hasRegisteredMenus = ref(false);
 const platformConnectionNoticeDismissed = ref(false);
 
 const platformNames = {
@@ -221,9 +225,25 @@ const operationBrief = computed(() => {
 
 const shouldShowPlatformConnectionNotice = computed(() => (
   platformConnectionChecked.value
-  && !hasActivePlatformConnection.value
+  && (!hasActivePlatformConnection.value || !hasRegisteredMenus.value)
   && !platformConnectionNoticeDismissed.value
 ));
+
+const platformConnectionNotice = computed(() => {
+  if (!hasActivePlatformConnection.value) {
+    return {
+      title: '배달 플랫폼 연결을 설정해 주세요.',
+      description: '현재 배민 Simulator 연결이 없습니다. 외부 매장을 선택한 뒤 메뉴를 연결하면 테스트 주문을 받을 수 있습니다.',
+      action: '연결 설정',
+    };
+  }
+
+  return {
+    title: '등록된 메뉴가 없습니다.',
+    description: '외부 주문을 정상 처리하고 수익을 분석하려면 먼저 메뉴를 등록하고 플랫폼 메뉴와 연결해 주세요.',
+    action: '메뉴 등록/연결',
+  };
+});
 
 const apiStatusText = computed(() => {
   if (dashboardStore.isLoading) {
@@ -252,11 +272,21 @@ const loadDashboard = async () => {
 const loadPlatformConnection = async () => {
   platformConnectionChecked.value = false;
   try {
-    const response = await fetchIntegrations();
-    const integrations = response?.data?.data;
+    const [integrationResponse, menuResponse] = await Promise.all([
+      fetchIntegrations(),
+      fetchOwnedMenus(),
+    ]);
+    const integrations = integrationResponse?.data?.data;
+    const menus = menuResponse?.data?.data;
+
+    if (!Array.isArray(integrations) || !Array.isArray(menus)) {
+      throw new TypeError('플랫폼 연결 또는 메뉴 목록 응답 형식이 올바르지 않습니다.');
+    }
+
     hasActivePlatformConnection.value = Array.isArray(integrations)
       && integrations.some((item) => item.enabled === true
-        && item.connectionStatus === 'ACTIVE');
+        && Boolean(item.externalStoreId));
+    hasRegisteredMenus.value = menus.length > 0;
     platformConnectionChecked.value = true;
   } catch (error) {
     console.warn('플랫폼 연결 상태 조회 실패:', error);
@@ -338,12 +368,12 @@ onBeforeUnmount(() => {
 
       <section v-if="shouldShowPlatformConnectionNotice" class="platform-connection-notice col-12" data-testid="platform-connection-notice">
         <div>
-          <strong>배달 플랫폼 연결을 설정해 주세요.</strong>
-          <p>현재 배민 Simulator 연결이 없습니다. 외부 매장을 선택한 뒤 메뉴를 연결하면 테스트 주문을 받을 수 있습니다.</p>
+          <strong>{{ platformConnectionNotice.title }}</strong>
+          <p>{{ platformConnectionNotice.description }}</p>
         </div>
         <div class="platform-connection-notice__actions">
           <button type="button" class="sub-button" @click="platformConnectionNoticeDismissed = true">나중에</button>
-          <button type="button" class="primary-button" @click="goToPlatformConnection">연결 설정</button>
+          <button type="button" class="primary-button" @click="goToPlatformConnection">{{ platformConnectionNotice.action }}</button>
         </div>
       </section>
 
