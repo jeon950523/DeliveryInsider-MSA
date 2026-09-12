@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -43,6 +44,46 @@ public class SimulatorCatalogClient {
             ExternalMenuResponse[] result = client(platformType).get().uri(
                 "/api/catalog/providers/{platformType}/stores/{externalStoreId}/menus", platformType, externalStoreId
             ).retrieve().body(ExternalMenuResponse[].class);
+            return result == null ? List.of() : List.of(result);
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().value() == 404) return List.of();
+            throw new BusinessException(PlatformIntegrationError.EXTERNAL_CATALOG_UNAVAILABLE, e);
+        } catch (ResourceAccessException e) {
+            throw new BusinessException(PlatformIntegrationError.EXTERNAL_CATALOG_UNAVAILABLE, e);
+        } catch (RestClientException e) {
+            throw new BusinessException(PlatformIntegrationError.EXTERNAL_CATALOG_UNAVAILABLE, e);
+        }
+    }
+
+    public List<ExternalStoreResponse> findStores(PlatformType platformType) {
+        try {
+            ExternalStoreResponse[] result = client(platformType).get().uri(
+                "/api/catalog/providers/{platformType}/stores", platformType
+            ).retrieve().body(ExternalStoreResponse[].class);
+            return result == null ? List.of() : List.of(result);
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().value() == 404) return List.of();
+            throw new BusinessException(PlatformIntegrationError.EXTERNAL_CATALOG_UNAVAILABLE, e);
+        } catch (ResourceAccessException e) {
+            throw new BusinessException(PlatformIntegrationError.EXTERNAL_CATALOG_UNAVAILABLE, e);
+        } catch (RestClientException e) {
+            throw new BusinessException(PlatformIntegrationError.EXTERNAL_CATALOG_UNAVAILABLE, e);
+        }
+    }
+
+    public List<ExternalAdSpendResponse> findAdSpend(
+        PlatformType platformType,
+        String externalStoreId,
+        LocalDate from,
+        LocalDate to
+    ) {
+        try {
+            ExternalAdSpendResponse[] result = client(platformType).get().uri(builder -> builder
+                .path("/api/control/providers/{platformType}/stores/{externalStoreId}/ad-spend")
+                .queryParamIfPresent("from", java.util.Optional.ofNullable(from))
+                .queryParamIfPresent("to", java.util.Optional.ofNullable(to))
+                .build(platformType, externalStoreId))
+                .retrieve().body(ExternalAdSpendResponse[].class);
             return result == null ? List.of() : List.of(result);
         } catch (RestClientResponseException e) {
             if (e.getStatusCode().value() == 404) return List.of();

@@ -20,6 +20,17 @@ public class PlatformIntegrationController {
         return GlobalResponse.success("현재 매장의 플랫폼 연결 설정입니다.", service.list(userId).stream().map(PlatformIntegrationResponse::from).toList());
     }
 
+    @GetMapping("/{platformType}/external-stores")
+    public GlobalResponse<List<ExternalStoreResponse>> availableExternalStores(
+        @RequestHeader("X-User-Id") Long userId,
+        @PathVariable PlatformType platformType
+    ) {
+        return GlobalResponse.success(
+            "현재 매장에서 연결할 수 있는 Simulator 외부 매장입니다.",
+            service.availableExternalStores(userId, platformType)
+        );
+    }
+
     @PutMapping("/{platformType}")
     public GlobalResponse<PlatformIntegrationResponse> save(@RequestHeader("X-User-Id") Long userId,
         @PathVariable PlatformType platformType, @Valid @RequestBody PlatformIntegrationRequest request) {

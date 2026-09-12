@@ -3,6 +3,7 @@ package com.deliveryinsider.platform.domain.integration;
 import com.deliveryinsider.platform.domain.catalog.entity.MenuCatalogProjection;
 import com.deliveryinsider.platform.domain.catalog.mapper.MenuCatalogProjectionMapper;
 import com.deliveryinsider.platform.domain.catalog.model.MenuCatalogStatus;
+import com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping;
 import com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting;
 import com.deliveryinsider.platform.domain.mapping.mapper.PlatformMenuMappingMapper;
 import com.deliveryinsider.platform.domain.provider.PlatformType;
@@ -40,7 +41,21 @@ class PlatformIntegrationServiceTest {
         inbox,
         orderLoaderResolver
     );
-    @BeforeEach void owner() { when(store.findOwnedStoreId(10L)).thenReturn(1L); }
+    @BeforeEach void owner() {
+        when(store.findOwnedStoreId(10L)).thenReturn(1L);
+        when(mapper.findActiveByExternalStoreIdForUpdate(any(), anyString())).thenReturn(Optional.empty());
+    }
+
+    private void catalogStore(String externalStoreId) {
+        when(simulatorCatalog.findStores(PlatformType.BAEMIN)).thenReturn(List.of(
+            new ExternalStoreResponse(
+                PlatformType.BAEMIN,
+                externalStoreId,
+                "Simulator Store " + externalStoreId,
+                true
+            )
+        ));
+    }
     private StorePlatformSetting existing() {
         var setting = new StorePlatformSetting();
         setting.setId(1L); setting.setStoreId(1L); setting.setPlatformType(PlatformType.BAEMIN);
@@ -63,19 +78,21 @@ class PlatformIntegrationServiceTest {
             new PlatformIntegrationRequest("external-1", true, "SIMULATOR"))).isInstanceOf(BusinessException.class);
         verifyNoInteractions(mapper, catalog);
     }
-    @Test void newSettingIsPendingNotFakeConnected() {
+    @Test void newSettingIsActiveAfterSimulatorCatalogVerification() {
         when(mapper.findForUpdate(1L, PlatformType.BAEMIN)).thenReturn(Optional.empty());
+        catalogStore("external-1");
         var setting = service.save(10L, PlatformType.BAEMIN, new PlatformIntegrationRequest(" external-1 ", true, "SIMULATOR"));
         assertThat(setting.getStoreId()).isEqualTo(1L);
         assertThat(setting.getExternalStoreId()).isEqualTo("external-1");
-        assertThat(setting.getConnectionStatus()).isEqualTo("PENDING");
+        assertThat(setting.getConnectionStatus()).isEqualTo("ACTIVE");
         assertThat(setting.getLastSuccessAt()).isNull();
         verify(mapper).insert(setting);
     }
     @Test void identityChangeResetsEvidenceAndMovesOnlyOwnedMappings() {
         var setting = existing();
+        catalogStore("external-new");
         service.save(10L, PlatformType.BAEMIN, new PlatformIntegrationRequest("external-new", true, "SIMULATOR"));
-        assertThat(setting.getConnectionStatus()).isEqualTo("PENDING");
+        assertThat(setting.getConnectionStatus()).isEqualTo("ACTIVE");
         assertThat(setting.getLastSuccessAt()).isNull();
         verify(mapper).moveMenuMappings(1L, PlatformType.BAEMIN, "external-new");
     }
@@ -89,11 +106,28 @@ class PlatformIntegrationServiceTest {
     }
     @Test void duplicateIdentityBecomesConflictWithoutLeakingOwner() {
         when(mapper.findForUpdate(1L, PlatformType.BAEMIN)).thenReturn(Optional.empty());
+        catalogStore("external-1");
         doThrow(new DuplicateKeyException("private database details")).when(mapper).insert(any());
         assertThatThrownBy(() -> service.save(10L, PlatformType.BAEMIN,
             new PlatformIntegrationRequest("external-1", true, "SIMULATOR")))
             .isInstanceOfSatisfying(BusinessException.class,
                 error -> assertThat(error.errorCode()).isEqualTo(PlatformIntegrationError.IDENTITY_CONFLICT));
+    }
+    @Test void activeExternalStoreOwnedByAnotherStoreIsRejected() {
+        catalogStore("external-1");
+        var foreignOwner = new StorePlatformSetting();
+        foreignOwner.setStoreId(2L);
+        when(mapper.findActiveByExternalStoreIdForUpdate(PlatformType.BAEMIN, "external-1"))
+            .thenReturn(Optional.of(foreignOwner));
+
+        assertThatThrownBy(() -> service.save(10L, PlatformType.BAEMIN,
+            new PlatformIntegrationRequest("external-1", true, "SIMULATOR")))
+            .isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.errorCode()).isEqualTo(PlatformIntegrationError.EXTERNAL_STORE_CONNECTED));
+
+        verify(mapper, never()).findForUpdate(anyLong(), any());
+        verify(mapper, never()).insert(any());
+        verify(mapper, never()).update(any());
     }
     @Test void otherStoreMenuIsForbidden() {
         existing();
@@ -213,6 +247,36 @@ class PlatformIntegrationServiceTest {
         assertThat(result.getExternalMenuId()).isEqualTo("external-menu");
         verify(mapper).insertMenu(result);
         verify(inbox).requeueBlockedForMenuResolution();
+    }
+
+    @Test void creatingAndConnectingAnExternalMenuCreatesOneOwnedMenuAndStoresItsMapping() {
+        existing();
+        var external = new ExternalMenuResponse(PlatformType.BAEMIN, "external-1", "external-new", "새 외부 메뉴", 12000, true);
+        when(simulatorCatalog.findMenus(PlatformType.BAEMIN, "external-1")).thenReturn(List.of(external));
+        when(store.createMenu(eq(1L), any())).thenReturn(new PlatformStoreClient.CreatedMenu(21L, "새 외부 메뉴", 12000));
+        when(menuMappings.findByExternalIdentity(PlatformType.BAEMIN, "external-1", "external-new"))
+            .thenReturn(Optional.empty());
+        when(mapper.findMenu(1L, PlatformType.BAEMIN, 21L)).thenReturn(Optional.empty());
+
+        PlatformMenuMapping result = service.createAndConnectMenu(
+            10L,
+            PlatformType.BAEMIN,
+            "external-new",
+            new ExternalMenuConnectionRequest.CreateAndConnect(7000, 1000, 15)
+        );
+
+        assertThat(result.getStoreId()).isEqualTo(1L);
+        assertThat(result.getExternalStoreId()).isEqualTo("external-1");
+        assertThat(result.getExternalMenuId()).isEqualTo("external-new");
+        assertThat(result.getMenuId()).isEqualTo(21L);
+        verify(store).createMenu(eq(1L), argThat(request ->
+            request.menuName().equals("새 외부 메뉴")
+                && request.menuPrice().equals(12000)
+                && request.menuCost().equals(7000)
+                && request.packagingFee().equals(1000)
+                && request.expectedCookingTime().equals(15)
+        ));
+        verify(mapper).insertMenu(result);
     }
 
     @Test

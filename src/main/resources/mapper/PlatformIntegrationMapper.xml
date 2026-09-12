@@ -16,6 +16,25 @@
         SELECT <include refid="settingColumns"/> FROM store_platform_settings
         WHERE store_id = #{storeId} AND platform_type = #{platformType} FOR UPDATE
     </select>
+    <select id="findActiveByExternalStoreId" resultType="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
+        SELECT <include refid="settingColumns"/> FROM store_platform_settings
+        WHERE platform_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+          AND enabled = 1
+          AND connection_status = 'ACTIVE'
+        ORDER BY id
+        LIMIT 1
+    </select>
+    <select id="findActiveByExternalStoreIdForUpdate" resultType="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
+        SELECT <include refid="settingColumns"/> FROM store_platform_settings
+        WHERE platform_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+          AND enabled = 1
+          AND connection_status = 'ACTIVE'
+        ORDER BY id
+        LIMIT 1
+        FOR UPDATE
+    </select>
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO store_platform_settings (store_id, platform_type, external_store_id, enabled, connection_status, environment)
         VALUES (#{storeId}, #{platformType}, #{externalStoreId}, #{enabled}, #{connectionStatus}, #{environment})

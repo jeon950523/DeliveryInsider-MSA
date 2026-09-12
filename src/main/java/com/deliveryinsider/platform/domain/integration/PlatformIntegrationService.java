@@ -31,6 +31,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.time.LocalDate;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -56,21 +57,85 @@ public class PlatformIntegrationService {
             .orElseThrow(() -> new BusinessException(PlatformIntegrationError.SETTING_NOT_FOUND));
     }
 
+    /**
+     * This list is scoped by the current user's Store and deliberately excludes an active
+     * external-store identity that belongs to another Store.  The Client never queries 8101.
+     */
+    @Transactional(readOnly = true)
+    public List<ExternalStoreResponse> availableExternalStores(Long userId, PlatformType platform) {
+        long storeId = storeClient.findOwnedStoreId(userId);
+        return simulatorCatalog.findStores(platform).stream()
+            .filter(ExternalStoreResponse::enabled)
+            .filter(externalStore -> externalStore.platformType() == platform)
+            .filter(externalStore -> mapper.findActiveByExternalStoreId(
+                platform,
+                externalStore.externalStoreId()
+            ).map(owner -> owner.getStoreId() == storeId).orElse(true))
+            .toList();
+    }
+
+    /**
+     * Report reaches simulator advertising data through this authenticated
+     * internal contract. The currently active connection must still own the
+     * requested Provider/External Store pair; otherwise the expense is
+     * unavailable rather than represented as zero.
+     */
+    @Transactional(readOnly = true)
+    public PlatformAdSpendResponse findAdSpend(
+        long storeId,
+        PlatformType platform,
+        String externalStoreId,
+        LocalDate from,
+        LocalDate to
+    ) {
+        if (from != null && to != null && from.isAfter(to)) {
+            return new PlatformAdSpendResponse(platform, externalStoreId, false, List.of());
+        }
+
+        Optional<StorePlatformSetting> setting = mapper.findOne(storeId, platform);
+        if (setting.isEmpty()
+            || !setting.get().isEnabled()
+            || !"ACTIVE".equals(setting.get().getConnectionStatus())
+            || !Objects.equals(setting.get().getExternalStoreId(), externalStoreId)) {
+            return new PlatformAdSpendResponse(platform, externalStoreId, false, List.of());
+        }
+
+        return new PlatformAdSpendResponse(
+            platform,
+            externalStoreId,
+            true,
+            simulatorCatalog.findAdSpend(platform, externalStoreId, from, to)
+        );
+    }
+
     @Transactional
     public StorePlatformSetting save(Long userId, PlatformType platform, PlatformIntegrationRequest request) {
         long storeId = storeClient.findOwnedStoreId(userId);
+        String externalStoreId = request.externalStoreId().trim();
+        if (!"SIMULATOR".equals(request.environment())) {
+            throw new BusinessException(PlatformIntegrationError.SIMULATOR_ENVIRONMENT_REQUIRED);
+        }
+
+        requireExternalStore(platform, externalStoreId);
+        mapper.findActiveByExternalStoreIdForUpdate(platform, externalStoreId)
+            .filter(owner -> owner.getStoreId() != storeId)
+            .ifPresent(owner -> {
+                throw new BusinessException(PlatformIntegrationError.EXTERNAL_STORE_CONNECTED);
+            });
+
         StorePlatformSetting setting = mapper.findForUpdate(storeId, platform).orElseGet(StorePlatformSetting::new);
-        boolean identityChanged = !Objects.equals(setting.getExternalStoreId(), request.externalStoreId().trim())
+        boolean identityChanged = !Objects.equals(setting.getExternalStoreId(), externalStoreId)
             || !Objects.equals(setting.getEnvironment(), request.environment());
         setting.setStoreId(storeId);
         setting.setPlatformType(platform);
-        setting.setExternalStoreId(request.externalStoreId().trim());
+        setting.setExternalStoreId(externalStoreId);
         setting.setEnabled(request.enabled());
         setting.setEnvironment(request.environment());
         if (identityChanged) {
             if (setting.getId() != null) setting.setConnectionRevision(setting.getConnectionRevision() + 1);
-            // Configuration is not proof that an external Provider connection succeeded.
-            setting.setConnectionStatus("PENDING");
+            // ACTIVE means the current Simulator adapter verified the selected catalog store.
+            // It never represents real Provider credentials or a successful order delivery.
+            setting.setConnectionStatus("ACTIVE");
             setting.setLastWebhookAt(null);
             setting.setLastSuccessAt(null);
             setting.setLastErrorCode(null);
@@ -506,6 +571,15 @@ public class PlatformIntegrationService {
             .filter(ExternalMenuResponse::enabled)
             .findFirst()
             .orElseThrow(() -> new BusinessException(PlatformIntegrationError.EXTERNAL_MENU_NOT_FOUND));
+    }
+
+    private ExternalStoreResponse requireExternalStore(PlatformType platform, String externalStoreId) {
+        return simulatorCatalog.findStores(platform).stream()
+            .filter(ExternalStoreResponse::enabled)
+            .filter(store -> store.platformType() == platform)
+            .filter(store -> Objects.equals(store.externalStoreId(), externalStoreId))
+            .findFirst()
+            .orElseThrow(() -> new BusinessException(PlatformIntegrationError.EXTERNAL_STORE_NOT_FOUND));
     }
 
     private StorePlatformSetting requireSetting(long storeId, PlatformType platform) {
