@@ -228,6 +228,53 @@ class NormalizedOrderEventAssemblerTest {
         );
     }
 
+    @Test
+    void aPartiallyMappedOrderIsBlockedWithoutAnEvent() {
+        CanonicalPlatformOrder order =
+            CanonicalPlatformOrder.builder()
+                .platformType(PlatformType.BAEMIN)
+                .sourceEventId("BAE-EVENT-002")
+                .eventType(CanonicalOrderEventType.ORDER_CREATED)
+                .externalOrderId("BAE-ORDER-002")
+                .externalStoreId("BAE-STORE-001")
+                .orderedAt(Instant.parse("2026-08-24T05:00:00Z"))
+                .items(List.of(
+                    new CanonicalPlatformOrderItem("BAE-MENU-001", 1, 18000L),
+                    new CanonicalPlatformOrderItem("BAE-MENU-UNMAPPED", 1, 2000L)
+                ))
+                .financials(
+                    ProviderOrderFinancials.builder()
+                        .status(ProviderFinancialDataStatus.UNAVAILABLE)
+                        .build()
+                )
+                .build();
+
+        when(storeResolver.resolve(PlatformType.BAEMIN, "BAE-STORE-001"))
+            .thenReturn(15L);
+        when(menuResolver.resolve(
+            PlatformType.BAEMIN,
+            "BAE-STORE-001",
+            15L,
+            "BAE-MENU-001"
+        )).thenReturn(37L);
+        when(menuResolver.resolve(
+            PlatformType.BAEMIN,
+            "BAE-STORE-001",
+            15L,
+            "BAE-MENU-UNMAPPED"
+        )).thenThrow(new BlockedWebhookProcessingException(
+            "PLATFORM_MENU_MAPPING_NOT_FOUND",
+            "외부 Menu Mapping을 찾을 수 없습니다."
+        ));
+
+        BlockedWebhookProcessingException exception = assertThrows(
+            BlockedWebhookProcessingException.class,
+            () -> assembler.assemble(order)
+        );
+
+        assertEquals("PLATFORM_MENU_MAPPING_NOT_FOUND", exception.getErrorCode());
+    }
+
     private CanonicalPlatformOrder orderWithItems() {
         return CanonicalPlatformOrder.builder()
             .platformType(PlatformType.BAEMIN)
