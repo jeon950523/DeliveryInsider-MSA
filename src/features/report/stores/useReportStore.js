@@ -11,6 +11,7 @@ import {
   formatKstDate,
   formatKstDateTime,
 } from '../../../shared/utils/timeFormatters.js';
+import { escapeCsvCell } from '../utils/reportHelpers.js';
 
 const createEmptySummary = () => ({
   totalOrderCount: 0,
@@ -323,14 +324,6 @@ export const useReportStore = defineStore('report', () => {
     }
   };
 
-  const csvEscape = (value) => {
-    const text = value === null || value === undefined
-      ? ''
-      : String(value);
-
-    return `"${text.replace(/"/g, '""')}"`;
-  };
-
   /*
    * Report Backend에는 현재 CSV export endpoint가 없다.
    * 존재하지 않는 API를 호출하지 않고, 화면에 조회된 실제 데이터만 CSV로 저장한다.
@@ -367,7 +360,7 @@ export const useReportStore = defineStore('report', () => {
       ]);
 
       const csv = '\uFEFF' + [headers, ...bodyRows]
-        .map((row) => row.map(csvEscape).join(','))
+        .map((row) => row.map(escapeCsvCell).join(','))
         .join('\n');
 
       const blob = new Blob([csv], {
@@ -430,7 +423,7 @@ export const useReportStore = defineStore('report', () => {
           : '',
       ]);
       const csv = '\uFEFF' + [headers, ...bodyRows]
-        .map((row) => row.map(csvEscape).join(','))
+        .map((row) => row.map(escapeCsvCell).join(','))
         .join('\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const downloadUrl = window.URL.createObjectURL(blob);

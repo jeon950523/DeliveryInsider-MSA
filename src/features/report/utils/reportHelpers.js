@@ -54,7 +54,7 @@ export const filterReportOrders = (orders, filters = {}) => {
       .some((value) => String(value || '').toLowerCase().includes(keyword));
   });
 };
-const csvEscape = (value) => {
+export const escapeCsvCell = (value) => {
   let text = value == null ? '' : String(value);
   if (typeof value === 'string' && (/^\s*[=+\-@]/.test(text) || /^[\t\r\n]/.test(text))) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
@@ -63,5 +63,5 @@ export const createOrdersCsv = (orders) => {
   const rows = [['내부 주문번호', '플랫폼 주문번호', '플랫폼', '플랫폼 상태', '주문금액', '고객 실결제액', '정산정보 상태', '주문일시(UTC)'],
     ...orders.map((order) => [`ORD-${order.orderId}`, order.platformOrderId, order.platformType,
       order.status, order.grossOrderAmount, order.customerPaidAmount, order.financialDataStatus, order.orderedAt])];
-  return '\uFEFF' + rows.map((row) => row.map(csvEscape).join(',')).join('\r\n');
+  return '\uFEFF' + rows.map((row) => row.map(escapeCsvCell).join(',')).join('\r\n');
 };
