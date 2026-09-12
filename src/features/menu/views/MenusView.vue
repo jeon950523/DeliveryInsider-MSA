@@ -133,7 +133,7 @@ const handleDelete = async () => {
 // ============================================================
 // 분석 및 계산 로직
 // ============================================================
-const fallbackPlatformPolicies = [
+const referencePlatformPolicies = [
   { platformType: 'BAEMIN', name: '배민', commissionRate: 6.8 },
   { platformType: 'COUPANG_EATS', name: '쿠팡이츠', commissionRate: 9.8 },
   { platformType: 'YOGIYO', name: '요기요', commissionRate: 8.5 },
@@ -317,7 +317,7 @@ const platformCandidateMenus = computed(() => {
 });
 
 const platformPolicies = computed(() => {
-  return fallbackPlatformPolicies;
+  return referencePlatformPolicies;
 });
 
 const selectedCompareMenu = computed(() => {
@@ -707,7 +707,7 @@ const restoreDismissedLossMenu = async (menu) => {
         메뉴 기준정보
       </button>
       <button class="tab" :class="{ 'active': activeMenuTab === 'platform' }" @click="setMenuTab('platform')">
-        플랫폼 수수료 비교
+        참고 수수료 비교
       </button>
       <button class="tab" :class="{ 'active': activeMenuTab === 'loss' }" @click="setMenuTab('loss')">
         숨은 손실 메뉴
@@ -834,8 +834,8 @@ const restoreDismissedLossMenu = async (menu) => {
     <section v-if="activeMenuTab === 'platform'" class="card platform-compare-section">
       <div class="card-header border-bottom">
         <div class="title-area">
-          <h2>플랫폼 수수료 기준 단품 수익 비교</h2>
-          <p>동일 메뉴를 각 플랫폼에서 판매했을 때, 플랫폼 수수료만 반영한 단품 예상 순수익과 판매건수를 확인합니다.</p>
+          <h2>참고 수수료 기준 단품 수익 비교</h2>
+          <p>이 표는 비교를 위한 참고 수수료만 반영합니다. Store·Provider별 실제 비용, 쿠폰, 광고비를 반영한 금액은 운영 리포트에서 확인하세요.</p>
         </div>
       </div>
 
@@ -929,7 +929,7 @@ const restoreDismissedLossMenu = async (menu) => {
         </div>
 
         <div class="info-banner">
-          배달비와 쿠폰 부담금은 주문 단위 비용이므로 단품 비교에서는 제외했습니다. 실제 주문 기준 순수익은 운영 리포트에서 확인하세요.
+          이 화면의 수수료율은 설정값이나 정산값이 아닌 참고값입니다. 배달비·쿠폰 부담금·광고비를 포함한 실제 주문 기준 순수익은 운영 리포트에서 확인하세요.
         </div>
       </template>
       <div v-else class="empty-state" style="padding: 40px 0;">
