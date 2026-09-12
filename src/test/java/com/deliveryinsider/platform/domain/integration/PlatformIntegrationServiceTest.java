@@ -113,6 +113,22 @@ class PlatformIntegrationServiceTest {
             .isInstanceOfSatisfying(BusinessException.class,
                 error -> assertThat(error.errorCode()).isEqualTo(PlatformIntegrationError.IDENTITY_CONFLICT));
     }
+    @Test void activeExternalStoreOwnedByAnotherStoreIsRejected() {
+        catalogStore("external-1");
+        var foreignOwner = new StorePlatformSetting();
+        foreignOwner.setStoreId(2L);
+        when(mapper.findActiveByExternalStoreIdForUpdate(PlatformType.BAEMIN, "external-1"))
+            .thenReturn(Optional.of(foreignOwner));
+
+        assertThatThrownBy(() -> service.save(10L, PlatformType.BAEMIN,
+            new PlatformIntegrationRequest("external-1", true, "SIMULATOR")))
+            .isInstanceOfSatisfying(BusinessException.class,
+                error -> assertThat(error.errorCode()).isEqualTo(PlatformIntegrationError.EXTERNAL_STORE_CONNECTED));
+
+        verify(mapper, never()).findForUpdate(anyLong(), any());
+        verify(mapper, never()).insert(any());
+        verify(mapper, never()).update(any());
+    }
     @Test void otherStoreMenuIsForbidden() {
         existing();
         var foreign = new MenuCatalogProjection(); foreign.setMenuId(99L); foreign.setStoreId(2L); foreign.setStatus(MenuCatalogStatus.ACTIVE);
