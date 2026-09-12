@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 
 /**
@@ -17,7 +18,12 @@ import java.time.format.DateTimeParseException;
 public final class BusinessWindowResolver {
 
     private static final DateTimeFormatter TIME_FORMAT =
-        DateTimeFormatter.ofPattern("H:mm");
+        new DateTimeFormatterBuilder()
+            .appendPattern("H:mm")
+            .optionalStart()
+            .appendPattern(":ss")
+            .optionalEnd()
+            .toFormatter();
 
     private BusinessWindowResolver() {
     }
