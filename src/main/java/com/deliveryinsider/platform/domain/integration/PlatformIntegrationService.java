@@ -31,6 +31,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.time.LocalDate;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -71,6 +72,40 @@ public class PlatformIntegrationService {
                 externalStore.externalStoreId()
             ).map(owner -> owner.getStoreId() == storeId).orElse(true))
             .toList();
+    }
+
+    /**
+     * Report reaches simulator advertising data through this authenticated
+     * internal contract. The currently active connection must still own the
+     * requested Provider/External Store pair; otherwise the expense is
+     * unavailable rather than represented as zero.
+     */
+    @Transactional(readOnly = true)
+    public PlatformAdSpendResponse findAdSpend(
+        long storeId,
+        PlatformType platform,
+        String externalStoreId,
+        LocalDate from,
+        LocalDate to
+    ) {
+        if (from != null && to != null && from.isAfter(to)) {
+            return new PlatformAdSpendResponse(platform, externalStoreId, false, List.of());
+        }
+
+        Optional<StorePlatformSetting> setting = mapper.findOne(storeId, platform);
+        if (setting.isEmpty()
+            || !setting.get().isEnabled()
+            || !"ACTIVE".equals(setting.get().getConnectionStatus())
+            || !Objects.equals(setting.get().getExternalStoreId(), externalStoreId)) {
+            return new PlatformAdSpendResponse(platform, externalStoreId, false, List.of());
+        }
+
+        return new PlatformAdSpendResponse(
+            platform,
+            externalStoreId,
+            true,
+            simulatorCatalog.findAdSpend(platform, externalStoreId, from, to)
+        );
     }
 
     @Transactional
