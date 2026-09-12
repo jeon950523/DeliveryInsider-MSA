@@ -47,8 +47,8 @@ logging:
     level: "%5p [traceId:%X{traceId:-}]"
 notification:
   kafka:
-    order-event-topic: ${ORDER_EVENT_TOPIC:order.events}
-    order-event-dlt-topic: ${ORDER_EVENT_NOTIFICATION_DLT_TOPIC:order.events.notification.DLT}
+    order-event-topic: ${ORDER_EVENT_TOPIC:${KAFKA_TOPIC_PREFIX:}order.events}
+    order-event-dlt-topic: ${ORDER_EVENT_NOTIFICATION_DLT_TOPIC:${KAFKA_TOPIC_PREFIX:}order.events.notification.DLT}
     order-consumer-group: ${NOTIFICATION_ORDER_CONSUMER_GROUP:notification-order-event-group}
     retry-interval-ms: ${NOTIFICATION_KAFKA_RETRY_INTERVAL_MS:1000}
     max-attempts: ${NOTIFICATION_KAFKA_MAX_ATTEMPTS:3}

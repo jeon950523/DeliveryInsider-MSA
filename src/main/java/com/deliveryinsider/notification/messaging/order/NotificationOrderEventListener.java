@@ -27,8 +27,8 @@ public class NotificationOrderEventListener {
         notificationService;
 
     @KafkaListener(
-        topics = "${notification.kafka.order-event-topic:order.events}",
-        groupId = "${notification.kafka.order-consumer-group:notification-order-event-group}",
+        topics = "${notification.kafka.order-event-topic}",
+        groupId = "${notification.kafka.order-consumer-group}",
         containerFactory =
             "notificationOrderEventKafkaListenerContainerFactory"
     )
