@@ -47,12 +47,12 @@ spring:
       ack-mode: record
 order:
   kafka:
-    platform-order-topic: ${PLATFORM_ORDER_TOPIC:platform.order-events}
-    platform-order-dlt-topic: ${PLATFORM_ORDER_DLT_TOPIC:platform.order-events.DLT}
+    platform-order-topic: ${PLATFORM_ORDER_TOPIC:${KAFKA_TOPIC_PREFIX:}platform.order-events}
+    platform-order-dlt-topic: ${PLATFORM_ORDER_DLT_TOPIC:${KAFKA_TOPIC_PREFIX:}platform.order-events.DLT}
     retry-interval-ms: ${ORDER_KAFKA_RETRY_INTERVAL_MS:1000}
     max-attempts: ${ORDER_KAFKA_MAX_ATTEMPTS:3}
   outbox:
-    topic: ${ORDER_EVENT_TOPIC:order.events}
+    topic: ${ORDER_EVENT_TOPIC:${KAFKA_TOPIC_PREFIX:}order.events}
     batch-size: ${ORDER_OUTBOX_BATCH_SIZE:20}
     poll-interval-ms: ${ORDER_OUTBOX_POLL_INTERVAL_MS:500}
     lease-seconds: ${ORDER_OUTBOX_LEASE_SECONDS:30}
