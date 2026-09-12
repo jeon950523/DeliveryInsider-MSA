@@ -13,6 +13,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
@@ -24,6 +25,7 @@ class ProviderConnectionHealthMySqlTest {
     @Autowired PlatformIntegrationService settings;
     @Autowired PlatformTransactionManager transactions;
     @MockitoBean PlatformStoreClient stores;
+    @MockitoBean SimulatorCatalogClient simulatorCatalog;
     @BeforeEach void isolatedFixture() {
         String schema = System.getenv("CATALOG_TEST_SCHEMA");
         assertNotNull(schema, "Run scripts/test-local-mysql.ps1");
@@ -32,8 +34,12 @@ class ProviderConnectionHealthMySqlTest {
         jdbc.update("DELETE FROM provider_webhook_inbox");
         jdbc.update("DELETE FROM platform_menu_mappings");
         jdbc.update("DELETE FROM store_platform_settings");
-        jdbc.update("INSERT INTO store_platform_settings(id,store_id,platform_type,external_store_id,enabled,environment) VALUES (101,11,'BAEMIN','same-external',1,'SIMULATOR'),(102,11,'COUPANG_EATS','same-external',1,'SIMULATOR')");
+        jdbc.update("INSERT INTO store_platform_settings(id,store_id,platform_type,external_store_id,enabled,connection_status,environment) VALUES (101,11,'BAEMIN','same-external',1,'ACTIVE','SIMULATOR'),(102,11,'COUPANG_EATS','same-external',1,'ACTIVE','SIMULATOR')");
         when(stores.findOwnedStoreId(1L)).thenReturn(11L);
+        when(simulatorCatalog.findStores(PlatformType.BAEMIN)).thenReturn(List.of(
+            new ExternalStoreResponse(PlatformType.BAEMIN,"same-external","Same Store",true),
+            new ExternalStoreResponse(PlatformType.BAEMIN,"changed-external","Changed Store",true)
+        ));
     }
     @Test void receiptUsesActualInboxTimeAndSuccessUsesAcknowledgedProcessedTime() {
         var webhook = inbox("BAEMIN", "2026-09-01 10:11:12");
@@ -55,13 +61,25 @@ class ProviderConnectionHealthMySqlTest {
         claims.markRetryableFailed(next.inboxId(),"health-test",1,Duration.ZERO,3,"KAFKA_UNAVAILABLE","test");
         assertEquals("KAFKA_UNAVAILABLE",text("last_error_code"));
         assertEquals(success,time("last_success_at"));
+        assertEquals("ACTIVE",text("connection_status"));
         var retried=claims.claimNext("health-test").orElseThrow();
         claims.markRetryableFailed(retried.inboxId(),"health-test",retried.claimVersion(),Duration.ZERO,2,"KAFKA_UNAVAILABLE","test");
         assertEquals("RETRY_EXHAUSTED",text("last_error_code"));
+        assertEquals("ACTIVE",text("connection_status"));
         var recovery=inbox("BAEMIN","2026-09-03 10:00:00");
         claims.recordResolvedStore(recovery,"same-external");
         claims.markProcessed(recovery.inboxId(),"health-test",1);
         assertNull(text("last_error_code"));
+        assertEquals("ACTIVE",text("connection_status"));
+    }
+    @Test void blockedMenuResolutionKeepsVerifiedConnectionActive() {
+        var processed=inbox("BAEMIN","2026-09-01 10:00:00");
+        claims.recordResolvedStore(processed,"same-external");
+        claims.markProcessed(processed.inboxId(),"health-test",1);
+        var blocked=inbox("BAEMIN","2026-09-01 10:05:00");
+        claims.recordResolvedStore(blocked,"same-external");
+        claims.markBlocked(blocked.inboxId(),"health-test",1,"PLATFORM_MENU_MAPPING_NOT_FOUND","test");
+        assertEquals("PLATFORM_MENU_MAPPING_NOT_FOUND",text("last_error_code"));
         assertEquals("ACTIVE",text("connection_status"));
     }
     @Test void expiredClaimCannotWriteReceiptOrOutcome() {
@@ -76,11 +94,11 @@ class ProviderConnectionHealthMySqlTest {
     @Test void changedConfigurationCannotReceivePreviousAttemptOutcome() {
         var webhook=inbox("BAEMIN","2026-09-01 10:00:00");
         claims.recordResolvedStore(webhook,"same-external");
-        settings.save(1L,PlatformType.BAEMIN,new PlatformIntegrationRequest("same-external",true,"SANDBOX"));
+        settings.save(1L,PlatformType.BAEMIN,new PlatformIntegrationRequest("changed-external",true,"SIMULATOR"));
         assertEquals(2L,jdbc.queryForObject("SELECT connection_revision FROM store_platform_settings WHERE id=101",Long.class));
         claims.markProcessed(webhook.inboxId(),"health-test",1);
         assertNull(time("last_webhook_at")); assertNull(time("last_success_at"));
-        assertEquals("PENDING",text("connection_status"));
+        assertEquals("ACTIVE",text("connection_status"));
     }
     @Test void unknownStoreAndFailureBeforeDetailNeverMarkAllProviderSettings() {
         var unknown=inbox("BAEMIN","2026-09-01 10:00:00");

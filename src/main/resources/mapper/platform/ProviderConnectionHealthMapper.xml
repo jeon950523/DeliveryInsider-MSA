@@ -28,7 +28,7 @@
               THEN GREATEST(COALESCE(s.last_success_at, i.processed_at), i.processed_at)
               ELSE s.last_success_at END,
             s.last_error_code = i.last_error_code,
-            s.connection_status = CASE WHEN i.status = 'PROCESSED' THEN 'ACTIVE' ELSE 'ERROR' END
+            s.connection_status = CASE WHEN i.status = 'PROCESSED' THEN 'ACTIVE' ELSE s.connection_status END
         WHERE i.id = #{inboxId} AND i.status IN ('PROCESSED', 'RETRYABLE_FAILED', 'BLOCKED')
     </update>
 </mapper>
