@@ -40,6 +40,12 @@ public enum OrderErrorCode implements ErrorCode {
         "Store Service의 영업시간 정보가 올바르지 않습니다."
     ),
 
+    ORDER_MENU_MAPPING_REQUIRED(
+        "ORDER-013",
+        HttpStatus.CONFLICT,
+        "메뉴 연결이 완료되지 않은 주문은 조리를 시작할 수 없습니다."
+    ),
+
     OPERATION_STATUS_PROVIDER_CONTROLLED(
         "ORDER-006",
         HttpStatus.CONFLICT,

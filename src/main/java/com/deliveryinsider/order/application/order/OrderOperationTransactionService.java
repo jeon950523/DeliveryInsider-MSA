@@ -2,7 +2,9 @@ package com.deliveryinsider.order.application.order;
 
 import com.deliveryinsider.order.api.order.response.OrderOperationStatusResponse;
 import com.deliveryinsider.order.domain.order.entity.OrderEntity;
+import com.deliveryinsider.order.domain.order.entity.OrderItemEntity;
 import com.deliveryinsider.order.domain.order.entity.OutboxEventEntity;
+import com.deliveryinsider.order.domain.order.mapper.OrderItemMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderMapper;
 import com.deliveryinsider.order.domain.order.mapper.OutboxEventMapper;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
@@ -18,6 +20,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,6 +29,8 @@ import java.util.UUID;
 public class OrderOperationTransactionService {
 
     private final OrderMapper orderMapper;
+
+    private final OrderItemMapper orderItemMapper;
 
     private final OutboxEventMapper outboxEventMapper;
 
@@ -94,6 +99,10 @@ public class OrderOperationTransactionService {
                 OrderErrorCode
                     .INVALID_OPERATION_STATUS_TRANSITION
             );
+        }
+
+        if (targetStatus == OrderOperationStatus.COOKING) {
+            requireResolvedMenuMappings(order);
         }
 
         OrderOperationStatus previousOperationStatus =
@@ -217,6 +226,22 @@ public class OrderOperationTransactionService {
             order.getCompletedAt(),
             order.getCanceledAt()
         );
+    }
+
+    private void requireResolvedMenuMappings(OrderEntity order) {
+        List<OrderItemEntity> items =
+            orderItemMapper.findAllByOrderId(order.getId());
+
+        boolean hasUnresolvedMenu =
+            items.isEmpty()
+                || items.stream()
+                    .anyMatch(item -> item.getMenuId() == null);
+
+        if (hasUnresolvedMenu) {
+            throw new BusinessException(
+                OrderErrorCode.ORDER_MENU_MAPPING_REQUIRED
+            );
+        }
     }
 
     private String resolveTraceId() {
