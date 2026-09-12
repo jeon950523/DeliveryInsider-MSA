@@ -9,10 +9,16 @@ import {
   changeExternalOrderStatus,
   createExternalOrder,
   createExternalMenu,
+  createAdSpend,
+  createCoupon,
+  fetchAdSpend,
+  fetchCoupons,
   fetchControlStatus,
   fetchExternalMenus,
   fetchExternalStores,
+  fetchFeePolicy,
   fetchRecentOrders,
+  saveFeePolicy,
 } from './api/simulatorApi.js';
 import {
   calculateOrderTotal,
@@ -26,11 +32,18 @@ const selectedExternalStoreId = ref('');
 const menus = ref([]);
 const quantities = ref({});
 const recentOrders = ref([]);
+const feePolicy = ref(null);
+const coupons = ref([]);
+const adSpends = ref([]);
+const selectedCouponIds = ref([]);
 const deliveryAddress = ref('대구광역시 동구 동대구로 475');
 const customerRequest = ref('문 앞에 놓아주세요.');
 const isLoadingCatalog = ref(false);
 const isCreating = ref(false);
 const isCreatingMenu = ref(false);
+const isSavingFeePolicy = ref(false);
+const isCreatingCoupon = ref(false);
+const isCreatingAdSpend = ref(false);
 const newMenuExternalId = ref('');
 const newMenuCatalogKey = ref('');
 const newMenuName = ref('');
@@ -41,6 +54,40 @@ const isBackendAvailable = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 let selectionGeneration = 0;
+
+const localDateTime = () => new Date().toISOString().slice(0, 16);
+const localDate = () => new Date().toISOString().slice(0, 10);
+
+const emptyFeePolicy = () => ({
+  platformCommissionRate: 0,
+  paymentFeeRate: 0,
+  merchantDeliveryFeeAmount: 0,
+  effectiveFrom: localDateTime(),
+  effectiveTo: '',
+  enabled: true,
+});
+
+const emptyCouponDraft = () => ({
+  code: '',
+  name: '',
+  discountType: 'FIXED',
+  discountValue: 0,
+  maxDiscountAmount: '',
+  fundingType: 'MERCHANT',
+  merchantShareRate: 100,
+  activeFrom: localDateTime(),
+  activeTo: '',
+  enabled: true,
+});
+
+const emptyAdSpendDraft = () => ({
+  spendDate: localDate(),
+  campaignName: '',
+  spendAmount: 0,
+});
+
+const couponDraft = ref(emptyCouponDraft());
+const adSpendDraft = ref(emptyAdSpendDraft());
 
 const selectedProviderLabel = computed(() => {
   return PROVIDERS.find((provider) => provider.type === selectedProvider.value)?.label
@@ -66,6 +113,9 @@ const hasSelectedExternalStore = computed(() => Boolean(selectedExternalStoreId.
 const isSelectionLocked = computed(() => isLoadingCatalog.value
   || isCreating.value
   || isCreatingMenu.value
+  || isSavingFeePolicy.value
+  || isCreatingCoupon.value
+  || isCreatingAdSpend.value
   || Boolean(changingOrderId.value));
 
 const clearMessageLater = () => {
@@ -109,6 +159,12 @@ const resetStoreScopedState = () => {
   menus.value = [];
   quantities.value = {};
   recentOrders.value = [];
+  feePolicy.value = null;
+  coupons.value = [];
+  adSpends.value = [];
+  selectedCouponIds.value = [];
+  couponDraft.value = emptyCouponDraft();
+  adSpendDraft.value = emptyAdSpendDraft();
   resetMenuProvisionDraft();
 };
 
@@ -123,9 +179,12 @@ const loadStoreScope = async (provider, externalStoreId, generation) => {
     return;
   }
 
-  const [catalog, orders] = await Promise.all([
+  const [catalog, orders, loadedFeePolicy, loadedCoupons, loadedAdSpends] = await Promise.all([
     fetchExternalMenus(provider, externalStoreId),
     fetchRecentOrders(provider, externalStoreId, 20),
+    fetchFeePolicy(provider, externalStoreId),
+    fetchCoupons(provider, externalStoreId),
+    fetchAdSpend(provider, externalStoreId),
   ]);
 
   if (!isCurrentScope(provider, externalStoreId, generation)) {
@@ -135,6 +194,9 @@ const loadStoreScope = async (provider, externalStoreId, generation) => {
   menus.value = catalog;
   initializeQuantities();
   recentOrders.value = orders;
+  feePolicy.value = loadedFeePolicy || emptyFeePolicy();
+  coupons.value = Array.isArray(loadedCoupons) ? loadedCoupons : [];
+  adSpends.value = Array.isArray(loadedAdSpends) ? loadedAdSpends : [];
 };
 
 const loadRecentOrders = async () => {
@@ -241,6 +303,7 @@ const createOrder = async () => {
       externalStoreId,
       menus: menus.value,
       quantities: quantities.value,
+      couponIds: selectedCouponIds.value,
       deliveryAddress: deliveryAddress.value,
       customerRequest: customerRequest.value,
     });
@@ -283,6 +346,88 @@ const createMenu = async () => {
     clearMessageLater();
   } catch (error) { setError(error, '외부 메뉴를 등록하지 못했습니다.'); }
   finally { isCreatingMenu.value = false; }
+};
+
+const saveFinancialPolicy = async () => {
+  const provider = selectedProvider.value;
+  const externalStoreId = selectedExternalStoreId.value;
+  if (!externalStoreId || !feePolicy.value) return;
+
+  isSavingFeePolicy.value = true;
+  errorMessage.value = '';
+  successMessage.value = '';
+  try {
+    feePolicy.value = await saveFeePolicy(provider, externalStoreId, {
+      platformCommissionRate: Number(feePolicy.value.platformCommissionRate),
+      paymentFeeRate: Number(feePolicy.value.paymentFeeRate),
+      merchantDeliveryFeeAmount: Number(feePolicy.value.merchantDeliveryFeeAmount),
+      effectiveFrom: feePolicy.value.effectiveFrom,
+      effectiveTo: feePolicy.value.effectiveTo || null,
+      enabled: Boolean(feePolicy.value.enabled),
+    });
+    successMessage.value = `${externalStoreId} 비용 정책을 저장했습니다.`;
+    clearMessageLater();
+  } catch (error) {
+    setError(error, '비용 정책을 저장하지 못했습니다.');
+  } finally {
+    isSavingFeePolicy.value = false;
+  }
+};
+
+const addCoupon = async () => {
+  const provider = selectedProvider.value;
+  const externalStoreId = selectedExternalStoreId.value;
+  if (!externalStoreId || !couponDraft.value.code.trim() || !couponDraft.value.name.trim()) return;
+
+  isCreatingCoupon.value = true;
+  errorMessage.value = '';
+  successMessage.value = '';
+  try {
+    const created = await createCoupon(provider, externalStoreId, {
+      ...couponDraft.value,
+      code: couponDraft.value.code.trim(),
+      name: couponDraft.value.name.trim(),
+      discountValue: Number(couponDraft.value.discountValue),
+      maxDiscountAmount: couponDraft.value.maxDiscountAmount === '' ? null : Number(couponDraft.value.maxDiscountAmount),
+      merchantShareRate: couponDraft.value.fundingType === 'SPLIT'
+        ? Number(couponDraft.value.merchantShareRate)
+        : null,
+      activeTo: couponDraft.value.activeTo || null,
+    });
+    coupons.value = [created, ...coupons.value];
+    couponDraft.value = emptyCouponDraft();
+    successMessage.value = `${created.code} 쿠폰을 추가했습니다.`;
+    clearMessageLater();
+  } catch (error) {
+    setError(error, '쿠폰을 추가하지 못했습니다.');
+  } finally {
+    isCreatingCoupon.value = false;
+  }
+};
+
+const addAdSpend = async () => {
+  const provider = selectedProvider.value;
+  const externalStoreId = selectedExternalStoreId.value;
+  if (!externalStoreId || !adSpendDraft.value.campaignName.trim()) return;
+
+  isCreatingAdSpend.value = true;
+  errorMessage.value = '';
+  successMessage.value = '';
+  try {
+    const created = await createAdSpend(provider, externalStoreId, {
+      spendDate: adSpendDraft.value.spendDate,
+      campaignName: adSpendDraft.value.campaignName.trim(),
+      spendAmount: Number(adSpendDraft.value.spendAmount),
+    });
+    adSpends.value = [...adSpends.value, created];
+    adSpendDraft.value = emptyAdSpendDraft();
+    successMessage.value = `${created.spendDate} 광고비를 추가했습니다.`;
+    clearMessageLater();
+  } catch (error) {
+    setError(error, '광고비를 추가하지 못했습니다.');
+  } finally {
+    isCreatingAdSpend.value = false;
+  }
 };
 
 const changeOrderStatus = async (order, status) => {
@@ -394,6 +539,63 @@ onMounted(async () => {
           <label>정렬 순서<input v-model.number="newMenuSortOrder" type="number" min="0" step="1" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
           <button type="submit" :disabled="isSelectionLocked || !hasSelectedExternalStore">{{ isCreatingMenu ? '등록 중...' : '+ 메뉴 등록' }}</button>
         </form>
+      </section>
+
+      <section class="panel financial-settings-panel">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">FINANCIAL SETTINGS</span>
+            <h2>비용/프로모션 설정</h2>
+          </div>
+          <small>선택된 Provider / Store에만 저장됩니다.</small>
+        </div>
+
+        <form v-if="feePolicy" class="financial-grid" @submit.prevent="saveFinancialPolicy">
+          <label>플랫폼 수수료 (%)<input v-model.number="feePolicy.platformCommissionRate" type="number" min="0" max="100" step="0.0001" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <label>결제 수수료 (%)<input v-model.number="feePolicy.paymentFeeRate" type="number" min="0" max="100" step="0.0001" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <label>점주 부담 배달비 (원)<input v-model.number="feePolicy.merchantDeliveryFeeAmount" type="number" min="0" step="1" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <label>적용 시작<input v-model="feePolicy.effectiveFrom" type="datetime-local" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <label>적용 종료 (선택)<input v-model="feePolicy.effectiveTo" type="datetime-local" :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+          <label class="checkbox-label"><input v-model="feePolicy.enabled" type="checkbox" :disabled="isSelectionLocked || !hasSelectedExternalStore"> 정책 사용</label>
+          <button type="submit" :disabled="isSelectionLocked || !hasSelectedExternalStore">{{ isSavingFeePolicy ? '저장 중...' : '비용 정책 저장' }}</button>
+        </form>
+        <p v-else class="financial-list-note">외부 매장을 선택하면 비용 정책을 조회합니다.</p>
+
+        <div class="financial-subsection">
+          <h3>쿠폰</h3>
+          <form class="financial-grid coupon-grid" @submit.prevent="addCoupon">
+            <label>코드<input v-model="couponDraft.code" maxlength="120" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <label>쿠폰명<input v-model="couponDraft.name" maxlength="160" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <label>할인 방식<select v-model="couponDraft.discountType" :disabled="isSelectionLocked || !hasSelectedExternalStore"><option value="FIXED">정액</option><option value="PERCENT">정률</option></select></label>
+            <label>할인 값<input v-model.number="couponDraft.discountValue" type="number" min="0" step="0.0001" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <label>최대 할인액 (선택)<input v-model.number="couponDraft.maxDiscountAmount" type="number" min="0" step="1" :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <label>부담 주체<select v-model="couponDraft.fundingType" :disabled="isSelectionLocked || !hasSelectedExternalStore"><option value="MERCHANT">점주</option><option value="PROVIDER">플랫폼</option><option value="SPLIT">분담</option></select></label>
+            <label v-if="couponDraft.fundingType === 'SPLIT'">점주 부담 비율 (%)<input v-model.number="couponDraft.merchantShareRate" type="number" min="0" max="100" step="0.0001" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <label>활성 시작<input v-model="couponDraft.activeFrom" type="datetime-local" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <label>활성 종료 (선택)<input v-model="couponDraft.activeTo" type="datetime-local" :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <button type="submit" :disabled="isSelectionLocked || !hasSelectedExternalStore">{{ isCreatingCoupon ? '추가 중...' : '쿠폰 추가' }}</button>
+          </form>
+          <p v-if="coupons.length" class="financial-list-note">주문에 적용할 쿠폰을 선택하세요. 점주 부담분만 주문 비용으로 저장됩니다.</p>
+          <div v-if="coupons.length" class="coupon-list">
+            <label v-for="coupon in coupons" :key="coupon.couponId" class="coupon-option">
+              <input v-model="selectedCouponIds" type="checkbox" :value="coupon.couponId" :disabled="isSelectionLocked || !coupon.enabled">
+              <span><strong>{{ coupon.code }}</strong> · {{ coupon.name }} · {{ coupon.fundingType }}</span>
+            </label>
+          </div>
+          <p v-else class="financial-list-note">이 외부 매장에는 등록된 쿠폰이 없습니다.</p>
+        </div>
+
+        <div class="financial-subsection">
+          <h3>광고비</h3>
+          <form class="financial-grid ad-spend-grid" @submit.prevent="addAdSpend">
+            <label>집계일<input v-model="adSpendDraft.spendDate" type="date" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <label>캠페인명<input v-model="adSpendDraft.campaignName" maxlength="160" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <label>광고비 (원)<input v-model.number="adSpendDraft.spendAmount" type="number" min="0" step="1" required :disabled="isSelectionLocked || !hasSelectedExternalStore"></label>
+            <button type="submit" :disabled="isSelectionLocked || !hasSelectedExternalStore">{{ isCreatingAdSpend ? '추가 중...' : '광고비 추가' }}</button>
+          </form>
+          <p v-if="adSpends.length" class="financial-list-note">{{ adSpends.length }}건의 Store별 일별 광고비가 저장되어 있습니다. 주문 charge에 합산하지 않고 리포트에서 기간 비용으로 배분합니다.</p>
+          <p v-else class="financial-list-note">저장된 Store별 일별 광고비가 없습니다.</p>
+        </div>
       </section>
 
       <div v-if="successMessage" class="notice notice--success">

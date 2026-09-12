@@ -2,6 +2,7 @@ export const createOrderPayload = ({
   externalStoreId,
   menus,
   quantities,
+  couponIds,
   deliveryAddress,
   customerRequest,
 }) => {
@@ -18,6 +19,7 @@ export const createOrderPayload = ({
     deliveryAddress: deliveryAddress?.trim() || null,
     customerRequest: customerRequest?.trim() || null,
     items,
+    couponIds: Array.isArray(couponIds) ? couponIds : [],
     financials: null,
   };
 };
