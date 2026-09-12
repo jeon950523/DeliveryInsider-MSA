@@ -1,6 +1,8 @@
 import httpClient from '../../../shared/api/httpClient.js';
 
-export const fetchMenus = () => httpClient.get('/api/menus');
+export const fetchMenus = () => httpClient.get('/api/menus', {
+  skipServerErrorRedirect: true,
+});
 export const createMenu = (payload) => httpClient.post('/api/menus', payload);
 export const updateMenu = (menuId, payload) => httpClient.patch(`/api/menus/${menuId}`, payload);
 export const deleteMenu = (menuId) => httpClient.delete(`/api/menus/${menuId}`);

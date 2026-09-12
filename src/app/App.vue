@@ -75,7 +75,9 @@ watch(
   },
 );
 const dashboardRefresh = createCoalescedRefresh(() => {
-  if (auth.isLoggedIn && store.currentData?.id && !route.meta.hideLayout) return dashboard.loadDashboard();
+  if (auth.isLoggedIn && store.currentData?.id && !route.meta.hideLayout) {
+    return dashboard.loadDashboard({ showAlert: false });
+  }
 }, { delay: 350 });
 watch(() => realtime.revision, dashboardRefresh.request);
 const refreshOnFocus = () => dashboardRefresh.request();

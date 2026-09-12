@@ -23,6 +23,7 @@ let elapsedTimer = null;
 const platformConnectionChecked = ref(false);
 const hasActivePlatformConnection = ref(false);
 const hasRegisteredMenus = ref(false);
+const platformConnectionError = ref('');
 const platformConnectionNoticeDismissed = ref(false);
 
 const platformNames = {
@@ -224,12 +225,24 @@ const operationBrief = computed(() => {
 });
 
 const shouldShowPlatformConnectionNotice = computed(() => (
-  platformConnectionChecked.value
-  && (!hasActivePlatformConnection.value || !hasRegisteredMenus.value)
+  (platformConnectionError.value
+    || (
+      platformConnectionChecked.value
+      && (!hasActivePlatformConnection.value || !hasRegisteredMenus.value)
+    ))
   && !platformConnectionNoticeDismissed.value
 ));
 
 const platformConnectionNotice = computed(() => {
+  if (platformConnectionError.value) {
+    return {
+      title: '플랫폼 연결 상태를 불러오지 못했습니다.',
+      description: platformConnectionError.value,
+      action: '다시 조회',
+      isError: true,
+    };
+  }
+
   if (!hasActivePlatformConnection.value) {
     return {
       title: '배달 플랫폼 연결을 설정해 주세요.',
@@ -271,10 +284,14 @@ const loadDashboard = async () => {
 
 const loadPlatformConnection = async () => {
   platformConnectionChecked.value = false;
+  platformConnectionError.value = '';
   try {
+    const managedErrorConfig = {
+      skipServerErrorRedirect: true,
+    };
     const [integrationResponse, menuResponse] = await Promise.all([
-      fetchIntegrations(),
-      fetchOwnedMenus(),
+      fetchIntegrations(managedErrorConfig),
+      fetchOwnedMenus(managedErrorConfig),
     ]);
     const integrations = integrationResponse?.data?.data;
     const menus = menuResponse?.data?.data;
@@ -290,6 +307,7 @@ const loadPlatformConnection = async () => {
     platformConnectionChecked.value = true;
   } catch (error) {
     console.warn('플랫폼 연결 상태 조회 실패:', error);
+    platformConnectionError.value = '연결 여부를 미설정 상태로 판단하지 않았습니다. 서버 상태를 확인한 뒤 다시 조회해 주세요.';
   }
 };
 
@@ -321,6 +339,14 @@ const goToSalesReport = () => {
 const handleSimulate = () => router.push('/mockdata');
 const handleExport = () => router.push('/reports');
 const goToPlatformConnection = () => router.push({ path: '/store', query: { tab: 'platform' } });
+const handlePlatformNoticeAction = () => {
+  if (platformConnectionNotice.value.isError) {
+    loadPlatformConnection();
+    return;
+  }
+
+  goToPlatformConnection();
+};
 
 onMounted(async () => {
   elapsedTimer = window.setInterval(() => {
@@ -357,7 +383,13 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <main class="grid-12">
+    <main v-if="dashboardStore.loadError" class="dashboard-error-state" data-testid="dashboard-error-state">
+      <strong>실시간 운영 정보를 불러오지 못했습니다.</strong>
+      <p>{{ dashboardStore.loadError }}</p>
+      <button type="button" class="primary-button" @click="loadDashboard">다시 시도</button>
+    </main>
+
+    <main v-else class="grid-12">
       <section class="operation-brief-card col-12" :class="operationBrief.tone">
         <div class="brief-main">
           <span>오늘의 운영 브리핑</span>
@@ -373,7 +405,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="platform-connection-notice__actions">
           <button type="button" class="sub-button" @click="platformConnectionNoticeDismissed = true">나중에</button>
-          <button type="button" class="primary-button" @click="goToPlatformConnection">{{ platformConnectionNotice.action }}</button>
+          <button type="button" class="primary-button" @click="handlePlatformNoticeAction">{{ platformConnectionNotice.action }}</button>
         </div>
       </section>
 
@@ -574,6 +606,26 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   gap: 20px;
+}
+
+.dashboard-error-state {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  padding: 30px;
+  border: 1px solid #fecaca;
+  border-radius: 18px;
+  color: #991b1b;
+  background: #fff7f7;
+}
+
+.dashboard-error-state strong {
+  font-size: 22px;
+}
+
+.dashboard-error-state p {
+  margin: 0 0 6px;
+  color: #7f1d1d;
 }
 .col-3 { grid-column: span 3; }
 .col-6 { grid-column: span 6; }

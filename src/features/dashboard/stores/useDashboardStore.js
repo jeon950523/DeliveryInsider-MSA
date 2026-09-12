@@ -7,6 +7,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
   const todayOrders = ref([]);
   const isLoading = ref(false);
   const lastUpdatedAt = ref(null);
+  const loadError = ref('');
 
   const findOperationSummary = async () => {
     const result = await fetchOperationSummary();
@@ -27,6 +28,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
 
     try {
       isLoading.value = true;
+      loadError.value = '';
 
       await Promise.all([
         findOperationSummary(),
@@ -41,6 +43,11 @@ export const useDashboardStore = defineStore('dashboard', () => {
       };
     } catch (error) {
       console.error(error);
+
+      operationSummary.value = null;
+      todayOrders.value = [];
+      lastUpdatedAt.value = null;
+      loadError.value = '실시간 운영 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
 
       if (shouldAlert) {
         alert('실시간 운영 대시보드 조회에 실패했습니다.');
@@ -57,6 +64,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     todayOrders.value = [];
     isLoading.value = false;
     lastUpdatedAt.value = null;
+    loadError.value = '';
   };
 
   return {
@@ -64,6 +72,7 @@ export const useDashboardStore = defineStore('dashboard', () => {
     todayOrders,
     isLoading,
     lastUpdatedAt,
+    loadError,
     findOperationSummary,
     findTodayOrders,
     loadDashboard,

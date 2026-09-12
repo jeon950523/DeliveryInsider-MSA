@@ -146,6 +146,14 @@ onMounted(async () => {
         <!-- <img src="/logo.png" alt="배프(BAEF) 로고" class="main-logo" /> -->
       </div>
 
+      <section v-if="dashboardStore.loadError" class="side-operation-card side-operation-error" data-tour="dashboard-summary">
+        <span class="side-card-label">현재 운영</span>
+        <strong>조회 실패</strong>
+        <p class="side-load-text">운영 수치를 확인할 수 없습니다.</p>
+        <small class="side-card-help">대시보드에서 다시 시도해 주세요.</small>
+      </section>
+
+      <template v-else>
       <section class="side-operation-card" data-tour="dashboard-summary">
         <span class="side-card-label">
           현재 운영 <em>{{ updatedAtText }}</em>
@@ -203,6 +211,7 @@ onMounted(async () => {
           취소 확인 <strong>{{ operationSummary.cancelCount }}건</strong>
         </button>
       </section>
+      </template>
 
       <nav class="side-list">
         <router-link

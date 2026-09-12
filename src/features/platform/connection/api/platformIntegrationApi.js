@@ -11,4 +11,4 @@ export const fetchUnmappedExternalMenus = (platform, config = {}) => httpClient.
 export const fetchUnresolvedOrderMenus = (config = {}) => httpClient.get(`${base}/unresolved-order-menus`, config);
 export const connectExistingExternalMenu = (platform, externalMenuId, menuId, config = {}) => httpClient.post(`${base}/${platform}/unmapped-menus/${encodeURIComponent(externalMenuId)}/connect`, { menuId }, config);
 export const createAndConnectExternalMenu = (platform, externalMenuId, payload, config = {}) => httpClient.post(`${base}/${platform}/unmapped-menus/${encodeURIComponent(externalMenuId)}/create-and-connect`, payload, config);
-export const fetchOwnedMenus = () => httpClient.get('/api/menus');
+export const fetchOwnedMenus = (config = {}) => httpClient.get('/api/menus', config);

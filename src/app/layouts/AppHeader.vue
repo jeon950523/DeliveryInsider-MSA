@@ -174,7 +174,9 @@ const findHeaderNotifications = async () => {
     isNotificationLoading.value = true
     notificationError.value = ''
 
-    const result = await fetchTodayOrders()
+    const result = await fetchTodayOrders({}, {
+      skipServerErrorRedirect: true,
+    })
     if (!active || request !== requestVersion || !authStore.isLoggedIn) return
     const todayOrders = result.data.data || []
 
