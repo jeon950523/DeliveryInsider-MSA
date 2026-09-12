@@ -67,7 +67,7 @@ class ReportReadMySqlTest {
                     + " LIKE `" + sourceDatabase + "`." + table);
             }
             sql.execute("""
-                CREATE TABLE report_refunds (
+                CREATE TABLE `%s`.report_refunds (
                     order_id BIGINT NOT NULL PRIMARY KEY,
                     status VARCHAR(32) NOT NULL,
                     amount BIGINT NOT NULL,
@@ -76,7 +76,7 @@ class ReportReadMySqlTest {
                     requested_at DATETIME(6) NOT NULL,
                     event_version BIGINT NOT NULL
                 )
-                """);
+                """.formatted(testDatabase));
         }
         connection.setCatalog(testDatabase);
         try (Statement sql = connection.createStatement()) {
@@ -114,9 +114,9 @@ class ReportReadMySqlTest {
                     (5, 1, 'A', 9000, 1000, 100, 4000, 1)
                 """);
             sql.executeUpdate("""
-                INSERT INTO report_order_charges (order_id, charge_type, amount)
-                VALUES (1, 'COMMISSION', 1000), (1, 'DELIVERY', 2000),
-                       (2, 'COMMISSION', 500), (2, 'DELIVERY', 1500)
+                INSERT INTO report_order_charges (order_id, charge_type, amount, provisional)
+                VALUES (1, 'COMMISSION', 1000, FALSE), (1, 'DELIVERY', 2000, FALSE),
+                       (2, 'COMMISSION', 500, FALSE), (2, 'DELIVERY', 1500, FALSE)
                 """);
             sql.executeUpdate("""
                 INSERT INTO report_cancellations

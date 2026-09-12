@@ -84,8 +84,9 @@ class ReportDailyContractMySqlTest {
                     (4, 1, 'A', 9000, 1000, 100, 3000, 2), (5, 1, 'A', 9000, 1000, 100, 4000, 1)
                 """);
             sql.executeUpdate("""
-                INSERT INTO report_order_charges (order_id, charge_type, amount)
-                VALUES (1, 'COMMISSION', 1000), (1, 'DELIVERY', 2000), (2, 'COMMISSION', 500), (2, 'DELIVERY', 1500)
+                INSERT INTO report_order_charges (order_id, charge_type, amount, provisional)
+                VALUES (1, 'COMMISSION', 1000, FALSE), (1, 'DELIVERY', 2000, FALSE),
+                       (2, 'COMMISSION', 500, FALSE), (2, 'DELIVERY', 1500, FALSE)
                 """);
             sql.executeUpdate("""
                 UPDATE report_orders
@@ -216,7 +217,7 @@ class ReportDailyContractMySqlTest {
         assertThat(connection.getCatalog()).isEqualTo(testDatabase).matches("report_daily_test_[0-9a-f]{32}");
         try (Statement sql = connection.createStatement()) {
             sql.executeUpdate("UPDATE report_orders SET customer_paid_amount = 0, provider_financial_data_status = 'AVAILABLE' WHERE order_id = 6");
-            sql.executeUpdate("INSERT INTO report_order_charges (order_id, charge_type, amount) VALUES (6, 'COMMISSION', 0)");
+            sql.executeUpdate("INSERT INTO report_order_charges (order_id, charge_type, amount, provisional) VALUES (6, 'COMMISSION', 0, FALSE)");
             sql.executeUpdate("UPDATE report_orders SET customer_paid_amount = 99999 WHERE order_id IN (4, 5)");
         }
         session.clearCache(); // JDBC fixture writes bypass MyBatis local-session cache invalidation.
