@@ -4,18 +4,22 @@ import com.deliveryinsider.report.domain.order.entity.ReportCancellationEntity;
 import com.deliveryinsider.report.domain.order.entity.ReportOrderChargeEntity;
 import com.deliveryinsider.report.domain.order.entity.ReportOrderEntity;
 import com.deliveryinsider.report.domain.order.entity.ReportOrderItemEntity;
+import com.deliveryinsider.report.domain.order.entity.ReportRefundEntity;
 import com.deliveryinsider.report.domain.order.mapper.ReportCancellationMapper;
 import com.deliveryinsider.report.domain.order.mapper.ReportOrderChargeMapper;
 import com.deliveryinsider.report.domain.order.mapper.ReportOrderItemMapper;
 import com.deliveryinsider.report.domain.order.mapper.ReportOrderMapper;
+import com.deliveryinsider.report.domain.order.mapper.ReportRefundMapper;
 import com.deliveryinsider.report.messaging.order.dto.OrderCreatedEventData;
 import com.deliveryinsider.report.messaging.order.dto.OrderEventEnvelope;
 import com.deliveryinsider.report.messaging.order.dto.OrderOperationStatusChangedEventData;
+import com.deliveryinsider.report.messaging.order.dto.OrderRefundRequestedEventData;
 import com.deliveryinsider.report.messaging.order.dto.OrderStatusChangedEventData;
 import com.deliveryinsider.report.messaging.order.exception.NonRetryableReportEventException;
 import com.deliveryinsider.report.messaging.order.exception.RetryableReportEventException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -25,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +47,8 @@ public class ReportOrderProjectionService {
 
     private final ReportCancellationMapper
         reportCancellationMapper;
+
+    private final ReportRefundMapper reportRefundMapper;
 
     private final JsonMapper jsonMapper;
 
@@ -67,6 +74,11 @@ public class ReportOrderProjectionService {
 
             case "ORDER_OPERATION_STATUS_CHANGED" ->
                 handleOperationStatusChanged(
+                    event
+                );
+
+            case "ORDER_REFUND_REQUESTED" ->
+                handleRefundRequested(
                     event
                 );
 
@@ -403,6 +415,66 @@ public class ReportOrderProjectionService {
         }
 
         return ReportProjectionResult.APPLIED;
+    }
+
+
+    private ReportProjectionResult
+    handleRefundRequested(
+        OrderEventEnvelope event
+    ) {
+        OrderRefundRequestedEventData data =
+            convertData(
+                event.data(),
+                OrderRefundRequestedEventData.class
+            );
+
+        if (
+            data.orderId() == null
+                || data.refundStatus() == null
+                || data.requestedAt() == null
+                || data.amount() < 0
+                || !"REQUESTED".equals(data.refundStatus())
+                || !"ORDER_REFUND".equals(event.aggregateType())
+                || !data.orderId().toString().equals(event.aggregateId())
+        ) {
+            throw new NonRetryableReportEventException(
+                "ORDER_REFUND_REQUESTED 필수 값이 없습니다."
+            );
+        }
+
+        ReportOrderEntity order =
+            findOrderForUpdate(
+                data.orderId()
+            );
+
+        if (
+            !Objects.equals(event.storeId(), order.getStoreId())
+                || !Objects.equals(data.platformType(), order.getPlatformType())
+                || !Objects.equals(data.platformOrderId(), order.getPlatformOrderId())
+                || !Objects.equals(data.externalStoreId(), order.getExternalStoreId())
+        ) {
+            throw new NonRetryableReportEventException(
+                "ORDER_REFUND_REQUESTED 주문 식별자가 Report 주문과 일치하지 않습니다. orderId="
+                    + data.orderId()
+            );
+        }
+
+        try {
+            reportRefundMapper.insert(
+                ReportRefundEntity.builder()
+                    .orderId(data.orderId())
+                    .status(data.refundStatus())
+                    .amount(data.amount())
+                    .reasonCode(data.reasonCode())
+                    .reasonText(data.reasonText())
+                    .requestedAt(toUtcLocalDateTime(data.requestedAt()))
+                    .eventVersion(event.eventVersion())
+                    .build()
+            );
+            return ReportProjectionResult.APPLIED;
+        } catch (DuplicateKeyException e) {
+            return ReportProjectionResult.STALE_IGNORED;
+        }
     }
 
 

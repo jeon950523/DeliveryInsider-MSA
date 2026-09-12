@@ -110,6 +110,25 @@ public class ReportReadController {
         );
     }
 
+    @GetMapping("/history")
+    public List<ReportOrderHistoryResponse> getOrderHistory(
+        @RequestHeader("X-User-Id") Long userId,
+        @RequestParam(required = false)
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+        LocalDateTime from,
+        @RequestParam(required = false)
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+        LocalDateTime to,
+        @RequestParam(required = false) String platformType
+    ) {
+        return reportReadService.getOrderHistory(
+            userId,
+            from,
+            to,
+            platformType
+        );
+    }
+
     @GetMapping("/menus")
     public List<ReportMenuPerformanceResponse> getMenuPerformance(
         @RequestHeader("X-User-Id")

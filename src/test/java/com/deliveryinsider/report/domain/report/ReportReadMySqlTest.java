@@ -62,10 +62,21 @@ class ReportReadMySqlTest {
             // Assign the cleanup target only after creating a new database succeeds.
             sql.execute("CREATE DATABASE `" + candidate + "`");
             testDatabase = candidate;
-            for (String table : new String[]{"report_orders", "report_order_items", "report_order_charges"}) {
+            for (String table : new String[]{"report_orders", "report_order_items", "report_order_charges", "report_cancellations"}) {
                 sql.execute("CREATE TABLE `" + testDatabase + "`." + table
                     + " LIKE `" + sourceDatabase + "`." + table);
             }
+            sql.execute("""
+                CREATE TABLE report_refunds (
+                    order_id BIGINT NOT NULL PRIMARY KEY,
+                    status VARCHAR(32) NOT NULL,
+                    amount BIGINT NOT NULL,
+                    reason_code VARCHAR(120) NULL,
+                    reason_text TEXT NULL,
+                    requested_at DATETIME(6) NOT NULL,
+                    event_version BIGINT NOT NULL
+                )
+                """);
         }
         connection.setCatalog(testDatabase);
         try (Statement sql = connection.createStatement()) {
@@ -106,6 +117,16 @@ class ReportReadMySqlTest {
                 INSERT INTO report_order_charges (order_id, charge_type, amount)
                 VALUES (1, 'COMMISSION', 1000), (1, 'DELIVERY', 2000),
                        (2, 'COMMISSION', 500), (2, 'DELIVERY', 1500)
+                """);
+            sql.executeUpdate("""
+                INSERT INTO report_cancellations
+                    (order_id, provider_cancel_code, provider_cancel_reason, canceled_at, event_version)
+                VALUES (5, 'OUT_OF_STOCK', '재료 소진', '2026-09-08 05:10:00', 2)
+                """);
+            sql.executeUpdate("""
+                INSERT INTO report_refunds
+                    (order_id, status, amount, reason_code, reason_text, requested_at, event_version)
+                VALUES (2, 'REQUESTED', 12000, 'FOOD_ISSUE', '음식 문제', '2026-09-08 02:20:00', 1)
                 """);
             sql.executeUpdate("""
                 UPDATE report_orders
@@ -226,6 +247,24 @@ class ReportReadMySqlTest {
             .andExpect(jsonPath("$.content").isEmpty())
             .andExpect(jsonPath("$.totalElements").value(0))
             .andExpect(jsonPath("$.totalPages").value(0));
+    }
+
+    @Test
+    void historySeparatesCancellationFromRefundRequestWithoutChangingOrderLifecycle() throws Exception {
+        mvc.perform(get("/api/reports/history").header("X-User-Id", 10))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(2))
+            .andExpect(jsonPath("$[0].historyType").value("CANCELED"))
+            .andExpect(jsonPath("$[0].reasonCode").value("OUT_OF_STOCK"))
+            .andExpect(jsonPath("$[0].reasonText").value("재료 소진"))
+            .andExpect(jsonPath("$[1].historyType").value("REFUND_REQUESTED"))
+            .andExpect(jsonPath("$[1].refundStatus").value("REQUESTED"))
+            .andExpect(jsonPath("$[1].amount").value(12000));
+
+        mvc.perform(get("/api/reports/orders").header("X-User-Id", 10)
+                .param("platformType", "COUPANG_EATS"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content[0].status").value("DELIVERED"));
     }
 
     @Test

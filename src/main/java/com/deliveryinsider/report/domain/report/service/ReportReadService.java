@@ -10,6 +10,7 @@ import com.deliveryinsider.report.domain.report.response.ReportDailyTrendRespons
 import com.deliveryinsider.report.domain.report.response.ReportMenuPerformanceResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderPageResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderResponse;
+import com.deliveryinsider.report.domain.report.response.ReportOrderHistoryResponse;
 import com.deliveryinsider.report.domain.report.response.ReportSummaryResponse;
 import com.deliveryinsider.report.domain.report.response.ReportMenuEstimatedProfitResponse;
 import com.deliveryinsider.report.global.error.BusinessException;
@@ -162,6 +163,27 @@ public class ReportReadService {
             totalElements,
             totalPages
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReportOrderHistoryResponse> getOrderHistory(
+        Long userId,
+        LocalDateTime from,
+        LocalDateTime to,
+        String platformType
+    ) {
+        validateRangeAndPlatform(from, to, platformType);
+        CurrentStoreResponse store = resolveStore(userId);
+
+        return reportReadMapper.findOrderHistory(
+                store.storeId(),
+                from,
+                to,
+                platformType
+            )
+            .stream()
+            .map(ReportOrderHistoryResponse::from)
+            .toList();
     }
 
     @Transactional(readOnly = true)

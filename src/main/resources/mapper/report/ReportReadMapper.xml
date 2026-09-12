@@ -374,6 +374,75 @@
     </select>
 
     <select
+            id="findOrderHistory"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportOrderHistoryProjection">
+
+        SELECT
+            history.order_id AS orderId,
+            history.platform_type AS platformType,
+            history.platform_order_id AS platformOrderId,
+            history.history_type AS historyType,
+            history.reason_code AS reasonCode,
+            history.reason_text AS reasonText,
+            history.amount AS amount,
+            history.refund_status AS refundStatus,
+            history.occurred_at AS occurredAt
+        FROM (
+            SELECT
+                ro.order_id,
+                ro.platform_type,
+                ro.platform_order_id,
+                'CANCELED' AS history_type,
+                rc.provider_cancel_code AS reason_code,
+                rc.provider_cancel_reason AS reason_text,
+                NULL AS amount,
+                NULL AS refund_status,
+                rc.canceled_at AS occurred_at
+            FROM report_orders ro
+            INNER JOIN report_cancellations rc
+                ON rc.order_id = ro.order_id
+            WHERE ro.store_id = #{storeId}
+            <if test="from != null">
+                AND rc.canceled_at <![CDATA[ >= ]]> #{from}
+            </if>
+            <if test="to != null">
+                AND rc.canceled_at <![CDATA[ <= ]]> #{to}
+            </if>
+            <if test="platformType != null and platformType != ''">
+                AND ro.platform_type = #{platformType}
+            </if>
+
+            UNION ALL
+
+            SELECT
+                ro.order_id,
+                ro.platform_type,
+                ro.platform_order_id,
+                'REFUND_REQUESTED' AS history_type,
+                rr.reason_code,
+                rr.reason_text,
+                rr.amount,
+                rr.status AS refund_status,
+                rr.requested_at AS occurred_at
+            FROM report_orders ro
+            INNER JOIN report_refunds rr
+                ON rr.order_id = ro.order_id
+            WHERE ro.store_id = #{storeId}
+            <if test="from != null">
+                AND rr.requested_at <![CDATA[ >= ]]> #{from}
+            </if>
+            <if test="to != null">
+                AND rr.requested_at <![CDATA[ <= ]]> #{to}
+            </if>
+            <if test="platformType != null and platformType != ''">
+                AND ro.platform_type = #{platformType}
+            </if>
+        ) history
+        ORDER BY history.occurred_at DESC, history.order_id DESC
+
+    </select>
+
+    <select
             id="findMenuPerformance"
             resultType="com.deliveryinsider.report.domain.report.projection.ReportMenuPerformanceProjection">
 
