@@ -6,5 +6,8 @@ export const fetchReportOrders = (params = {}) =>
 export const fetchReportSummary = (params = {}) =>
   httpClient.get('/api/reports/summary', { params });
 
+export const fetchEstimatedMenuProfit = (params = {}) =>
+  httpClient.get('/api/reports/menus/estimated-profit', { params });
+
 export const fetchReportProcessingTimes = (params = {}) =>
   httpClient.get('/api/reports/processing-times', { params });

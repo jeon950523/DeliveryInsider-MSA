@@ -2,10 +2,8 @@
 import { onBeforeMount, reactive, ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useMenuStore } from '../stores/useMenuStore.js';
-import { usePlatformSettingStore } from '../../platform/settings/stores/usePlatformSettingStore.js';
 
 const store = useMenuStore();
-const platformSettingStore = usePlatformSettingStore();
 const route = useRoute();
 
 // 탭 상태 관리 (base: 메뉴 기준정보, platform: 플랫폼 수수료 기준 단품 수익 비교, loss: 숨은 손실 메뉴)
@@ -61,8 +59,7 @@ const applyRouteQuery = () => {
 onBeforeMount(async () => {
   await Promise.all([
     store.fetchMenus(),
-    store.fetchLossDismissals().catch(() => []),
-    platformSettingStore.findAll().catch(() => [])
+    store.fetchLossDismissals().catch(() => [])
   ]);
 
   applyRouteQuery();
@@ -136,13 +133,6 @@ const handleDelete = async () => {
 // ============================================================
 // 분석 및 계산 로직
 // ============================================================
-const platformNames = {
-  BAEMIN: '배민',
-  COUPANG_EATS: '쿠팡이츠',
-  YOGIYO: '요기요',
-  DDANGYO: '땡겨요',
-};
-
 const fallbackPlatformPolicies = [
   { platformType: 'BAEMIN', name: '배민', commissionRate: 6.8 },
   { platformType: 'COUPANG_EATS', name: '쿠팡이츠', commissionRate: 9.8 },
@@ -327,19 +317,7 @@ const platformCandidateMenus = computed(() => {
 });
 
 const platformPolicies = computed(() => {
-  const settings = platformSettingStore.platformSettings || [];
-
-  if (!settings.length) {
-    return fallbackPlatformPolicies;
-  }
-
-  return settings.map((setting) => {
-    return {
-      platformType: setting.platformType,
-      name: platformNames[setting.platformType] || setting.platformType,
-      commissionRate: toNumber(setting.commissionRate),
-    };
-  });
+  return fallbackPlatformPolicies;
 });
 
 const selectedCompareMenu = computed(() => {

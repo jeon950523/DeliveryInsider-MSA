@@ -18,7 +18,7 @@ const priorityPageSize = 3;
 const nowTick = ref(new Date());
 let elapsedTimer = null;
 const platformConnectionChecked = ref(false);
-const hasActiveBaeminConnection = ref(false);
+const hasActivePlatformConnection = ref(false);
 const platformConnectionNoticeDismissed = ref(false);
 
 const platformNames = {
@@ -221,7 +221,7 @@ const operationBrief = computed(() => {
 
 const shouldShowPlatformConnectionNotice = computed(() => (
   platformConnectionChecked.value
-  && !hasActiveBaeminConnection.value
+  && !hasActivePlatformConnection.value
   && !platformConnectionNoticeDismissed.value
 ));
 
@@ -254,9 +254,8 @@ const loadPlatformConnection = async () => {
   try {
     const response = await fetchIntegrations();
     const integrations = response?.data?.data;
-    hasActiveBaeminConnection.value = Array.isArray(integrations)
-      && integrations.some((item) => item.platformType === 'BAEMIN'
-        && item.enabled === true
+    hasActivePlatformConnection.value = Array.isArray(integrations)
+      && integrations.some((item) => item.enabled === true
         && item.connectionStatus === 'ACTIVE');
     platformConnectionChecked.value = true;
   } catch (error) {

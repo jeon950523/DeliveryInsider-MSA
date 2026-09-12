@@ -124,6 +124,7 @@ const reasonTypeLabels = [
 const orders = computed(() => reportStore.reportOrders);
 const reportSummary = computed(() => reportStore.reportSummary);
 const processingTimes = computed(() => reportStore.processingTimes);
+const estimatedMenuProfits = computed(() => reportStore.estimatedMenuProfits);
 
 const getReportSortValue = (order) => {
   const rawDateTime =
@@ -221,6 +222,10 @@ const hiddenPreviewCount = computed(() => {
 const formatMoney = (value) => {
   return `${Number(value || 0).toLocaleString('ko-KR')} 원`;
 };
+
+const formatMarginRate = (value) => (value === null || value === undefined
+  ? '-'
+  : `${Number(value).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`);
 
 const summaryStats = computed(() => {
   const summary = reportSummary.value || {};
@@ -378,7 +383,7 @@ const applyRouteQueryToReport = () => {
   const query = route.query;
 
   const requestedTab = String(query.tab || '');
-  const availableTabs = ['sales', 'processing', 'cancel', 'platform', 'export'];
+  const availableTabs = ['sales', 'menu-profit', 'processing', 'cancel', 'platform', 'export'];
 
   if (availableTabs.includes(requestedTab)) {
     activeTab.value = requestedTab;
@@ -623,6 +628,7 @@ onMounted(async () => {
 
     <div class="tabs-mock report-tabs report-tabs-under-title">
       <button class="tab" :class="{ active: activeTab === 'sales' }" @click="activeTab = 'sales'">매출 리포트</button>
+      <button class="tab" :class="{ active: activeTab === 'menu-profit' }" @click="activeTab = 'menu-profit'">메뉴별 추정 순수익</button>
       <button class="tab" :class="{ active: activeTab === 'processing' }" @click="activeTab = 'processing'">처리시간 분석</button>
       <button class="tab" :class="{ active: activeTab === 'cancel' }" @click="activeTab = 'cancel'">취소/환불 리포트</button>
       <button class="tab" :class="{ active: activeTab === 'platform' }" @click="activeTab = 'platform'">플랫폼별 운영 요약</button>
@@ -749,6 +755,46 @@ onMounted(async () => {
         >
           다음
         </button>
+        </div>
+      </article>
+    </section>
+
+    <section v-if="activeTab === 'menu-profit'" class="sales-report-page-block">
+      <article class="card report-card menu-profit-card">
+        <div class="card-header">
+          <div class="title-area">
+            <h2>메뉴별 추정 순수익</h2>
+            <p class="required-note">주문 당시 플랫폼 비용·점주 부담 쿠폰·메뉴 원가·포장비와 선택 기간의 Store별 광고비를 메뉴 매출 비중으로 배분한 운영 지표입니다. 인건비·임대료·세금·공과금·감가상각은 포함하지 않습니다.</p>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table menu-profit-table">
+            <thead>
+              <tr>
+                <th>메뉴</th><th>판매수량</th><th>매출</th><th>원가</th><th>포장비</th>
+                <th>플랫폼 수수료</th><th>결제 수수료</th><th>점주 배달비</th><th>점주 쿠폰</th>
+                <th>광고비 배분</th><th>추정 순수익</th><th>추정 수익률</th><th>금융 상태</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="menu in estimatedMenuProfits" :key="`${menu.menuId}-${menu.menuName}`">
+                <td class="text-main">{{ menu.menuName || '-' }}</td>
+                <td>{{ menu.quantity }}개</td>
+                <td>{{ formatMoney(menu.grossSales) }}</td>
+                <td>{{ formatMoney(menu.costOfGoods) }}</td>
+                <td>{{ formatMoney(menu.packagingCost) }}</td>
+                <td>{{ formatMoney(menu.platformCommission) }}</td>
+                <td>{{ formatMoney(menu.paymentFee) }}</td>
+                <td>{{ formatMoney(menu.merchantDeliveryFee) }}</td>
+                <td>{{ formatMoney(menu.merchantCouponDiscount) }}</td>
+                <td>{{ formatMoney(menu.allocatedAdSpend) }}</td>
+                <td><strong class="profit-strong" :class="{ 'loss-text': Number(menu.estimatedNetProfit) < 0 }">{{ formatMoney(menu.estimatedNetProfit) }}</strong></td>
+                <td>{{ formatMarginRate(menu.estimatedMarginRate) }}</td>
+                <td><span class="financial-status-badge" :class="{ unavailable: menu.financialDataStatus === 'UNAVAILABLE' || menu.financialDataStatus === 'PARTIAL' }">{{ menu.financialDataStatus }}</span></td>
+              </tr>
+              <tr v-if="estimatedMenuProfits.length === 0"><td colspan="13" class="empty-message">조건에 맞는 완료 주문 기반 메뉴 수익 데이터가 없습니다.</td></tr>
+            </tbody>
+          </table>
         </div>
       </article>
     </section>
@@ -2479,6 +2525,10 @@ onMounted(async () => {
   color: #64748b;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.menu-profit-table {
+  min-width: 1560px;
 }
 
 </style>

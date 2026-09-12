@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import {
   fetchReportOrders,
+  fetchEstimatedMenuProfit,
   fetchReportProcessingTimes,
   fetchReportSummary,
 } from '../api/reportApi.js';
@@ -49,6 +50,7 @@ export const useReportStore = defineStore('report', () => {
   const allReportOrders = ref([]);
   const reportSummary = ref(createEmptySummary());
   const processingTimes = ref(createEmptyProcessingTimes());
+  const estimatedMenuProfits = ref([]);
 
   const isLoading = ref(false);
   const isExporting = ref(false);
@@ -244,6 +246,12 @@ export const useReportStore = defineStore('report', () => {
     return processingTimes.value;
   };
 
+  const findEstimatedMenuProfits = async (filters = {}) => {
+    const result = await fetchEstimatedMenuProfit(buildAnalysisParams(filters));
+    estimatedMenuProfits.value = Array.isArray(result.data) ? result.data : [];
+    return estimatedMenuProfits.value;
+  };
+
   const findReports = async (filters = {}) => {
     try {
       isLoading.value = true;
@@ -255,6 +263,7 @@ export const useReportStore = defineStore('report', () => {
         findOrders(filters),
         findSummary(filters),
         findProcessingTimes(filters),
+        findEstimatedMenuProfits(filters),
       ]);
 
       return orders;
@@ -345,6 +354,7 @@ export const useReportStore = defineStore('report', () => {
     allReportOrders.value = [];
     reportSummary.value = createEmptySummary();
     processingTimes.value = createEmptyProcessingTimes();
+    estimatedMenuProfits.value = [];
     isLoading.value = false;
     isExporting.value = false;
     lastSearchParams.value = {};
@@ -354,6 +364,7 @@ export const useReportStore = defineStore('report', () => {
     reportOrders,
     reportSummary,
     processingTimes,
+    estimatedMenuProfits,
     isLoading,
     isExporting,
     lastSearchParams,
@@ -361,6 +372,7 @@ export const useReportStore = defineStore('report', () => {
     findOrders,
     findSummary,
     findProcessingTimes,
+    findEstimatedMenuProfits,
     findReports,
     downloadOrdersCsv,
     clearReports,
