@@ -26,11 +26,15 @@ import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class OrderReadService {
+
+    private static final ZoneId STORE_BUSINESS_ZONE =
+        ZoneId.of("Asia/Seoul");
 
     private final CurrentStoreClient currentStoreClient;
 
@@ -630,7 +634,8 @@ public class OrderReadService {
     ) {
         BusinessWindow window =
             BusinessWindowResolver.resolve(
-                LocalDateTime.now(clock),
+                clock.instant(),
+                STORE_BUSINESS_ZONE,
                 store.openTime(),
                 store.closeTime()
             );

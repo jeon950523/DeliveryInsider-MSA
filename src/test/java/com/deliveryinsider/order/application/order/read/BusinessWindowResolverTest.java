@@ -4,12 +4,16 @@ import com.deliveryinsider.order.global.error.BusinessException;
 import com.deliveryinsider.order.global.error.OrderErrorCode;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class BusinessWindowResolverTest {
+
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
     @Test
     void resolvesSameDayBusinessHours() {
@@ -133,6 +137,63 @@ class BusinessWindowResolverTest {
         );
         assertEquals(
             LocalDateTime.of(2026, 9, 12, 18, 0),
+            window.businessEndAt()
+        );
+    }
+
+    @Test
+    void convertsTwentyFourHourSeoulWindowToUtcDatabaseRange() {
+        BusinessWindow window = BusinessWindowResolver.resolve(
+            Instant.parse("2026-09-12T08:59:36Z"),
+            SEOUL,
+            "09:00",
+            "09:00"
+        );
+
+        assertEquals(
+            LocalDateTime.of(2026, 9, 12, 0, 0),
+            window.businessStartAt()
+        );
+        assertEquals(
+            LocalDateTime.of(2026, 9, 13, 0, 0),
+            window.businessEndAt()
+        );
+    }
+
+    @Test
+    void convertsSameDaySeoulWindowToUtcDatabaseRange() {
+        BusinessWindow window = BusinessWindowResolver.resolve(
+            Instant.parse("2026-09-12T03:30:00Z"),
+            SEOUL,
+            "09:00",
+            "18:00"
+        );
+
+        assertEquals(
+            LocalDateTime.of(2026, 9, 12, 0, 0),
+            window.businessStartAt()
+        );
+        assertEquals(
+            LocalDateTime.of(2026, 9, 12, 9, 0),
+            window.businessEndAt()
+        );
+    }
+
+    @Test
+    void convertsOvernightSeoulWindowAfterMidnightToUtcDatabaseRange() {
+        BusinessWindow window = BusinessWindowResolver.resolve(
+            Instant.parse("2026-09-11T16:30:00Z"),
+            SEOUL,
+            "18:00",
+            "03:00"
+        );
+
+        assertEquals(
+            LocalDateTime.of(2026, 9, 11, 9, 0),
+            window.businessStartAt()
+        );
+        assertEquals(
+            LocalDateTime.of(2026, 9, 11, 18, 0),
             window.businessEndAt()
         );
     }

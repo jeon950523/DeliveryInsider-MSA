@@ -6,6 +6,9 @@ import com.deliveryinsider.order.global.error.OrderErrorCode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
@@ -59,6 +62,38 @@ public final class BusinessWindowResolver {
         }
 
         return window(today.minusDays(1), open, today, close);
+    }
+
+    public static BusinessWindow resolve(
+        Instant now,
+        ZoneId businessZone,
+        String openTime,
+        String closeTime
+    ) {
+        LocalDateTime localNow = LocalDateTime.ofInstant(
+            now,
+            businessZone
+        );
+        BusinessWindow localWindow = resolve(
+            localNow,
+            openTime,
+            closeTime
+        );
+
+        return new BusinessWindow(
+            toUtc(localWindow.businessStartAt(), businessZone),
+            toUtc(localWindow.businessEndAt(), businessZone)
+        );
+    }
+
+    private static LocalDateTime toUtc(
+        LocalDateTime localDateTime,
+        ZoneId businessZone
+    ) {
+        return localDateTime
+            .atZone(businessZone)
+            .withZoneSameInstant(ZoneOffset.UTC)
+            .toLocalDateTime();
     }
 
     private static BusinessWindow window(
