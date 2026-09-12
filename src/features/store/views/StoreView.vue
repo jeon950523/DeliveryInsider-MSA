@@ -1,15 +1,16 @@
 <script setup>
 import { onBeforeMount, reactive, computed, nextTick, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useStoreStore } from '../stores/useStoreStore';
 import PlatformSettingsPanel from '../../platform/connection/components/PlatformSettingsPanel.vue';
 import { isValidStorePhone } from '../utils/storeContactValidation.js';
 
 const router = useRouter();
+const route = useRoute();
 const store = useStoreStore();
 
 // 탭 상태 관리 ('basic', 'platform', 'operation')
-const activeTab = ref('basic');
+const activeTab = ref(route.query.tab === 'platform' ? 'platform' : 'basic');
 const isLoading = ref(true);
 const loadError = ref('');
 const saveError = ref('');

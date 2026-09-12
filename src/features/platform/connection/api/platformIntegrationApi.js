@@ -1,6 +1,7 @@
 import httpClient from '../../../../shared/api/httpClient.js';
 const base = '/api/platform-integrations';
 export const fetchIntegrations = (config = {}) => httpClient.get(base, config);
+export const fetchAvailableExternalStores = (platform, config = {}) => httpClient.get(`${base}/${platform}/external-stores`, config);
 export const saveIntegration = (platform, payload) => httpClient.put(`${base}/${platform}`, payload);
 export const changeIntegrationEnabled = (platform, enabled) => httpClient.patch(`${base}/${platform}/enabled`, { enabled });
 export const fetchIntegrationStatus = (platform) => httpClient.get(`${base}/${platform}/status`);

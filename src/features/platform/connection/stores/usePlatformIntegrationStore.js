@@ -4,6 +4,7 @@ import * as api from '../api/platformIntegrationApi.js';
 
 export const usePlatformIntegrationStore = defineStore('platformIntegration', () => {
   const integrations = ref([]);
+  const availableStores = ref({});
   const menus = ref([]);
   const mappings = ref({});
   const unmappedMenus = ref({});
@@ -22,18 +23,22 @@ export const usePlatformIntegrationStore = defineStore('platformIntegration', ()
     const version = ++epoch;
     isLoading.value = true; hasLoaded.value = false; errorMessage.value = ''; successMessage.value = '';
     try {
-      const [settings, ownMenus, unresolved] = await Promise.all([
+      const platformTypes = ['BAEMIN', 'COUPANG_EATS', 'YOGIYO', 'DDANGYO'];
+      const [settings, ownMenus, unresolved, ...externalStores] = await Promise.all([
         api.fetchIntegrations(),
         api.fetchOwnedMenus(),
         api.fetchUnresolvedOrderMenus(),
+        ...platformTypes.map((platform) => api.fetchAvailableExternalStores(platform)),
       ]);
       if (version !== epoch) return false;
-      if (!Array.isArray(settings.data.data) || !Array.isArray(ownMenus.data.data) || !Array.isArray(unresolved.data.data)) throw new Error('응답 형식 오류');
+      if (!Array.isArray(settings.data.data) || !Array.isArray(ownMenus.data.data) || !Array.isArray(unresolved.data.data)
+        || externalStores.some((response) => !Array.isArray(response.data.data))) throw new Error('응답 형식 오류');
       integrations.value = settings.data.data; menus.value = ownMenus.data.data; unresolvedOrderMenus.value = unresolved.data.data;
+      availableStores.value = Object.fromEntries(platformTypes.map((platform, index) => [platform, externalStores[index].data.data]));
       hasLoaded.value = true;
       return true;
     } catch (error) {
-      if (version === epoch) { integrations.value = []; menus.value = []; mappings.value = {}; unmappedMenus.value = {}; unresolvedOrderMenus.value = []; errorMessage.value = message(error); }
+      if (version === epoch) { integrations.value = []; availableStores.value = {}; menus.value = []; mappings.value = {}; unmappedMenus.value = {}; unresolvedOrderMenus.value = []; errorMessage.value = message(error); }
       return false;
     } finally { if (version === epoch) isLoading.value = false; }
   };
@@ -75,6 +80,6 @@ export const usePlatformIntegrationStore = defineStore('platformIntegration', ()
     if (applied) await loadUnresolvedOrderMenus();
     return applied;
   };
-  const clear = () => { epoch += 1; integrations.value = []; menus.value = []; mappings.value = {}; unmappedMenus.value = {}; unresolvedOrderMenus.value = []; isLoading.value = false; hasLoaded.value = false; busy.value = ''; errorMessage.value = ''; successMessage.value = ''; };
-  return { integrations, menus, mappings, unmappedMenus, unresolvedOrderMenus, isLoading, hasLoaded, busy, errorMessage, successMessage, load, save, toggle, refreshStatus, loadMappings, saveMapping, loadUnmappedMenus, loadUnresolvedOrderMenus, connectExternalMenu, createAndConnectExternalMenu, clear };
+  const clear = () => { epoch += 1; integrations.value = []; availableStores.value = {}; menus.value = []; mappings.value = {}; unmappedMenus.value = {}; unresolvedOrderMenus.value = []; isLoading.value = false; hasLoaded.value = false; busy.value = ''; errorMessage.value = ''; successMessage.value = ''; };
+  return { integrations, availableStores, menus, mappings, unmappedMenus, unresolvedOrderMenus, isLoading, hasLoaded, busy, errorMessage, successMessage, load, save, toggle, refreshStatus, loadMappings, saveMapping, loadUnmappedMenus, loadUnresolvedOrderMenus, connectExternalMenu, createAndConnectExternalMenu, clear };
 });

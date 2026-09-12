@@ -9,6 +9,7 @@ const drafts = reactive(Object.fromEntries(Object.keys(providers).map((platform)
 const menuDrafts = reactive(Object.fromEntries(Object.keys(providers).map((platform) => [platform, { menuId: '', externalMenuId: '', enabled: true }])));
 const externalMenuDrafts = reactive(Object.fromEntries(Object.keys(providers).map((platform) => [platform, { menuId: '', menuCost: 0, packagingFee: 0, expectedCookingTime: 10 }])));
 const stored = (platform) => store.integrations.find((item) => item.platformType === platform);
+const externalStores = (platform) => store.availableStores[platform] || [];
 const sync = (platform) => { const setting = stored(platform); if (setting) Object.assign(drafts[platform], { externalStoreId: setting.externalStoreId, environment: setting.environment || 'SIMULATOR', enabled: setting.enabled }); };
 const load = async () => { if (await store.load()) Object.keys(providers).forEach(sync); };
 const save = async (platform) => { if (await store.save(platform, { ...drafts[platform] })) sync(platform); };
@@ -25,6 +26,7 @@ const statusLabel = (platform) => {
   if (!setting) return '미설정';
   if (!setting.enabled) return '비활성';
   if (setting.lastErrorCode) return '최근 처리 오류 확인 필요';
+  if (setting.connectionStatus === 'ACTIVE') return 'Simulator 연결 확인됨';
   return setting.lastSuccessAt ? '정상 전달 기록 있음' : '연동 확인 대기';
 };
 onMounted(load);
@@ -33,8 +35,8 @@ onBeforeUnmount(() => store.clear());
 
 <template>
   <section class="platform-settings-panel" data-testid="platform-settings">
-    <header><div><h2>플랫폼 연결 설정</h2><p>내 매장의 외부 매장·메뉴 식별자를 연결합니다. 설정 저장과 실제 외부 연동 성공은 다릅니다.</p></div><button type="button" :disabled="store.isLoading || !!store.busy" @click="load">설정 새로고침</button></header>
-    <p class="note">현재 Simulator/Sandbox 환경입니다. 수수료·고객 실결제액을 이 설정으로 추정하지 않습니다. 내부 메뉴 연결은 현재 매장 소유 메뉴만 가능합니다. 최근 정상 전달은 Platform의 주문 정규화·이벤트 발행 확인이며, 최종 주문 반영 완료를 뜻하지 않습니다.</p>
+    <header><div><h2>플랫폼 연결 설정</h2><p>내 매장이 연결할 수 있는 외부 Simulator 매장을 선택합니다. 외부 매장 목록은 Platform을 통해 조회합니다.</p></div><button type="button" :disabled="store.isLoading || !!store.busy" @click="load">설정 새로고침</button></header>
+    <p class="note">현재 제공자는 실제 배달 플랫폼이 아닌 Simulator adapter입니다. 이 화면의 ACTIVE는 Simulator 카탈로그 확인 상태이며, 실 Provider 자격증명·고객 결제·실서비스 주문 성공을 뜻하지 않습니다. 내부 메뉴 연결은 현재 매장 소유 메뉴만 가능합니다.</p>
     <p v-if="store.isLoading" role="status">플랫폼 설정을 불러오는 중입니다.</p>
     <p v-if="store.errorMessage" class="error" role="alert" data-testid="platform-error">{{ store.errorMessage }}</p>
     <p v-if="store.successMessage" class="success" role="status">{{ store.successMessage }}</p>
@@ -53,10 +55,11 @@ onBeforeUnmount(() => store.clear());
       <article v-for="(name, platform) in providers" :key="platform" class="platform-card" :data-testid="`integration-${platform}`">
         <h3>{{ name }} <span class="badge" data-testid="connection-status">{{ statusLabel(platform) }}</span></h3>
         <form @submit.prevent="save(platform)">
-          <label :for="`external-${platform}`">외부 매장 ID</label><input :id="`external-${platform}`" v-model.trim="drafts[platform].externalStoreId" maxlength="150" required :disabled="!!store.busy">
-          <label :for="`environment-${platform}`">연동 환경</label><select :id="`environment-${platform}`" v-model="drafts[platform].environment" :disabled="!!store.busy"><option value="SIMULATOR">Simulator</option><option value="SANDBOX">Sandbox</option></select>
+          <label :for="`external-${platform}`">연결할 외부 매장</label><select :id="`external-${platform}`" v-model="drafts[platform].externalStoreId" required :disabled="!!store.busy || externalStores(platform).length === 0"><option value="">선택</option><option v-for="externalStore in externalStores(platform)" :key="externalStore.externalStoreId" :value="externalStore.externalStoreId">{{ externalStore.storeName }} ({{ externalStore.externalStoreId }})</option></select>
+          <p v-if="!externalStores(platform).length" class="note">현재 매장에서 연결 가능한 외부 Simulator 매장이 없습니다.</p>
+          <p class="note">연동 환경: Simulator adapter</p>
           <label class="checkbox"><input v-model="drafts[platform].enabled" type="checkbox" :disabled="!!store.busy">주문 연동 활성</label>
-          <div class="actions"><button type="submit" :disabled="!!store.busy">{{ stored(platform) ? '연결 설정 저장' : '연결 설정 생성' }}</button><button v-if="stored(platform)" type="button" :disabled="!!store.busy" @click="toggle(platform)">{{ stored(platform).enabled ? '연동 비활성화' : '연동 활성화' }}</button><button v-if="stored(platform)" type="button" :disabled="!!store.busy" @click="refresh(platform)">상태 확인</button></div>
+          <div class="actions"><button type="submit" :disabled="!!store.busy || !drafts[platform].externalStoreId">{{ stored(platform) ? '연결 설정 저장' : '연결 설정 생성' }}</button><button v-if="stored(platform)" type="button" :disabled="!!store.busy" @click="toggle(platform)">{{ stored(platform).enabled ? '연동 비활성화' : '연동 활성화' }}</button><button v-if="stored(platform)" type="button" :disabled="!!store.busy" @click="refresh(platform)">상태 확인</button></div>
         </form>
         <dl v-if="stored(platform)"><dt>저장된 상태</dt><dd>{{ stored(platform).connectionStatus || '-' }}</dd><dt>최근 Webhook</dt><dd>{{ formatKstDateTime(stored(platform).lastWebhookAt) }}</dd><dt>최근 정상 전달</dt><dd>{{ formatKstDateTime(stored(platform).lastSuccessAt) }}</dd><dt>최근 오류 코드</dt><dd>{{ stored(platform).lastErrorCode || '-' }}</dd></dl>
         <details v-if="stored(platform)" class="menu-mapping"><summary @click="loadMenuConnection(platform)">메뉴 연결 관리</summary>
