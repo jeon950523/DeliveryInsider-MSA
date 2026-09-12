@@ -10,6 +10,6 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix="catalog.consumer", name="enabled", havingValue="true", matchIfMissing=true)
 public class CatalogKafkaListener {
     private final CatalogEventConsumer consumer;
-    @KafkaListener(topics="${catalog.consumer.topic:store.events}", groupId="${catalog.consumer.group:platform-store-catalog-v1}")
+    @KafkaListener(topics="${catalog.consumer.topic}", groupId="${catalog.consumer.group}")
     public void receive(String body) { consumer.receive(body); }
 }

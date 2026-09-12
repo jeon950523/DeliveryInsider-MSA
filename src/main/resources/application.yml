@@ -33,7 +33,7 @@ spring:
 
 deliveryinsider:
   kafka:
-    platform-order-topic: platform.order-events
+    platform-order-topic: ${PLATFORM_ORDER_TOPIC:${KAFKA_TOPIC_PREFIX:}platform.order-events}
     publish-timeout-ms: 10000
 
 springdoc:
@@ -93,3 +93,9 @@ provider-client:
 catalog:
   consumer:
     enabled: ${CATALOG_CONSUMER_ENABLED:true}
+    topic: ${STORE_EVENT_TOPIC:${KAFKA_TOPIC_PREFIX:}store.events}
+    group: ${CATALOG_CONSUMER_GROUP:platform-store-catalog-v1}
+order-operation:
+  consumer:
+    topic: ${ORDER_EVENT_TOPIC:${KAFKA_TOPIC_PREFIX:}order.events}
+    group: ${PLATFORM_ORDER_OPERATION_CONSUMER_GROUP:platform-order-operation-v1}

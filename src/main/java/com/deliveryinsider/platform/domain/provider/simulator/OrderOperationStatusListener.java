@@ -22,8 +22,8 @@ public class OrderOperationStatusListener {
     private final SimulatorDeliveryControlClient deliveryControlClient;
 
     @KafkaListener(
-        topics = "${order-operation.consumer.topic:order.events}",
-        groupId = "${order-operation.consumer.group:platform-order-operation-v1}"
+        topics = "${order-operation.consumer.topic}",
+        groupId = "${order-operation.consumer.group}"
     )
     public void receive(String payload) {
         try {
