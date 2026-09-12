@@ -3,6 +3,7 @@ package com.deliveryinsider.platform.domain.catalog.event;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -17,9 +18,10 @@ class CatalogProjectionMySqlTest {
     @Autowired CatalogEventConsumer consumer;
     @Autowired PlatformTransactionManager transactions;
     @Autowired JsonMapper json;
-    @Autowired org.springframework.kafka.config.KafkaListenerEndpointRegistry listeners;
+    @Autowired ApplicationContext applicationContext;
     @BeforeEach void isolatedFixture() {
-        assertTrue(listeners.getListenerContainers().isEmpty(), "Disabled Catalog must not register a live listener");
+        assertFalse(applicationContext.containsBean("catalogKafkaListener"),
+            "Disabled Catalog must not register its listener bean");
         String schema = System.getenv("CATALOG_TEST_SCHEMA");
         assertNotNull(schema, "Run scripts/test-local-mysql.ps1");
         assertTrue(schema.matches("platform_regression_test_[0-9a-f]{32}"));

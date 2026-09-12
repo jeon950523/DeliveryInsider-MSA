@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.util.List;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -34,6 +35,7 @@ class PlatformIntegrationMySqlTest {
     @Autowired PlatformIntegrationController controller;
     @Autowired JdbcTemplate jdbc;
     @MockitoBean PlatformStoreClient storeClient;
+    @MockitoBean SimulatorCatalogClient simulatorCatalog;
     private MockMvc mvc;
 
     private static Connection sourceConnection() throws Exception {
@@ -51,7 +53,8 @@ class PlatformIntegrationMySqlTest {
             String candidate = "platform_setting_test_" + UUID.randomUUID().toString().replace("-", "");
             sql.execute("CREATE DATABASE `" + candidate + "`");
             testDatabase = candidate;
-            for (String table : new String[]{"store_platform_settings", "platform_menu_mappings", "store_catalog_projection", "menu_catalog_projection"}) {
+            for (String table : new String[]{"store_platform_settings", "platform_menu_mappings", "store_catalog_projection",
+                "menu_catalog_projection", "provider_webhook_inbox"}) {
                 sql.execute("CREATE TABLE `" + testDatabase + "`." + table + " LIKE `" + sourceName.replace("`", "``") + "`." + table);
             }
             testUrl = System.getenv("PLATFORM_TEST_DB_URL").replace("/" + sourceName + "?", "/" + testDatabase + "?");
@@ -76,6 +79,14 @@ class PlatformIntegrationMySqlTest {
         assertThat(jdbc.queryForObject("SELECT DATABASE()", String.class)).isEqualTo(testDatabase);
         when(storeClient.findOwnedStoreId(10L)).thenReturn(1L);
         when(storeClient.findOwnedStoreId(20L)).thenReturn(2L);
+        when(simulatorCatalog.findStores(com.deliveryinsider.platform.domain.provider.PlatformType.BAEMIN))
+            .thenReturn(List.of(
+                new ExternalStoreResponse(com.deliveryinsider.platform.domain.provider.PlatformType.BAEMIN,
+                    "integration-own-1", "Own Store", true),
+                new ExternalStoreResponse(com.deliveryinsider.platform.domain.provider.PlatformType.BAEMIN,
+                    "integration-foreign", "Foreign Store", true),
+                new ExternalStoreResponse(com.deliveryinsider.platform.domain.provider.PlatformType.BAEMIN,
+                    "integration-renamed", "Renamed Store", true)));
         jdbc.update("INSERT INTO store_catalog_projection(store_id,status,store_event_version) VALUES (1,'ACTIVE',1),(2,'ACTIVE',1)");
         jdbc.update("INSERT INTO menu_catalog_projection(menu_id,store_id,status,menu_event_version) VALUES (11,1,'ACTIVE',1),(22,2,'ACTIVE',1)");
         mvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
@@ -86,7 +97,7 @@ class PlatformIntegrationMySqlTest {
     private void create(long user, String external) throws Exception {
         mvc.perform(put("/api/platform-integrations/BAEMIN").header("X-User-Id", user)
                 .contentType("application/json").content(request(external)))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.data.connectionStatus").value("PENDING"));
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.connectionStatus").value("ACTIVE"));
     }
     @Test
     void createReadUpdateDisableAndStatusUseRealDatabase() throws Exception {
@@ -98,7 +109,7 @@ class PlatformIntegrationMySqlTest {
                 .contentType("application/json").content("{\"enabled\":false}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.data.enabled").value(false));
         mvc.perform(get("/api/platform-integrations/BAEMIN/status").header("X-User-Id", 10))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.data.connectionStatus").value("PENDING"));
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.connectionStatus").value("ACTIVE"));
         assertThat(jdbc.queryForObject("SELECT enabled FROM store_platform_settings WHERE store_id=1", Boolean.class)).isFalse();
     }
     @Test
