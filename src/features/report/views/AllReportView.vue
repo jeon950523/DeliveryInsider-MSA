@@ -79,6 +79,7 @@ const statusNames = {
   COMPLETED: '배달 완료',
   CANCELED: '취소',
   REFUNDED: '환불',
+  REFUND_REQUESTED: '환불 요청',
 };
 
 const riskNames = {
@@ -122,6 +123,7 @@ const reasonTypeLabels = [
 // 3. Store 데이터 연결
 // ==========================================
 const orders = computed(() => reportStore.reportOrders);
+const reportHistory = computed(() => reportStore.reportHistory);
 const reportSummary = computed(() => reportStore.reportSummary);
 const processingTimes = computed(() => reportStore.processingTimes);
 const estimatedMenuProfits = computed(() => reportStore.estimatedMenuProfits);
@@ -193,18 +195,15 @@ const cancelOrders = computed(() => {
   });
 });
 
-const refundOrders = computed(() => {
-  return filteredOrders.value.filter((order) => {
-    return order.orderStatus === 'REFUNDED';
-  });
-});
+const cancellationHistory = computed(() => reportHistory.value.filter((entry) => (
+  entry.historyType === 'CANCELED'
+)));
 
-const historyOrders = computed(() => {
-  return filteredOrders.value.filter((order) => {
-    return order.orderStatus === 'CANCELED' ||
-      order.orderStatus === 'REFUNDED';
-  });
-});
+const refundHistory = computed(() => reportHistory.value.filter((entry) => (
+  entry.historyType === 'REFUND_REQUESTED'
+)));
+
+const historyEntries = computed(() => reportHistory.value);
 
 const previewOrders = computed(() => {
   return filteredOrders.value.slice(0, 5);
@@ -243,6 +242,8 @@ const summaryStats = computed(() => {
 
   const totalCount = Number(summary.totalOrderCount || 0);
   const cancelCount = Number(summary.canceledOrderCount || 0);
+  const refundCount = refundHistory.value.length;
+  const closedCount = cancelCount + refundCount;
 
   return {
     totalSales,
@@ -251,10 +252,10 @@ const summaryStats = computed(() => {
     cancelRate: totalCount
       ? Math.round((cancelCount / totalCount) * 1000) / 10
       : 0,
-    refundCount: 0,
-    closedCount: cancelCount,
+    refundCount,
+    closedCount,
     closedRate: totalCount
-      ? Math.round((cancelCount / totalCount) * 1000) / 10
+      ? Math.round((closedCount / totalCount) * 1000) / 10
       : 0,
     totalCount,
     completedCount: Number(summary.completedOrderCount || 0),
@@ -311,9 +312,9 @@ const formatTimeOnly = (value) => {
 
 
 const historyTypeSummary = computed(() => {
-  return historyOrders.value.reduce((acc, order) => {
-    const category = getHistoryCategory(order);
-    const key = `${statusNames[order.orderStatus]} · ${category}`;
+  return historyEntries.value.reduce((acc, entry) => {
+    const category = entry.reasonCode || '기타';
+    const key = `${statusNames[entry.historyType]} · ${category}`;
 
     acc[key] = (acc[key] || 0) + 1;
 
@@ -460,11 +461,13 @@ const exportExcel = async (type = '전체') => {
   }
 
   if (type === '취소') {
-    exportFilters.status = 'CANCELED';
+    await reportStore.downloadHistoryCsv('CANCELED');
+    return;
   }
 
   if (type === '환불') {
-    exportFilters.status = 'REFUNDED';
+    await reportStore.downloadHistoryCsv('REFUND_REQUESTED');
+    return;
   }
 
   await reportStore.downloadOrdersCsv(exportFilters);
@@ -487,7 +490,7 @@ const getHistoryBadgeClass = (status) => {
     return 'status-completed';
   }
 
-  if (status === 'REFUNDED') {
+  if (status === 'REFUNDED' || status === 'REFUND_REQUESTED') {
     return 'status-refunded';
   }
 
@@ -892,7 +895,7 @@ onMounted(async () => {
     <div class="card-header">
       <div class="title-area">
         <h2>취소/환불 유형 요약</h2>
-        <p class="required-note">취소와 환불 유형별 건수</p>
+        <p class="required-note">실제 이벤트로 투영된 취소·환불 요청 이력 건수</p>
       </div>
     </div>
 
@@ -909,7 +912,7 @@ onMounted(async () => {
     </div>
 
     <div class="info-banner">
-      완료 이후 문제가 생긴 주문은 취소가 아니라 환불 이력으로 분리해 확인합니다.
+      환불 요청은 완료 주문의 매출·외부 상태를 바꾸지 않습니다. 실제 지급 완료 여부는 플랫폼 결제 정산 확인 전까지 알 수 없습니다.
     </div>
   </article>
 
@@ -918,7 +921,7 @@ onMounted(async () => {
       <div class="title-area">
         <h2>취소/환불 이력 모음</h2>
         <p class="required-note">
-          취소일시, 환불일시, 유형, 상세 사유를 한 곳에서 확인합니다.
+          취소와 환불 요청의 일시·사유·금액을 이벤트 기반 읽기 모델에서 확인합니다.
         </p>
       </div>
 
@@ -947,52 +950,54 @@ onMounted(async () => {
         <thead>
           <tr>
             <th>날짜</th>
-            <th>상태</th>
+            <th>이력</th>
             <th>플랫폼 주문번호</th>
             <th>플랫폼</th>
-            <th>메뉴</th>
-            <th>유형</th>
+            <th>사유코드</th>
             <th>상세사유</th>
+            <th>환불 요청금액</th>
             <th>처리일시</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="order in historyOrders" :key="order.orderNo">
-            <td class="text-muted">{{ order.orderDate }}</td>
+          <tr v-for="entry in historyEntries" :key="entry.id">
+            <td class="text-muted">{{ entry.occurredDate }}</td>
             <td>
               <span
                 class="status-badge"
-                :class="getHistoryBadgeClass(order.orderStatus)"
+                :class="getHistoryBadgeClass(entry.historyType)"
               >
-                {{ statusNames[order.orderStatus] }}
+                {{ statusNames[entry.historyType] || entry.historyType }}
               </span>
             </td>
             <td class="cancel-order-no-cell">
-              <strong class="order-no-main">{{ order.platformOrderNo }}</strong>
+              <strong class="order-no-main">{{ entry.platformOrderNo }}</strong>
             </td>
             <td class="cancel-platform-cell">
-              <span class="platform-badge" :class="getPlatformClass(order.platformType)">
-                {{ platformNames[order.platformType] }}
+              <span class="platform-badge" :class="getPlatformClass(entry.platformType)">
+                {{ platformNames[entry.platformType] || entry.platformType }}
               </span>
             </td>
-            <td class="text-main cancel-menu-cell">{{ order.menuSummary }}</td>
             <td class="cancel-type-cell">
               <span
                 class="status-badge cancel-type-badge"
-                :class="getHistoryBadgeClass(order.orderStatus)"
+                :class="getHistoryBadgeClass(entry.historyType)"
               >
-                {{ getHistoryCategory(order) }}
+                {{ entry.reasonCode || '-' }}
               </span>
             </td>
             <td class="text-main cancel-reason-text">
-              {{ getHistoryDetail(order) }}
+              {{ entry.reasonText || '-' }}
+            </td>
+            <td class="text-muted">
+              {{ entry.historyType === 'REFUND_REQUESTED' ? formatMoney(entry.amount) : '-' }}
             </td>
             <td class="text-muted cancel-processed-at-cell">
-              {{ getHistoryAt(order) }}
+              {{ entry.occurredAtText || '-' }}
             </td>
           </tr>
 
-          <tr v-if="historyOrders.length === 0">
+          <tr v-if="historyEntries.length === 0">
             <td colspan="8" class="empty-message">
               조건에 맞는 취소/환불 이력이 없습니다.
             </td>
@@ -1199,13 +1204,13 @@ onMounted(async () => {
         
         <article class="card col-4 export-card">
           <h3>취소 이력 내보내기</h3>
-          <p>현재 필터 결과 중 취소 주문 {{ cancelOrders.length }}건의 상세 사유를 저장합니다.</p>
+          <p>현재 필터 결과 중 취소 이력 {{ cancellationHistory.length }}건의 상세 사유를 저장합니다.</p>
           <button class="primary-button card-button" @click="exportExcel('취소')">필터 취소 CSV 생성</button>
         </article>
 
         <article class="card col-4 export-card">
           <h3>환불 이력 내보내기</h3>
-          <p>현재 필터 결과 중 환불 주문 {{ refundOrders.length }}건의 상세 사유를 저장합니다.</p>
+          <p>현재 필터 결과 중 환불 요청 이력 {{ refundHistory.length }}건의 상세 사유를 저장합니다.</p>
           <button class="primary-button card-button" @click="exportExcel('환불')">
             필터 환불 CSV 생성
           </button>
