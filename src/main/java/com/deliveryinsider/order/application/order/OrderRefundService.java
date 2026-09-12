@@ -7,6 +7,7 @@ import com.deliveryinsider.order.domain.order.entity.OrderRefundEntity;
 import com.deliveryinsider.order.domain.order.mapper.OrderItemMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderRefundMapper;
+import com.deliveryinsider.order.domain.order.mapper.OutboxEventMapper;
 import com.deliveryinsider.order.domain.order.model.CancellationActor;
 import com.deliveryinsider.order.domain.order.model.OrderRefundStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
@@ -14,11 +15,14 @@ import com.deliveryinsider.order.global.error.BusinessException;
 import com.deliveryinsider.order.global.error.OrderErrorCode;
 import com.deliveryinsider.order.integration.store.CurrentStoreClient;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +31,8 @@ public class OrderRefundService {
     private final OrderMapper orderMapper;
     private final OrderItemMapper itemMapper;
     private final OrderRefundMapper refundMapper;
+    private final OutboxEventMapper outboxEventMapper;
+    private final OrderOutboxEventFactory outboxEventFactory;
     private final Clock clock;
 
     @Transactional
@@ -46,11 +52,25 @@ public class OrderRefundService {
             : itemMapper.findAllByOrderId(orderId).stream()
                 .mapToLong(item -> item.getOrderedUnitPrice() * item.getQuantity()).sum();
         LocalDateTime requestedAt = LocalDateTime.now(clock);
-        refundMapper.insert(OrderRefundEntity.builder()
+        OrderRefundEntity refund = OrderRefundEntity.builder()
             .orderId(orderId).status(OrderRefundStatus.REQUESTED).amount(amount)
             .actor(CancellationActor.MERCHANT).reasonCode(request.reasonCode().name())
-            .reasonText(request.reasonText()).requestedAt(requestedAt).build());
+            .reasonText(request.reasonText()).requestedAt(requestedAt).build();
+        refundMapper.insert(refund);
+        outboxEventMapper.insert(
+            outboxEventFactory.createOrderRefundRequested(
+                order,
+                refund,
+                resolveTraceId()
+            )
+        );
         return new OrderRefundResponse(orderId, OrderRefundStatus.REQUESTED, amount, request.reasonCode().name(), requestedAt,
             "외부 플랫폼 환불 API가 없어 내부 환불 요청 이력으로 저장했습니다. 실제 지급 완료 상태는 확인되지 않았습니다.");
+    }
+
+    private String resolveTraceId() {
+        return Optional.ofNullable(MDC.get("traceId"))
+            .filter(traceId -> !traceId.isBlank())
+            .orElseGet(() -> UUID.randomUUID().toString());
     }
 }

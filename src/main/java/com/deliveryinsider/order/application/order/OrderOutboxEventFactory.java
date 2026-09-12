@@ -3,6 +3,7 @@ package com.deliveryinsider.order.application.order;
 import com.deliveryinsider.order.domain.order.entity.OrderEntity;
 import com.deliveryinsider.order.domain.order.entity.OrderItemEntity;
 import com.deliveryinsider.order.domain.order.entity.OrderProviderChargeEntity;
+import com.deliveryinsider.order.domain.order.entity.OrderRefundEntity;
 import com.deliveryinsider.order.domain.order.entity.OutboxEventEntity;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
@@ -11,6 +12,7 @@ import com.deliveryinsider.order.domain.order.model.OutboxStatus;
 import com.deliveryinsider.order.messaging.order.dto.OrderCreatedEventData;
 import com.deliveryinsider.order.messaging.order.dto.OrderDomainEventMessage;
 import com.deliveryinsider.order.messaging.order.dto.OrderOperationStatusChangedEventData;
+import com.deliveryinsider.order.messaging.order.dto.OrderRefundRequestedEventData;
 import com.deliveryinsider.order.messaging.order.dto.OrderStatusChangedEventData;
 import com.deliveryinsider.order.messaging.platform.dto.PlatformOrderEventMessage;
 import lombok.RequiredArgsConstructor;
@@ -164,6 +166,43 @@ public class OrderOutboxEventFactory {
         return toOutboxEvent(
             event
         );
+    }
+
+    public OutboxEventEntity createOrderRefundRequested(
+        OrderEntity order,
+        OrderRefundEntity refund,
+        String traceId
+    ) {
+        OrderRefundRequestedEventData data =
+            new OrderRefundRequestedEventData(
+                order.getId(),
+                order.getPlatformType(),
+                order.getPlatformOrderId(),
+                order.getExternalStoreId(),
+                refund.getStatus(),
+                refund.getAmount(),
+                refund.getReasonCode(),
+                refund.getReasonText(),
+                refund.getRequestedAt()
+                    .atOffset(java.time.ZoneOffset.UTC)
+                    .toInstant()
+            );
+
+        OrderDomainEventMessage<OrderRefundRequestedEventData> event =
+            new OrderDomainEventMessage<>(
+                UUID.randomUUID().toString(),
+                "ORDER_REFUND_REQUESTED",
+                SCHEMA_VERSION,
+                1,
+                clock.instant(),
+                traceId,
+                "ORDER_REFUND",
+                order.getId().toString(),
+                order.getStoreId(),
+                data
+            );
+
+        return toOutboxEvent(event);
     }
 
     private OrderCreatedEventData createData(
