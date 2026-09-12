@@ -13,6 +13,7 @@ public record CreateSimulatorOrderRequest(
     String deliveryAddress,
     String customerRequest,
     @NotEmpty List<@Valid Item> items,
+    List<String> couponIds,
     @Valid Financials financials
 ) {
 

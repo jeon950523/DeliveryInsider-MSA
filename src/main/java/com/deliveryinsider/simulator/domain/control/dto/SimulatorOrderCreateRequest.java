@@ -19,6 +19,13 @@ public record SimulatorOrderCreateRequest(
         @NotEmpty
         List<@Valid Item> items,
 
+        List<String> couponIds,
+
+        /**
+         * Legacy control clients may still send this field.  Financial values
+         * are never trusted from the browser; 8101 calculates the immutable
+         * snapshot from the selected Provider/Store policy instead.
+         */
         @Valid
         Financials financials
 ) {

@@ -119,7 +119,14 @@ public class SimulatorControlService {
                 .map(charge -> new CreateSimulatorOrderRequest.Charge(charge.type(), charge.amount(), charge.rate(), charge.basisAmount(), charge.provisional(), charge.code())).toList();
             financials = new CreateSimulatorOrderRequest.Financials(value.status(), value.grossAmount(), value.paidAmount(), value.merchantDiscount(), value.providerDiscount(), charges);
         }
-        return new CreateSimulatorOrderRequest(request.storeId(), request.deliveryAddress(), request.customerRequest(), items, financials);
+        return new CreateSimulatorOrderRequest(
+            request.storeId(),
+            request.deliveryAddress(),
+            request.customerRequest(),
+            items,
+            request.couponIds(),
+            financials
+        );
     }
     private SimulatorEventResponse toEventResponse(SimulatorEventAttempt event) {
         return new SimulatorEventResponse(event.sourceEventId(), event.platformType(), event.eventType(), event.externalOrderId(),

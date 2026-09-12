@@ -6,6 +6,7 @@ import com.deliveryinsider.simulator.domain.provider.repository.InMemorySimulato
 import com.deliveryinsider.simulator.domain.provider.webhook.*;
 import com.deliveryinsider.simulator.domain.baemin.exception.*;
 import com.deliveryinsider.simulator.domain.control.exception.SimulatorEventNotFoundException;
+import com.deliveryinsider.simulator.domain.financial.service.ExternalStoreFinancialService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -17,10 +18,13 @@ import static org.mockito.Mockito.*;
 
 class SimulatorProviderServiceTest {
     private SimulatorWebhookClient client;
+    private ExternalStoreFinancialService financialService;
     private SimulatorProviderService service;
     @BeforeEach void setup() {
         client = mock(SimulatorWebhookClient.class);
-        service = new SimulatorProviderService(new InMemorySimulatorOrderRepository(), client,
+        financialService = mock(ExternalStoreFinancialService.class);
+        when(financialService.apply(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
+        service = new SimulatorProviderService(new InMemorySimulatorOrderRepository(), client, financialService,
             Clock.fixed(Instant.parse("2026-09-08T00:00:00Z"), ZoneOffset.UTC));
     }
     @ParameterizedTest @EnumSource(PlatformType.class)
@@ -104,6 +108,6 @@ class SimulatorProviderServiceTest {
     }
     private CreateSimulatorOrderRequest request(String storeId) {
         return new CreateSimulatorOrderRequest(storeId, "테스트 전용 주소", "테스트 요청",
-            List.of(new CreateSimulatorOrderRequest.Item("same-external-menu", 2, 9000)), null);
+            List.of(new CreateSimulatorOrderRequest.Item("same-external-menu", 2, 9000)), null, null);
     }
 }

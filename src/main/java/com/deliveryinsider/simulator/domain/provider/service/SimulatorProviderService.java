@@ -7,6 +7,7 @@ import com.deliveryinsider.simulator.domain.provider.model.SimulatorOrder;
 import com.deliveryinsider.simulator.domain.provider.repository.SimulatorOrderRepository;
 import com.deliveryinsider.simulator.domain.provider.webhook.SimulatorWebhookClient;
 import com.deliveryinsider.simulator.domain.provider.webhook.OrderWebhookEvent;
+import com.deliveryinsider.simulator.domain.financial.service.ExternalStoreFinancialService;
 import com.deliveryinsider.simulator.domain.baemin.exception.SimulatorInvalidOrderStatusTransitionException;
 import com.deliveryinsider.simulator.domain.baemin.exception.SimulatorOrderNotFoundException;
 import com.deliveryinsider.simulator.domain.control.exception.SimulatorEventNotFoundException;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class SimulatorProviderService {
     private final SimulatorOrderRepository orderRepository;
     private final SimulatorWebhookClient webhookClient;
+    private final ExternalStoreFinancialService financialService;
     private final Clock clock;
 
     public SimulatorOrderDetailResponse create(PlatformType provider, CreateSimulatorOrderRequest request) {
@@ -36,14 +38,20 @@ public class SimulatorProviderService {
             throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
                 "Provide both DI-E2E identifiers (up to 150 URL-safe characters), or neither");
         }
+        CreateSimulatorOrderRequest financialSnapshot =
+            financialService.apply(provider, request);
+
         Instant now = clock.instant();
         SimulatorOrder order = SimulatorOrder.builder()
             .platformType(provider)
             .orderId(orderId == null ? provider.prefix() + "-ORDER-" + UUID.randomUUID() : orderId)
             .createdEventId(eventId == null ? provider.prefix() + "-EVENT-" + UUID.randomUUID() : eventId)
-            .storeId(request.storeId()).sequence(1L).status(SimulatorOrderStatus.CREATED)
+            .storeId(financialSnapshot.storeId()).sequence(1L).status(SimulatorOrderStatus.CREATED)
             .orderedAt(now).eventOccurredAt(now).deliveryAddress(request.deliveryAddress())
-            .customerRequest(request.customerRequest()).items(request.items()).financials(request.financials()).build();
+            .customerRequest(financialSnapshot.customerRequest())
+            .items(financialSnapshot.items())
+            .financials(financialSnapshot.financials())
+            .build();
         // Persist immutable event detail before sending the notification.
         orderRepository.save(order, order.createdEventId());
         send(order, order.createdEventId());

@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.simulator.domain.financial.mapper.ExternalStoreFinancialMapper">
+
+    <select id="findLatestFeePolicy" resultType="com.deliveryinsider.simulator.domain.financial.model.ExternalStoreFeePolicy">
+        SELECT provider_type AS platformType, external_store_id AS externalStoreId,
+               platform_commission_rate AS platformCommissionRate,
+               payment_fee_rate AS paymentFeeRate,
+               merchant_delivery_fee_amount AS merchantDeliveryFeeAmount,
+               effective_from AS effectiveFrom, effective_to AS effectiveTo, enabled
+        FROM external_store_fee_policies
+        WHERE provider_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+        ORDER BY effective_from DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="findEffectiveFeePolicy" resultType="com.deliveryinsider.simulator.domain.financial.model.ExternalStoreFeePolicy">
+        SELECT provider_type AS platformType, external_store_id AS externalStoreId,
+               platform_commission_rate AS platformCommissionRate,
+               payment_fee_rate AS paymentFeeRate,
+               merchant_delivery_fee_amount AS merchantDeliveryFeeAmount,
+               effective_from AS effectiveFrom, effective_to AS effectiveTo, enabled
+        FROM external_store_fee_policies
+        WHERE provider_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+          AND enabled = 1
+          AND effective_from &lt;= #{at}
+          AND (effective_to IS NULL OR effective_to &gt; #{at})
+        ORDER BY effective_from DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <insert id="upsertFeePolicy">
+        INSERT INTO external_store_fee_policies (
+            provider_type, external_store_id, platform_commission_rate,
+            payment_fee_rate, merchant_delivery_fee_amount,
+            effective_from, effective_to, enabled
+        ) VALUES (
+            #{platformType}, #{externalStoreId}, #{request.platformCommissionRate},
+            #{request.paymentFeeRate}, #{request.merchantDeliveryFeeAmount},
+            #{request.effectiveFrom}, #{request.effectiveTo}, #{request.enabled}
+        )
+        ON DUPLICATE KEY UPDATE
+            platform_commission_rate = VALUES(platform_commission_rate),
+            payment_fee_rate = VALUES(payment_fee_rate),
+            merchant_delivery_fee_amount = VALUES(merchant_delivery_fee_amount),
+            effective_to = VALUES(effective_to),
+            enabled = VALUES(enabled),
+            updated_at = CURRENT_TIMESTAMP(6)
+    </insert>
+
+    <select id="findCoupons" resultType="com.deliveryinsider.simulator.domain.financial.model.ExternalStoreCoupon">
+        SELECT coupon_id AS couponId, provider_type AS platformType,
+               external_store_id AS externalStoreId, code, name,
+               discount_type AS discountType, discount_value AS discountValue,
+               max_discount_amount AS maxDiscountAmount, funding_type AS fundingType,
+               merchant_share_rate AS merchantShareRate,
+               active_from AS activeFrom, active_to AS activeTo, enabled
+        FROM external_store_coupons
+        WHERE provider_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+        ORDER BY active_from DESC, id DESC
+    </select>
+
+    <select id="findEffectiveCouponsByIds" resultType="com.deliveryinsider.simulator.domain.financial.model.ExternalStoreCoupon">
+        SELECT coupon_id AS couponId, provider_type AS platformType,
+               external_store_id AS externalStoreId, code, name,
+               discount_type AS discountType, discount_value AS discountValue,
+               max_discount_amount AS maxDiscountAmount, funding_type AS fundingType,
+               merchant_share_rate AS merchantShareRate,
+               active_from AS activeFrom, active_to AS activeTo, enabled
+        FROM external_store_coupons
+        WHERE provider_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+          AND enabled = 1
+          AND active_from &lt;= #{at}
+          AND (active_to IS NULL OR active_to &gt; #{at})
+          AND coupon_id IN
+          <foreach collection="couponIds" item="couponId" open="(" separator="," close=")">
+              #{couponId}
+          </foreach>
+    </select>
+
+    <insert id="insertCoupon">
+        INSERT INTO external_store_coupons (
+            coupon_id, provider_type, external_store_id, code, name,
+            discount_type, discount_value, max_discount_amount, funding_type,
+            merchant_share_rate, active_from, active_to, enabled
+        ) VALUES (
+            #{coupon.couponId}, #{coupon.platformType}, #{coupon.externalStoreId},
+            #{coupon.code}, #{coupon.name}, #{coupon.discountType},
+            #{coupon.discountValue}, #{coupon.maxDiscountAmount}, #{coupon.fundingType},
+            #{coupon.merchantShareRate}, #{coupon.activeFrom}, #{coupon.activeTo}, #{coupon.enabled}
+        )
+    </insert>
+
+    <select id="findAdSpend" resultType="com.deliveryinsider.simulator.domain.financial.dto.ExternalAdSpendResponse">
+        SELECT provider_type AS platformType, external_store_id AS externalStoreId,
+               spend_date AS spendDate, campaign_name AS campaignName,
+               spend_amount AS spendAmount
+        FROM external_ad_spend_daily
+        WHERE provider_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+        <if test="from != null">AND spend_date &gt;= #{from}</if>
+        <if test="to != null">AND spend_date &lt;= #{to}</if>
+        ORDER BY spend_date ASC, id ASC
+    </select>
+
+    <insert id="insertAdSpend">
+        INSERT INTO external_ad_spend_daily (
+            provider_type, external_store_id, spend_date, campaign_name, spend_amount
+        ) VALUES (
+            #{platformType}, #{externalStoreId}, #{request.spendDate},
+            #{request.campaignName}, #{request.spendAmount}
+        )
+    </insert>
+</mapper>
