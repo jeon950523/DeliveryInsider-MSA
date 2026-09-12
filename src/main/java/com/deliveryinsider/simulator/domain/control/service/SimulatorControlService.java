@@ -31,9 +31,10 @@ public class SimulatorControlService {
     }
     public List<SimulatorControlOrderResponse> findRecentOrders(
         PlatformType provider,
+        String externalStoreId,
         int limit
     ) {
-        return orderService.findRecent(provider, limit)
+        return orderService.findRecent(provider, externalStoreId, limit)
             .stream()
             .map(this::toControlOrderResponse)
             .toList();

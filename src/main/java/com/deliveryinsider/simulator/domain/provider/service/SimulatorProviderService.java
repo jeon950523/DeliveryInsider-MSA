@@ -53,10 +53,16 @@ public class SimulatorProviderService {
 
     public List<SimulatorOrder> findRecent(
         PlatformType provider,
+        String externalStoreId,
         int limit
     ) {
+        String normalizedStoreId = externalStoreId == null || externalStoreId.isBlank()
+            ? null
+            : externalStoreId.trim();
+
         return orderRepository.findRecent(
             provider,
+            normalizedStoreId,
             Math.min(Math.max(limit, 1), 100)
         );
     }

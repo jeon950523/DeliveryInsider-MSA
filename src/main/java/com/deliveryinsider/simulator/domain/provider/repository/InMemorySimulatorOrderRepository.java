@@ -78,12 +78,14 @@ public class InMemorySimulatorOrderRepository
     @Override
     public List<SimulatorOrder> findRecent(
         PlatformType provider,
+        String externalStoreId,
         int limit
     ) {
         return orders.entrySet()
             .stream()
             .filter(entry -> entry.getKey().provider() == provider)
             .map(java.util.Map.Entry::getValue)
+            .filter(order -> externalStoreId == null || externalStoreId.equals(order.storeId()))
             .sorted(
                 Comparator.comparing(
                         SimulatorOrder::orderedAt,

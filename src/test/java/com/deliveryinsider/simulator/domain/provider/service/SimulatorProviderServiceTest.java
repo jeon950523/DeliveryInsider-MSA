@@ -71,6 +71,19 @@ class SimulatorProviderServiceTest {
         var other = PlatformType.values()[(provider.ordinal() + 1) % 4];
         assertThrows(SimulatorOrderNotFoundException.class, () -> service.findById(other, created.orderId(), null));
     }
+    @org.junit.jupiter.api.Test
+    void recentOrdersAreScopedToTheRequestedExternalStore() {
+        var provider = PlatformType.BAEMIN;
+        var store003 = service.create(provider, request("BAE-STORE-003"));
+        var store004 = service.create(provider, request("BAE-STORE-004"));
+
+        var scoped = service.findRecent(provider, "BAE-STORE-004", 20);
+        var unscoped = service.findRecent(provider, null, 20);
+
+        assertEquals(List.of(store004.orderId()), scoped.stream().map(order -> order.orderId()).toList());
+        assertEquals(2, unscoped.size());
+        assertTrue(unscoped.stream().anyMatch(order -> order.orderId().equals(store003.orderId())));
+    }
     @ParameterizedTest @EnumSource(PlatformType.class)
     void duplicateConcurrentStatusCannotIncreaseSequenceTwice(PlatformType provider) throws Exception {
         var created = service.create(provider, request());
@@ -87,7 +100,10 @@ class SimulatorProviderServiceTest {
     }
     private ChangeSimulatorOrderStatusRequest status(SimulatorOrderStatus status) { return new ChangeSimulatorOrderStatusRequest(status, null, null); }
     private CreateSimulatorOrderRequest request() {
-        return new CreateSimulatorOrderRequest("same-external-store", "테스트 전용 주소", "테스트 요청",
+        return request("same-external-store");
+    }
+    private CreateSimulatorOrderRequest request(String storeId) {
+        return new CreateSimulatorOrderRequest(storeId, "테스트 전용 주소", "테스트 요청",
             List.of(new CreateSimulatorOrderRequest.Item("same-external-menu", 2, 9000)), null);
     }
 }

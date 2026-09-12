@@ -7,6 +7,11 @@ import com.deliveryinsider.simulator.domain.control.dto.SimulatorOrderSendRespon
 import com.deliveryinsider.simulator.domain.control.dto.SimulatorControlOrderResponse;
 import com.deliveryinsider.simulator.domain.provider.dto.ChangeSimulatorOrderStatusRequest;
 import com.deliveryinsider.simulator.domain.control.service.SimulatorControlService;
+import com.deliveryinsider.simulator.domain.catalog.dto.ExternalMenuProvisionRequest;
+import com.deliveryinsider.simulator.domain.catalog.dto.ExternalMenuResponse;
+import com.deliveryinsider.simulator.domain.catalog.dto.ExternalStoreProvisionRequest;
+import com.deliveryinsider.simulator.domain.catalog.dto.ExternalStoreResponse;
+import com.deliveryinsider.simulator.domain.catalog.service.ExternalCatalogService;
 import com.deliveryinsider.simulator.domain.provider.PlatformType;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,10 +33,30 @@ import java.util.List;
 public class SimulatorControlController {
 
     private final SimulatorControlService controlService;
+    private final ExternalCatalogService catalogService;
 
     @GetMapping("/status")
     public SimulatorControlStatusResponse getStatus() {
         return controlService.getStatus();
+    }
+
+    @PostMapping("/providers/{platformType}/stores")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ExternalStoreResponse provisionStore(
+        @PathVariable PlatformType platformType,
+        @Valid @RequestBody ExternalStoreProvisionRequest request
+    ) {
+        return catalogService.provisionStore(platformType, request);
+    }
+
+    @PostMapping("/providers/{platformType}/stores/{externalStoreId}/menus")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ExternalMenuResponse provisionMenu(
+        @PathVariable PlatformType platformType,
+        @PathVariable String externalStoreId,
+        @Valid @RequestBody ExternalMenuProvisionRequest request
+    ) {
+        return catalogService.provisionMenu(platformType, externalStoreId, request);
     }
 
     @PostMapping("/providers/{platformType}/orders")
@@ -49,10 +74,12 @@ public class SimulatorControlController {
     @GetMapping("/providers/{platformType}/orders")
     public List<SimulatorControlOrderResponse> findRecentOrders(
             @PathVariable PlatformType platformType,
+            @RequestParam(required = false) String externalStoreId,
             @RequestParam(defaultValue = "20") int limit
     ) {
         return controlService.findRecentOrders(
                 platformType,
+                externalStoreId,
                 limit
         );
     }

@@ -27,6 +27,7 @@ public interface SimulatorOrderRepository {
 
     List<SimulatorOrder> findRecent(
         PlatformType provider,
+        String externalStoreId,
         int limit
     );
 

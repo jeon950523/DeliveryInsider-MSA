@@ -45,6 +45,7 @@ public interface SimulatorPersistenceMapper {
 
     List<String> findRecentOrderSnapshotJson(
         @Param("provider") PlatformType provider,
+        @Param("externalStoreId") String externalStoreId,
         @Param("limit") int limit
     );
 

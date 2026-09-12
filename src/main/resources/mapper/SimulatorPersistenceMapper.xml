@@ -70,6 +70,9 @@
         SELECT snapshot_json
         FROM external_orders
         WHERE provider_type = #{provider}
+        <if test="externalStoreId != null">
+          AND external_store_id = #{externalStoreId}
+        </if>
         ORDER BY id DESC
         LIMIT #{limit}
     </select>

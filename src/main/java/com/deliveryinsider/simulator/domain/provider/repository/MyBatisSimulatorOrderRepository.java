@@ -99,6 +99,7 @@ public class MyBatisSimulatorOrderRepository
     @Override
     public List<SimulatorOrder> findRecent(
         PlatformType provider,
+        String externalStoreId,
         int limit
     ) {
         int safeLimit = Math.min(
@@ -108,6 +109,7 @@ public class MyBatisSimulatorOrderRepository
 
         return mapper.findRecentOrderSnapshotJson(
                 provider,
+                externalStoreId,
                 safeLimit
             )
             .stream()
