@@ -1,7 +1,8 @@
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { computed, nextTick, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStoreStore } from '../../store/stores/useStoreStore.js';
+import { isValidStorePhone } from '../../store/utils/storeContactValidation.js';
 import {
   createStore,
   verifyBusiness,
@@ -16,6 +17,15 @@ const isCreating = ref(false);
 const errorMessage = ref('');
 const verification = ref(null);
 
+const postcode = ref('');
+const isAddressSearchLoading = ref(false);
+const addressSelected = ref(false);
+const detailAddressInput = ref(null);
+
+const KAKAO_POSTCODE_SCRIPT_ID = 'kakao-postcode-script';
+const KAKAO_POSTCODE_SCRIPT_SRC =
+  'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+
 const businessForm = reactive({
   businessRegistrationNumber: '',
   representativeName: '',
@@ -28,8 +38,6 @@ const storeForm = reactive({
   address: '',
   addressDetail: '',
   industryType: '음식점업',
-  // TODO: Store Backend 계약에서 kitchenCapacity 제거 후 삭제한다.
-  kitchenCapacity: 1,
   minimumOrderAmount: 0,
   openTime: '09:00',
   closeTime: '22:00',
@@ -57,6 +65,121 @@ const resolveErrorMessage = (error, fallback) => {
     || error?.message
     || fallback
   );
+};
+
+
+const loadKakaoPostcode = () => {
+  if (window.kakao?.Postcode) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const existingScript =
+      document.getElementById(
+        KAKAO_POSTCODE_SCRIPT_ID
+      );
+
+    const handleLoaded = () => {
+      if (window.kakao?.Postcode) {
+        resolve();
+        return;
+      }
+
+      reject(
+        new Error(
+          'Kakao Postcode를 초기화하지 못했습니다.'
+        )
+      );
+    };
+
+    if (existingScript) {
+      existingScript.addEventListener(
+        'load',
+        handleLoaded,
+        { once: true }
+      );
+      existingScript.addEventListener(
+        'error',
+        () => reject(
+          new Error(
+            'Kakao Postcode 스크립트를 불러오지 못했습니다.'
+          )
+        ),
+        { once: true }
+      );
+      return;
+    }
+
+    const script =
+      document.createElement('script');
+
+    script.id = KAKAO_POSTCODE_SCRIPT_ID;
+    script.src = KAKAO_POSTCODE_SCRIPT_SRC;
+    script.async = true;
+
+    script.addEventListener(
+      'load',
+      handleLoaded,
+      { once: true }
+    );
+    script.addEventListener(
+      'error',
+      () => reject(
+        new Error(
+          'Kakao Postcode 스크립트를 불러오지 못했습니다.'
+        )
+      ),
+      { once: true }
+    );
+
+    document.head.appendChild(script);
+  });
+};
+
+const openAddressSearch = async () => {
+  if (isAddressSearchLoading.value) {
+    return;
+  }
+
+  resetError();
+  isAddressSearchLoading.value = true;
+
+  try {
+    await loadKakaoPostcode();
+
+    new window.kakao.Postcode({
+      oncomplete: async (data) => {
+        const selectedAddress =
+          data.userSelectedType === 'R'
+            ? data.roadAddress
+            : data.jibunAddress;
+
+        postcode.value =
+          String(data.zonecode || '');
+
+        storeForm.address =
+          String(
+            selectedAddress
+              || data.address
+              || ''
+          ).trim();
+
+        addressSelected.value =
+          Boolean(storeForm.address);
+
+        await nextTick();
+        detailAddressInput.value?.focus();
+      },
+    }).open();
+  } catch (error) {
+    errorMessage.value =
+      resolveErrorMessage(
+        error,
+        '주소 검색 서비스를 불러오지 못했습니다.'
+      );
+  } finally {
+    isAddressSearchLoading.value = false;
+  }
 };
 
 const handleVerifyBusiness = async () => {
@@ -96,6 +219,24 @@ const handleCreateStore = async () => {
   }
 
   resetError();
+
+  const phone = storeForm.phone.trim();
+
+  if (!isValidStorePhone(phone)) {
+    errorMessage.value =
+      '매장 전화번호 형식을 확인해 주세요. 예: 053-123-4567, 010-1234-5678';
+    return;
+  }
+
+  if (
+    !addressSelected.value
+    || !storeForm.address.trim()
+  ) {
+    errorMessage.value =
+      '주소 검색을 통해 매장 주소를 선택해 주세요.';
+    return;
+  }
+
   isCreating.value = true;
 
   try {
@@ -109,8 +250,6 @@ const handleCreateStore = async () => {
         storeForm.addressDetail.trim() || null,
       industryType:
         storeForm.industryType.trim(),
-      kitchenCapacity:
-        Number(storeForm.kitchenCapacity),
       minimumOrderAmount:
         Number(storeForm.minimumOrderAmount),
       openTime: storeForm.openTime,
@@ -271,9 +410,14 @@ const goBackToVerification = () => {
             <input
               id="phone"
               v-model="storeForm.phone"
-              type="text"
-              placeholder="053-000-0000"
+              type="tel"
+              inputmode="tel"
+              maxlength="20"
+              placeholder="053-123-4567 또는 010-1234-5678"
             />
+            <small class="field-help">
+              지역번호, 휴대폰, 대표번호 형식을 사용할 수 있습니다.
+            </small>
           </div>
 
           <div class="field">
@@ -289,22 +433,50 @@ const goBackToVerification = () => {
 
         <div class="field">
           <label for="address">주소</label>
+
+          <div class="address-search-row">
+            <input
+              id="postcode"
+              :value="postcode"
+              type="text"
+              placeholder="우편번호"
+              readonly
+              aria-label="우편번호"
+            />
+
+            <button
+              type="button"
+              class="address-search-button"
+              :disabled="isAddressSearchLoading || isCreating"
+              @click="openAddressSearch"
+            >
+              {{ isAddressSearchLoading ? '불러오는 중...' : '주소 검색' }}
+            </button>
+          </div>
+
           <input
             id="address"
-            v-model="storeForm.address"
+            :value="storeForm.address"
             type="text"
-            placeholder="대구광역시 중구 ..."
+            placeholder="주소 검색 버튼으로 주소를 선택해 주세요."
+            readonly
             required
+            @click="openAddressSearch"
           />
+
+          <small class="field-help">
+            기본 주소는 Kakao 우편번호 검색 결과만 사용할 수 있습니다.
+          </small>
         </div>
 
         <div class="field">
           <label for="addressDetail">상세 주소</label>
           <input
             id="addressDetail"
+            ref="detailAddressInput"
             v-model="storeForm.addressDetail"
             type="text"
-            placeholder="1층"
+            placeholder="건물명, 층, 호수 등"
           />
         </div>
 
@@ -605,4 +777,52 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+.address-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.address-search-button {
+  min-width: 108px;
+  padding: 0 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.address-search-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.field input[readonly] {
+  background: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+}
+
+.field-help {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .address-search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .address-search-button {
+    min-height: 44px;
+  }
+}
+
 </style>

@@ -8,6 +8,10 @@ import {
   formatKstTime,
   getCurrentStageLabel,
 } from '../../../shared/utils/timeFormatters.js';
+import {
+  fetchIntegrations,
+  fetchOwnedMenus,
+} from '../../platform/connection/api/platformIntegrationApi.js';
 
 const router = useRouter();
 const dashboardStore = useDashboardStore();
@@ -16,6 +20,10 @@ const priorityCurrentPage = ref(1);
 const priorityPageSize = 3;
 const nowTick = ref(new Date());
 let elapsedTimer = null;
+const platformConnectionChecked = ref(false);
+const hasActivePlatformConnection = ref(false);
+const hasRegisteredMenus = ref(false);
+const platformConnectionNoticeDismissed = ref(false);
 
 const platformNames = {
   BAEMIN: '배민',
@@ -62,7 +70,7 @@ const getStatusLabel = (status) => ({
   COOKING: '조리중',
   READY_FOR_PICKUP: '픽업대기',
   DELIVERING: '배달중',
-  COMPLETED: '완료',
+  COMPLETED: '배달 완료',
   CANCELED: '취소',
 }[status] || status || '-');
 
@@ -215,6 +223,28 @@ const operationBrief = computed(() => {
   };
 });
 
+const shouldShowPlatformConnectionNotice = computed(() => (
+  platformConnectionChecked.value
+  && (!hasActivePlatformConnection.value || !hasRegisteredMenus.value)
+  && !platformConnectionNoticeDismissed.value
+));
+
+const platformConnectionNotice = computed(() => {
+  if (!hasActivePlatformConnection.value) {
+    return {
+      title: '배달 플랫폼 연결을 설정해 주세요.',
+      description: '현재 배민 Simulator 연결이 없습니다. 외부 매장을 선택한 뒤 메뉴를 연결하면 테스트 주문을 받을 수 있습니다.',
+      action: '연결 설정',
+    };
+  }
+
+  return {
+    title: '등록된 메뉴가 없습니다.',
+    description: '외부 주문을 정상 처리하고 수익을 분석하려면 먼저 메뉴를 등록하고 플랫폼 메뉴와 연결해 주세요.',
+    action: '메뉴 등록/연결',
+  };
+});
+
 const apiStatusText = computed(() => {
   if (dashboardStore.isLoading) {
     return 'API 조회 중...';
@@ -237,6 +267,34 @@ const loadDashboard = async () => {
   } catch (error) {
     console.error('대시보드 조회 실패:', error);
   }
+};
+
+const loadPlatformConnection = async () => {
+  platformConnectionChecked.value = false;
+  try {
+    const [integrationResponse, menuResponse] = await Promise.all([
+      fetchIntegrations(),
+      fetchOwnedMenus(),
+    ]);
+    const integrations = integrationResponse?.data?.data;
+    const menus = menuResponse?.data?.data;
+
+    if (!Array.isArray(integrations) || !Array.isArray(menus)) {
+      throw new TypeError('플랫폼 연결 또는 메뉴 목록 응답 형식이 올바르지 않습니다.');
+    }
+
+    hasActivePlatformConnection.value = Array.isArray(integrations)
+      && integrations.some((item) => item.enabled === true
+        && Boolean(item.externalStoreId));
+    hasRegisteredMenus.value = menus.length > 0;
+    platformConnectionChecked.value = true;
+  } catch (error) {
+    console.warn('플랫폼 연결 상태 조회 실패:', error);
+  }
+};
+
+const refreshDashboard = async () => {
+  await Promise.all([loadDashboard(), loadPlatformConnection()]);
 };
 
 const goToOrderPage = (order) => {
@@ -262,13 +320,14 @@ const goToSalesReport = () => {
 
 const handleSimulate = () => router.push('/mockdata');
 const handleExport = () => router.push('/reports');
+const goToPlatformConnection = () => router.push({ path: '/store', query: { tab: 'platform' } });
 
 onMounted(async () => {
   elapsedTimer = window.setInterval(() => {
     nowTick.value = new Date();
   }, 30_000);
 
-  await loadDashboard();
+  await refreshDashboard();
 });
 
 onBeforeUnmount(() => {
@@ -292,7 +351,7 @@ onBeforeUnmount(() => {
 
       <div class="header-actions">
         <button type="button" class="sub-button" @click="router.push('/reports')">운영 리포트</button>
-        <button type="button" class="sub-button" @click="loadDashboard">새로고침</button>
+        <button type="button" class="sub-button" @click="refreshDashboard">새로고침</button>
         <button type="button" class="sub-button" @click="handleSimulate">Mock 주문 생성</button>
         <button type="button" class="primary-button" @click="handleExport">리포트/CSV 확인</button>
       </div>
@@ -304,6 +363,17 @@ onBeforeUnmount(() => {
           <span>오늘의 운영 브리핑</span>
           <h2>{{ operationBrief.title }}</h2>
           <p>{{ operationBrief.desc }}</p>
+        </div>
+      </section>
+
+      <section v-if="shouldShowPlatformConnectionNotice" class="platform-connection-notice col-12" data-testid="platform-connection-notice">
+        <div>
+          <strong>{{ platformConnectionNotice.title }}</strong>
+          <p>{{ platformConnectionNotice.description }}</p>
+        </div>
+        <div class="platform-connection-notice__actions">
+          <button type="button" class="sub-button" @click="platformConnectionNoticeDismissed = true">나중에</button>
+          <button type="button" class="primary-button" @click="goToPlatformConnection">{{ platformConnectionNotice.action }}</button>
         </div>
       </section>
 
@@ -1023,6 +1093,26 @@ onBeforeUnmount(() => {
 
 .border-danger {
   border-left: 5px solid #2784b8;
+}
+
+.platform-connection-notice {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 22px;
+  border: 1px solid #bfdbfe;
+  border-radius: 16px;
+  background: #eff6ff;
+}
+
+.platform-connection-notice strong { color: #164e68; font-size: 18px; }
+.platform-connection-notice p { margin: 7px 0 0; color: #475569; font-size: 14px; }
+.platform-connection-notice__actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+@media (max-width: 760px) {
+  .platform-connection-notice { align-items: stretch; flex-direction: column; }
+  .platform-connection-notice__actions { flex-direction: column; }
 }
 
 </style>

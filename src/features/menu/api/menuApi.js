@@ -1,7 +1,5 @@
 import httpClient from '../../../shared/api/httpClient.js';
 
-/** @deprecated 2차 MSA에서는 주문 기반 수익 분석을 Report Read Model로 이전 예정. */
-export const fetchMenuMarginAnalysisLegacy = () => httpClient.get('/api/menus/margin-analysis');
 export const fetchMenus = () => httpClient.get('/api/menus');
 export const createMenu = (payload) => httpClient.post('/api/menus', payload);
 export const updateMenu = (menuId, payload) => httpClient.patch(`/api/menus/${menuId}`, payload);

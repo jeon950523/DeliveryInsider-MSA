@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import {
   fetchReportOrders,
+  fetchReportHistory,
+  fetchEstimatedMenuProfit,
   fetchReportProcessingTimes,
   fetchReportSummary,
 } from '../api/reportApi.js';
@@ -9,6 +11,7 @@ import {
   formatKstDate,
   formatKstDateTime,
 } from '../../../shared/utils/timeFormatters.js';
+import { escapeCsvCell } from '../utils/reportHelpers.js';
 
 const createEmptySummary = () => ({
   totalOrderCount: 0,
@@ -47,11 +50,14 @@ const PROVIDER_STATUS_TO_UI_STATUS = {
 export const useReportStore = defineStore('report', () => {
   const reportOrders = ref([]);
   const allReportOrders = ref([]);
+  const reportHistory = ref([]);
   const reportSummary = ref(createEmptySummary());
   const processingTimes = ref(createEmptyProcessingTimes());
+  const estimatedMenuProfits = ref([]);
 
   const isLoading = ref(false);
   const isExporting = ref(false);
+  const hasLoaded = ref(false);
   const lastSearchParams = ref({});
 
   /*
@@ -155,6 +161,16 @@ export const useReportStore = defineStore('report', () => {
     };
   };
 
+  const normalizeReportHistory = (history = {}) => ({
+    ...history,
+    id: `${history.historyType || 'HISTORY'}-${history.orderId || ''}`,
+    orderNo: history.orderId ? `ORD-${history.orderId}` : '',
+    platformOrderNo: history.platformOrderId || '',
+    occurredDate: formatDate(history.occurredAt),
+    occurredAtText: formatDateTime(history.occurredAt),
+    amount: history.amount == null ? null : Number(history.amount),
+  });
+
   const applyClientReportFilter = (orders, filters = {}) => {
     const keyword = String(filters.keyword || '').trim().toLowerCase();
 
@@ -217,6 +233,38 @@ export const useReportStore = defineStore('report', () => {
     return reportOrders.value;
   };
 
+  const applyHistoryClientFilter = (history, filters = {}) => {
+    const keyword = String(filters.keyword || '').trim().toLowerCase();
+
+    if (!keyword) {
+      return history;
+    }
+
+    return history.filter((entry) => {
+      const target = [
+        entry.orderNo,
+        entry.platformOrderNo,
+        entry.platformType,
+        entry.reasonCode,
+        entry.reasonText,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return target.includes(keyword);
+    });
+  };
+
+  const findHistory = async (filters = {}) => {
+    const result = await fetchReportHistory(buildAnalysisParams(filters));
+    const normalizedHistory = Array.isArray(result.data)
+      ? result.data.map(normalizeReportHistory)
+      : [];
+    reportHistory.value = applyHistoryClientFilter(normalizedHistory, filters);
+    return reportHistory.value;
+  };
+
   const findSummary = async (filters = {}) => {
     const params = buildAnalysisParams(filters);
     const result = await fetchReportSummary(params);
@@ -244,6 +292,12 @@ export const useReportStore = defineStore('report', () => {
     return processingTimes.value;
   };
 
+  const findEstimatedMenuProfits = async (filters = {}) => {
+    const result = await fetchEstimatedMenuProfit(buildAnalysisParams(filters));
+    estimatedMenuProfits.value = Array.isArray(result.data) ? result.data : [];
+    return estimatedMenuProfits.value;
+  };
+
   const findReports = async (filters = {}) => {
     try {
       isLoading.value = true;
@@ -253,10 +307,13 @@ export const useReportStore = defineStore('report', () => {
 
       const [orders] = await Promise.all([
         findOrders(filters),
+        findHistory(filters),
         findSummary(filters),
         findProcessingTimes(filters),
+        findEstimatedMenuProfits(filters),
       ]);
 
+      hasLoaded.value = true;
       return orders;
     } catch (error) {
       console.error(error);
@@ -265,14 +322,6 @@ export const useReportStore = defineStore('report', () => {
     } finally {
       isLoading.value = false;
     }
-  };
-
-  const csvEscape = (value) => {
-    const text = value === null || value === undefined
-      ? ''
-      : String(value);
-
-    return `"${text.replace(/"/g, '""')}"`;
   };
 
   /*
@@ -311,7 +360,7 @@ export const useReportStore = defineStore('report', () => {
       ]);
 
       const csv = '\uFEFF' + [headers, ...bodyRows]
-        .map((row) => row.map(csvEscape).join(','))
+        .map((row) => row.map(escapeCsvCell).join(','))
         .join('\n');
 
       const blob = new Blob([csv], {
@@ -340,29 +389,95 @@ export const useReportStore = defineStore('report', () => {
     }
   };
 
+  const downloadHistoryCsv = async (historyType) => {
+    try {
+      isExporting.value = true;
+
+      const rows = reportHistory.value.filter((history) => (
+        history.historyType === historyType
+      ));
+      const headers = [
+        '내부 주문번호',
+        '플랫폼 주문번호',
+        '플랫폼',
+        '이력 유형',
+        '환불 요청 상태',
+        '사유 코드',
+        '상세 사유',
+        '환불 요청 금액',
+        '처리 일시',
+        '정산 확인 상태',
+      ];
+      const bodyRows = rows.map((history) => [
+        history.orderNo,
+        history.platformOrderNo,
+        history.platformType,
+        history.historyType,
+        history.refundStatus || '',
+        history.reasonCode || '',
+        history.reasonText || '',
+        history.amount ?? '',
+        history.occurredAtText,
+        history.historyType === 'REFUND_REQUESTED'
+          ? '확인되지 않음'
+          : '',
+      ]);
+      const csv = '\uFEFF' + [headers, ...bodyRows]
+        .map((row) => row.map(escapeCsvCell).join(','))
+        .join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+
+      link.href = downloadUrl;
+      link.download = `deliveryinsider-${historyType.toLowerCase()}-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error(error);
+      alert('이력 CSV 다운로드에 실패했습니다.');
+      throw error;
+    } finally {
+      isExporting.value = false;
+    }
+  };
+
   const clearReports = () => {
     reportOrders.value = [];
     allReportOrders.value = [];
+    reportHistory.value = [];
     reportSummary.value = createEmptySummary();
     processingTimes.value = createEmptyProcessingTimes();
+    estimatedMenuProfits.value = [];
     isLoading.value = false;
     isExporting.value = false;
+    hasLoaded.value = false;
     lastSearchParams.value = {};
   };
 
   return {
     reportOrders,
+    reportHistory,
     reportSummary,
     processingTimes,
+    estimatedMenuProfits,
     isLoading,
     isExporting,
+    hasLoaded,
     lastSearchParams,
 
     findOrders,
+    findHistory,
     findSummary,
     findProcessingTimes,
+    findEstimatedMenuProfits,
     findReports,
     downloadOrdersCsv,
+    downloadHistoryCsv,
     clearReports,
   };
 });

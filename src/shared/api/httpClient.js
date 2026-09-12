@@ -246,8 +246,11 @@ httpClient.interceptors.response.use(
      * Server Error 화면으로 이동한다.
      */
     const shouldMoveToErrorPage =
-      !error.response
-      || status >= 500;
+      error.config?.skipServerErrorRedirect !== true
+      && (
+        !error.response
+        || status >= 500
+      );
 
     if (
       shouldMoveToErrorPage

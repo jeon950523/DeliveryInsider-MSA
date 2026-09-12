@@ -20,13 +20,13 @@ const authStore = useAuthStore()
 const storeStore = useStoreStore()
 
 const navItems = ref([
-  { name: '실시간 운영 대시보드', path: '/dashboard' },
-  { name: '통합 주문 관리', path: '/orders' },
-  { name: '메뉴 수익 관리', path: '/menus' },
-  { name: '매장 관리', path: '/store' },
-  { name: '운영 리포트', path: '/reports' },
-  { name: '구독 관리', path: '/billing' },
-  { name: 'Mock 데이터', path: '/mockdata' },
+  { name: '실시간 운영 대시보드', path: '/dashboard', tour: 'dashboard-navigation' },
+  { name: '통합 주문 관리', path: '/orders', tour: 'order-navigation' },
+  { name: '메뉴 수익 관리', path: '/menus', tour: 'menu-navigation' },
+  { name: '매장 관리', path: '/store', tour: 'store-navigation' },
+  { name: '운영 리포트', path: '/reports', tour: 'report-navigation' },
+  { name: '구독 관리', path: '/billing', tour: 'billing-navigation' },
+  { name: 'Mock 데이터', path: '/mockdata', tour: 'mock-navigation' },
 ])
 
 const REQUEST_ATTENTION_TYPES = [
@@ -146,7 +146,7 @@ onMounted(async () => {
         <!-- <img src="/logo.png" alt="배프(BAEF) 로고" class="main-logo" /> -->
       </div>
 
-      <section class="side-operation-card">
+      <section class="side-operation-card" data-tour="dashboard-summary">
         <span class="side-card-label">
           현재 운영 <em>{{ updatedAtText }}</em>
         </span>
@@ -188,7 +188,7 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section class="side-action-card">
+      <section class="side-action-card" data-tour="active-orders">
         <span>바로가기</span>
         <button type="button" @click="router.push({ path: '/orders', query: { active: 'true' } })">
           진행 주문 <strong>{{ operationSummary.progressCount }}건</strong>
@@ -210,6 +210,7 @@ onMounted(async () => {
           v-for="(item, index) in navItems" 
           :key="index"
           :to="item.path"
+          :data-tour="item.tour"
         >
           <span class="menu-name">{{ item.name }}</span>
         </router-link>

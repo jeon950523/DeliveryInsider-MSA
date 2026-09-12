@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/useAuthStore.js';
 import { useStoreStore } from '../../store/stores/useStoreStore.js';
 import { isStoreNotFoundError } from '../../onboarding/utils/storeOnboarding.js';
+import { kakaoAuthorizationUrl } from '../utils/oauthLogin.js';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -19,6 +20,12 @@ const loginForm = reactive({
 
 const togglePassword = () => {
   showPassword.value = !showPassword.value;
+};
+
+const startKakaoLogin = () => {
+  window.location.assign(
+    kakaoAuthorizationUrl()
+  );
 };
 
 const moveAfterLogin = async () => {
@@ -170,6 +177,18 @@ const handleSubmit = async () => {
             :disabled="isLoading"
           >
             {{ isLoading ? '로그인 중...' : '로그인' }}
+          </button>
+
+          <div class="login-divider">
+            <span>또는</span>
+          </div>
+
+          <button
+            type="button"
+            class="kakao-login-btn"
+            @click="startKakaoLogin"
+          >
+            카카오로 로그인
           </button>
 
           <button
@@ -324,6 +343,40 @@ const handleSubmit = async () => {
 .submit-btn:disabled {
   background-color: #93c5fd;
   cursor: not-allowed;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 0 16px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.kakao-login-btn {
+  width: 100%;
+  height: 54px;
+  margin-bottom: 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #fee500;
+  color: #191919;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.kakao-login-btn:hover {
+  background: #f4dc00;
 }
 
 .signup-btn {

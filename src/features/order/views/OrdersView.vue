@@ -1,7 +1,11 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { orderFinancials } from '../utils/orderFinancials.js';
+import { formatReportMoney, financialStatusText } from '../../report/utils/reportHelpers.js';
 import { useOrderStore } from '../stores/useOrderStore';
+import { useOrderRealtimeStore } from '../../notification/stores/useOrderRealtimeStore.js';
+import { createCoalescedRefresh } from '../../notification/utils/orderConnection.js';
 import {
   diffMinutes,
   diffSeconds,
@@ -28,6 +32,12 @@ const detailActionsRef = ref(null);
 const route = useRoute();
 const router = useRouter();
 const orderStore = useOrderStore();
+const realtime = useOrderRealtimeStore();
+let viewActive = true;
+let loadVersion = 0;
+let selectionVersion = 0;
+const automaticRefresh = createCoalescedRefresh(() => loadTodayOrders(true, true));
+watch(() => realtime.revision, automaticRefresh.request);
 
 const selectedActiveOnly = ref(false);
 
@@ -38,7 +48,52 @@ const pageSize = 10;
 const selectedOrder = ref(null);
 const detailPanelRef = ref(null);
 
-// 1. 화면 구조 확인용 임시 주문 데이터 (HTML 시안과 동일한 데이터 속성 반영)
+const showCancelModal = ref(false);
+const cancelReasonCode = ref('OUT_OF_STOCK');
+const cancelReasonText = ref('');
+const showRefundModal = ref(false);
+const refundReasonCode = ref('OTHER');
+const refundReasonText = ref('');
+
+const cancellationReasonOptions = [
+  { value: 'OUT_OF_STOCK', label: '재료 품절' },
+  { value: 'STORE_CLOSED', label: '매장 사정 / 영업 불가' },
+  { value: 'MERCHANT_REQUEST', label: '매장 요청' },
+  { value: 'OTHER', label: '기타' },
+];
+
+const refundReasonOptions = [
+  { value: 'DELIVERY_DELAY', label: '배달 지연' },
+  { value: 'PAYMENT_ISSUE', label: '결제 / 정산 확인' },
+  { value: 'MERCHANT_REQUEST', label: '고객 보상 처리' },
+  { value: 'OTHER', label: '기타 (메뉴 누락 · 오배송 · 음식 상태 등)' },
+];
+
+const reasonLabels = {
+  CUSTOMER_CHANGED_MIND: '고객 변심',
+  DUPLICATE_ORDER: '중복 주문',
+  ADDRESS_ISSUE: '주소 문제',
+  OUT_OF_STOCK: '재료 품절',
+  STORE_CLOSED: '매장 사정 / 영업 불가',
+  COOKING_DELAY: '조리 지연',
+  DELIVERY_DELAY: '배달 지연',
+  PAYMENT_ISSUE: '결제 문제',
+  MERCHANT_REQUEST: '매장 요청',
+  OTHER: '기타',
+};
+
+const cancelActorLabels = {
+  CUSTOMER: '고객',
+  MERCHANT: '매장',
+  PROVIDER: '플랫폼',
+  SYSTEM: '시스템',
+};
+
+const refundStatusLabels = {
+  REQUESTED: '환불 요청됨',
+};
+
+// 실제 Order API 응답의 화면 표시 모델
 const orders = ref([]);
 
 // 오늘 주문 관리에서 실제로 점주가 처리해야 하는 진행 상태
@@ -81,9 +136,6 @@ const filteredOrders = computed(() => {
     }
 
 
-    if (selectedAttention.value === 'LOSS') {
-      attentionMatched = isActiveOrder(order) && order.lossRisk;
-    }
 
     if (selectedAttention.value === 'CANCEL') {
       attentionMatched = order.orderStatus === 'CANCELED';
@@ -182,8 +234,9 @@ const nextWaitingOrder = computed(() => {
 // 유틸리티 함수들
 const getPlatformName = (type) => ({ BAEMIN: '배민', COUPANG_EATS: '쿠팡이츠', YOGIYO: '요기요', DDANGYO: '땡겨요' }[type] || type);
 const getPlatformClass = (type) => ({ BAEMIN: 'baemin', COUPANG_EATS: 'coupang', YOGIYO: 'yogiyo', DDANGYO: 'ddangyo' }[type] || 'default');
-const getOrderStatusName = (status) => ({ WAITING: '접수대기', COOKING: '조리중', READY_FOR_PICKUP: '픽업대기', DELIVERING: '배달중', COMPLETED: '완료', CANCELED: '취소' }[status] || status);
-const formatMoney = (amount) => `${Number(amount || 0).toLocaleString('ko-KR')} 원`;
+const getOrderStatusName = (status) => ({ WAITING: '접수대기', COOKING: '조리중', READY_FOR_PICKUP: '픽업대기', DELIVERING: '배달중', COMPLETED: '배달 완료', CANCELED: '취소' }[status] || status);
+const formatMoney = formatReportMoney;
+const formatCost = (amount) => amount == null ? '-' : formatMoney(-amount);
 const formatTime = (dateTime) => formatKstTime(dateTime, '');
 const formatDateTime = (dateTime) => formatKstDateTime(dateTime, '');
 const formatDuration = (minutes) => formatDurationMinutes(minutes, {
@@ -215,7 +268,7 @@ const getElapsedPrimaryText = (order) => {
   }
 
   if (order?.orderStatus === 'COMPLETED') {
-    return `완료까지 ${elapsed}`;
+    return `배달 완료까지 ${elapsed}`;
   }
 
   return elapsed;
@@ -353,9 +406,24 @@ const getCurrentStageElapsedMinutes = (order) => {
 const getStateActionHint = (status) => ({
   READY_FOR_PICKUP: '픽업 대기 중',
   DELIVERING: '배달 진행 중',
-  COMPLETED: '처리 완료',
+  COMPLETED: '배달 완료',
   CANCELED: '취소 완료',
 }[status] || '상태 변경 불가');
+
+const canCancelOrder = (order) =>
+  ['WAITING', 'COOKING', 'READY_FOR_PICKUP'].includes(order?.orderStatus);
+
+const canRefundOrder = (order) =>
+  order?.orderStatus === 'COMPLETED' && !order?.refundType;
+
+const getReasonLabel = (reasonCode) =>
+  reasonLabels[reasonCode] || reasonCode || '-';
+
+const getCancelActorLabel = (actor) =>
+  cancelActorLabels[actor] || actor || '-';
+
+const getRefundStatusLabel = (status) =>
+  refundStatusLabels[status] || status || '-';
 
 const getOrderItemName = (item) => {
   return item.orderedMenuName || item.menuName || '-';
@@ -398,14 +466,6 @@ const sortFifoOrders = (orderList) => {
   });
 };
 
-const REQUEST_ATTENTION_TYPES = [
-  'ALLERGY',
-  'DISPUTE',
-  'EXCESSIVE',
-  'GROUP',
-  'REQUEST',
-  'REQUEST_RISK',
-];
 
 const REQUEST_ATTENTION_LEVELS = ['WARNING', 'DANGER'];
 
@@ -441,9 +501,6 @@ const getRiskBadges = (order) => {
     badges.push(riskLevel === 'DANGER' ? '위험 요청' : '요청사항 확인');
   }
 
-  if (Number(order.netProfit || 0) < 0) {
-    badges.push('손실 위험');
-  }
 
   return badges;
 };
@@ -458,7 +515,6 @@ const toOrderViewData = (order) => {
     totalQuantity: order.totalQuantity,
     orderStatus: order.orderStatus,
     totalAmount: Number(order.totalAmount || 0),
-    netProfit: Number(order.netProfit || 0),
     orderedAtRaw: order.orderedAt,
     cookingStartedAtRaw: order.cookingStartedAt,
     currentStageStartedAtRaw: order.currentStageStartedAt,
@@ -473,7 +529,6 @@ const toOrderViewData = (order) => {
     requestRiskType: order.requestRiskType || '',
     requestRiskLevel: order.requestRiskLevel || '',
     riskBadges: getRiskBadges(order),
-    lossRisk: Number(order.netProfit || 0) < 0,
 
     cancelType: order.cancelType || '',
     cancelReason: order.cancelReason || '',
@@ -484,11 +539,11 @@ const toOrderViewData = (order) => {
     refundedAt: formatTime(order.refundedAt),
 
     items: [],
-    commissionAmount: 0,
-    deliveryFeeAmount: 0,
-    couponAmount: 0,
-    menuCostAmount: 0,
-    packagingAmount: 0,
+    commissionAmount: null,
+    deliveryFeeAmount: null,
+    couponAmount: null,
+    menuCostAmount: null,
+    packagingAmount: null,
   };
 };
 
@@ -506,17 +561,9 @@ const toOrderDetailViewData = (detail, baseOrder = {}) => {
     platformType: detail.platformType,
     orderStatus: detail.orderStatus,
 
-    totalAmount: Number(detail.totalAmount || 0),
-    commissionAmount: Number(detail.commissionAmount || 0),
-    deliveryFeeAmount: Number(detail.deliveryFee || 0),
-    couponAmount: Number(detail.couponCost || 0),
-    platformSupportAmount: Number(detail.platformSupportAmount || 0),
-    menuCostAmount: Number(detail.totalMenuCost || 0),
-    packagingAmount: Number(detail.totalPackagingFee || 0),
-    netProfit: Number(detail.netProfit || 0),
+    ...orderFinancials(detail),
 
     deliveryAddress: detail.deliveryAddress,
-    financialDataStatus: detail.financialDataStatus || baseOrder.financialDataStatus || '',
     processingTime: detail.processingTime || baseOrder.processingTime || null,
 
     orderedAtRaw: detail.orderedAt || baseOrder.orderedAtRaw || '',
@@ -563,10 +610,8 @@ const toOrderDetailViewData = (detail, baseOrder = {}) => {
     riskBadges: getRiskBadges({
       requestRiskType: request.riskType || baseOrder.requestRiskType,
       requestRiskLevel: request.riskLevel || baseOrder.requestRiskLevel,
-      netProfit: detail.netProfit,
-    }),
 
-    lossRisk: Number(detail.netProfit || 0) < 0,
+    }),
 
     cancelType:
       cancellation.cancelType ||
@@ -608,7 +653,7 @@ const applyRouteQueryFilters = () => {
   selectedPlatform.value = String(query.platform || '');
   selectedStatus.value = String(query.status || '');
   const attention = String(query.attention || query.filter || '');
-  const allowedAttentionFilters = ['REQUEST', 'LOSS', 'CANCEL'];
+  const allowedAttentionFilters = ['REQUEST', 'CANCEL'];
   selectedAttention.value = allowedAttentionFilters.includes(attention)
     ? attention
     : '';
@@ -619,15 +664,17 @@ const applyRouteQueryFilters = () => {
   }
 };
 // 주문목록조회
-const loadTodayOrders = async () => {
+const loadTodayOrders = async (preserveSelection = false, quiet = false) => {
+  const request = ++loadVersion;
   try {
-    const todayResult = await orderStore.findToday();
+    const todayResult = await orderStore.findToday({}, { quiet });
+    if (!viewActive || request !== loadVersion) return;
 
     orders.value = sortFifoOrders(
       todayResult.map(toOrderViewData)
     );
 
-    const routeOrderId = Number(route.query.id || 0);
+    const routeOrderId = Number((preserveSelection === true ? selectedOrder.value?.id : null) || route.query.id || 0);
 
     const targetOrder =
       routeOrderId
@@ -635,12 +682,12 @@ const loadTodayOrders = async () => {
         : pagedOrders.value[0] || orders.value[0];
 
     if (targetOrder) {
-      await selectOrder(targetOrder);
+      await selectOrder(targetOrder, { quiet });
     } else {
-      selectedOrder.value = null;
+      selectionVersion++; selectedOrder.value = null;
     }
   } catch (error) {
-    console.error('오늘 주문 목록 조회 실패:', error);
+    // Pinia 오류 상태와 기존 공통 인증/서버 오류 흐름에서 안내한다.
   }
 };
 
@@ -654,6 +701,7 @@ onMounted(async () => {
   await bindDetailScrollContainer();
 });
 onBeforeUnmount(() => {
+  viewActive = false; loadVersion++; selectionVersion++; automaticRefresh.stop();
   if (elapsedTimer) {
     window.clearInterval(elapsedTimer);
   }
@@ -705,16 +753,17 @@ const clearFilters = () => {
   currentPage.value = 1;
 };
 
-const selectOrder = async (order) => {
+const selectOrder = async (order, { quiet = false } = {}) => {
+  const request = ++selectionVersion;
   selectedOrder.value = order;
 
   try {
     const detail =
-      await orderStore.findOne(order.id);
+      await orderStore.findOne(order.id, { quiet });
 
-    applyUpdatedOrder(detail, order);
+    if (viewActive && request === selectionVersion && selectedOrder.value?.id === order.id) applyUpdatedOrder(detail, order);
   } catch (error) {
-    console.error('주문 상세 조회 실패:', error);
+    // 오래된 상세 요청이 현재 선택을 덮지 않는다. 사용자 요청 오류는 Store에서 안내한다.
   }
 };
 
@@ -785,7 +834,6 @@ const setOrderFilter = (type, value) => {
     selectedStatus.value = '';
   }
   currentPage.value = 1;
-  closeStatusModal();
 };
 
 const getPageScrollContainer = () => {
@@ -876,24 +924,7 @@ const applyUpdatedOrder = (updatedDetail, baseOrder = {}) => {
   return updatedOrder;
 };
 
-const refreshOrderAfterWrite = async (orderId) => {
-  const todayResult = await orderStore.findToday();
-
-  orders.value = sortFifoOrders(
-    todayResult.map(toOrderViewData)
-  );
-
-  const baseOrder = orders.value.find((item) => item.id === orderId);
-
-  if (!baseOrder) {
-    selectedOrder.value = null;
-    return null;
-  }
-
-  const detail = await orderStore.findOne(orderId);
-
-  return applyUpdatedOrder(detail, baseOrder);
-};
+const refreshOrderAfterWrite = async () => { await loadTodayOrders(true); return selectedOrder.value; };
 
 const changeOrderStatus = async (order) => {
   const nextStatus = getNextStatus(order.orderStatus);
@@ -908,17 +939,90 @@ const changeOrderStatus = async (order) => {
       { orderStatus: nextStatus }
     );
 
-    await refreshOrderAfterWrite(order.id);
+    if (viewActive) await refreshOrderAfterWrite(order.id);
     refreshHeaderNotifications();
   } catch (error) {
     console.error('주문 상태 변경 실패:', error);
   }
 };
 
+const openCancelModal = (order) => {
+  if (!canCancelOrder(order)) return;
+  selectedOrder.value = order;
+  cancelReasonCode.value = 'OUT_OF_STOCK';
+  cancelReasonText.value = '';
+  showCancelModal.value = true;
+};
+
+const closeCancelModal = () => {
+  if (orderStore.changingOrderId === selectedOrder.value?.id) return;
+  showCancelModal.value = false;
+};
+
+const submitCancellation = async () => {
+  const order = selectedOrder.value;
+  if (!order || !canCancelOrder(order)) return;
+
+  if (cancelReasonCode.value === 'OTHER' && !cancelReasonText.value.trim()) {
+    alert('기타 사유를 입력해 주세요.');
+    return;
+  }
+
+  try {
+    await orderStore.requestCancellation(order.id, {
+      reasonCode: cancelReasonCode.value,
+      reasonText: cancelReasonText.value.trim() || null,
+    });
+    showCancelModal.value = false;
+    if (viewActive) await refreshOrderAfterWrite(order.id);
+    refreshHeaderNotifications();
+    alert('플랫폼에 주문 취소를 요청했습니다. 상태 반영까지 잠시 걸릴 수 있습니다.');
+  } catch (error) {
+    console.error('주문 취소 요청 실패:', error);
+  }
+};
+
+const openRefundModal = (order) => {
+  if (!canRefundOrder(order)) return;
+  selectedOrder.value = order;
+  refundReasonCode.value = 'OTHER';
+  refundReasonText.value = '';
+  showRefundModal.value = true;
+};
+
+const closeRefundModal = () => {
+  if (orderStore.changingOrderId === selectedOrder.value?.id) return;
+  showRefundModal.value = false;
+};
+
+const submitRefund = async () => {
+  const order = selectedOrder.value;
+  if (!order || !canRefundOrder(order)) return;
+
+  if (refundReasonCode.value === 'OTHER' && !refundReasonText.value.trim()) {
+    alert('기타 환불 사유를 입력해 주세요.');
+    return;
+  }
+
+  try {
+    await orderStore.requestRefund(order.id, {
+      reasonCode: refundReasonCode.value,
+      reasonText: refundReasonText.value.trim() || null,
+    });
+    showRefundModal.value = false;
+    if (viewActive) await refreshOrderAfterWrite(order.id);
+    refreshHeaderNotifications();
+    alert('환불 요청 이력을 저장했습니다. 실제 외부 지급 완료 상태는 별도 확인이 필요합니다.');
+  } catch (error) {
+    console.error('환불 요청 실패:', error);
+  }
+};
+
 </script>
 
 <template>
-  <div class="orders-view">
+  <div class="orders-view" data-tour="order-management">
+    <p v-if="orderStore.errorMessage" role="alert">{{ orderStore.errorMessage }}</p>
     <header class="page-header">
       <div>
         <span class="category-text">TODAY ORDER</span>
@@ -932,14 +1036,6 @@ const changeOrderStatus = async (order) => {
           @click="loadTodayOrders"
         >
           새로고침
-        </button>
-
-        <button
-          type="button"
-          class="primary-button"
-          @click="router.push('/mockdata')"
-        >
-          Mock 주문 생성
         </button>
       </div>
     </header>
@@ -984,6 +1080,15 @@ const changeOrderStatus = async (order) => {
             @click="selectOrderAndScroll(nextWaitingOrder)"
           >
             주문 상세
+          </button>
+
+          <button
+            type="button"
+            class="danger-button"
+            :disabled="orderStore.changingOrderId === nextWaitingOrder.id"
+            @click="openCancelModal(nextWaitingOrder)"
+          >
+            주문 취소
           </button>
 
           <button
@@ -1044,7 +1149,7 @@ const changeOrderStatus = async (order) => {
           <option value="COOKING">조리중</option>
           <option value="READY_FOR_PICKUP">픽업대기</option>
           <option value="DELIVERING">배달중</option>
-          <option value="COMPLETED">완료</option>
+          <option value="COMPLETED">배달 완료</option>
           <option value="CANCELED">취소</option>
         </select>
       </div>
@@ -1054,7 +1159,6 @@ const changeOrderStatus = async (order) => {
         <select v-model="selectedAttention" @change="selectedStatus = ''">
           <option value="">전체</option>
           <option value="REQUEST">요청사항 확인</option>
-          <option value="LOSS">손실 위험</option>
           <option value="CANCEL">취소 이력</option>
         </select>
       </div>
@@ -1317,7 +1421,7 @@ const changeOrderStatus = async (order) => {
             <span>조리시작 {{ selectedOrder.cookingStartedAt || '-' }}</span>
             <span>조리완료 {{ selectedOrder.readyForPickupAt || '-' }}</span>
             <span>픽업 {{ selectedOrder.pickedUpAt || '-' }}</span>
-            <span>완료 {{ selectedOrder.completedAt || '-' }}</span>
+            <span>배달 완료 {{ selectedOrder.completedAt || '-' }}</span>
           </div>
         </div>
 
@@ -1332,7 +1436,7 @@ const changeOrderStatus = async (order) => {
         </div>
 
         <div class="detail-section">
-          <h3>비용 스냅샷</h3>
+          <h3>비용 스냅샷</h3><p data-testid="order-financial-status">{{ financialStatusText(selectedOrder.financialDataStatus) }}</p>
 
           <div class="cost-row">
             <span>주문금액</span>
@@ -1341,27 +1445,27 @@ const changeOrderStatus = async (order) => {
 
           <div class="cost-row minus">
             <span>플랫폼 수수료</span>
-            <strong>-{{ formatMoney(selectedOrder.commissionAmount) }}</strong>
+            <strong data-testid="order-commission">{{ formatCost(selectedOrder.commissionAmount) }}</strong>
           </div>
 
           <div class="cost-row minus">
             <span>배달비 부담</span>
-            <strong>-{{ formatMoney(selectedOrder.deliveryFeeAmount) }}</strong>
+            <strong>{{ formatCost(selectedOrder.deliveryFeeAmount) }}</strong>
           </div>
 
           <div class="cost-row minus">
             <span>쿠폰 부담</span>
-            <strong>-{{ formatMoney(selectedOrder.couponAmount) }}</strong>
+            <strong>{{ formatCost(selectedOrder.couponAmount) }}</strong>
           </div>
 
           <div class="cost-row minus">
             <span>메뉴 원가</span>
-            <strong>-{{ formatMoney(selectedOrder.menuCostAmount) }}</strong>
+            <strong>{{ formatCost(selectedOrder.menuCostAmount) }}</strong>
           </div>
 
           <div class="cost-row minus">
             <span>포장비</span>
-            <strong>-{{ formatMoney(selectedOrder.packagingAmount) }}</strong>
+            <strong>{{ formatCost(selectedOrder.packagingAmount) }}</strong>
           </div>
 
           <div
@@ -1373,25 +1477,44 @@ const changeOrderStatus = async (order) => {
           </div>
 
           <div
+            v-if="selectedOrder.orderStatus !== 'CANCELED'"
             class="cost-row total"
             :class="{ negative: Number(selectedOrder.netProfit || 0) < 0 }"
           >
-            <span>예상 순수익</span>
+            <span data-testid="order-profit-label">{{ selectedOrder.financialDataStatus === 'AVAILABLE' ? '추정 수익' : '추정 수익 · 플랫폼 비용 미반영' }}</span>
             <strong>{{ formatMoney(selectedOrder.netProfit) }}</strong>
           </div>
         </div>
 
         <div v-if="selectedOrder.cancelReason" class="detail-section cancel-history">
           <h3>취소 이력</h3>
-          <p>{{ selectedOrder.canceledAt }} · {{ selectedOrder.cancelReason }}</p>
+          <p>
+            {{ selectedOrder.canceledAt }} ·
+            {{ getCancelActorLabel(selectedOrder.cancelType) }} ·
+            {{ getReasonLabel(selectedOrder.cancelReason) }}
+          </p>
         </div>
 
         <div v-if="selectedOrder.refundReason" class="detail-section refund-history">
           <h3>환불 이력</h3>
-          <p>{{ selectedOrder.refundedAt }} · {{ selectedOrder.refundReason }}</p>
+          <p>
+            {{ selectedOrder.refundedAt }} ·
+            {{ getRefundStatusLabel(selectedOrder.refundType) }} ·
+            {{ getReasonLabel(selectedOrder.refundReason) }}
+          </p>
         </div>
 
-        <div class="detail-actions" ref="detailActionsRef">
+        <div class="detail-actions order-command-actions" ref="detailActionsRef">
+          <button
+            v-if="canCancelOrder(selectedOrder)"
+            type="button"
+            class="danger-button"
+            :disabled="orderStore.changingOrderId === selectedOrder.id"
+            @click="openCancelModal(selectedOrder)"
+          >
+            주문 취소
+          </button>
+
           <button
             v-if="getNextStatus(selectedOrder.orderStatus)"
             type="button"
@@ -1401,13 +1524,144 @@ const changeOrderStatus = async (order) => {
           >
             {{ orderStore.changingOrderId === selectedOrder.id ? '변경 중...' : getNextActionName(selectedOrder.orderStatus) }}
           </button>
-          <button v-else type="button" class="sub-button state-action-button" disabled>
+
+          <button
+            v-else-if="canRefundOrder(selectedOrder)"
+            type="button"
+            class="primary-button state-action-button"
+            :disabled="orderStore.changingOrderId === selectedOrder.id"
+            @click="openRefundModal(selectedOrder)"
+          >
+            환불 요청
+          </button>
+
+          <button
+            v-else
+            type="button"
+            class="sub-button state-action-button"
+            disabled
+          >
             {{ getStateActionHint(selectedOrder.orderStatus) }}
           </button>
         </div>
         <div ref="detailBottomRef" class="detail-bottom-anchor"></div>
       </aside>
     </section>
+
+    <div
+      v-if="showCancelModal"
+      class="order-modal-backdrop"
+      role="presentation"
+      @click.self="closeCancelModal"
+    >
+      <section class="order-modal" role="dialog" aria-modal="true" aria-labelledby="cancel-modal-title">
+        <div class="order-modal-head">
+          <div>
+            <span class="category-text">ORDER CANCEL</span>
+            <h2 id="cancel-modal-title">주문 취소</h2>
+          </div>
+          <button type="button" class="modal-close-button" @click="closeCancelModal">×</button>
+        </div>
+
+        <p class="order-modal-note">
+          기사 픽업 전 주문만 취소할 수 있습니다. 취소 요청은 외부 플랫폼에 전달되고,
+          플랫폼 이벤트가 돌아온 뒤 최종 취소 상태와 이력이 반영됩니다.
+        </p>
+
+        <label class="order-modal-field">
+          <span>취소 사유</span>
+          <select v-model="cancelReasonCode">
+            <option
+              v-for="reason in cancellationReasonOptions"
+              :key="reason.value"
+              :value="reason.value"
+            >
+              {{ reason.label }}
+            </option>
+          </select>
+        </label>
+
+        <label class="order-modal-field">
+          <span>상세 사유</span>
+          <textarea
+            v-model="cancelReasonText"
+            maxlength="500"
+            rows="4"
+            placeholder="필요한 경우 상세 사유를 입력하세요. 기타 선택 시 필수입니다."
+          ></textarea>
+        </label>
+
+        <div class="order-modal-actions">
+          <button type="button" class="sub-button" @click="closeCancelModal">닫기</button>
+          <button
+            type="button"
+            class="danger-button"
+            :disabled="orderStore.changingOrderId === selectedOrder?.id"
+            @click="submitCancellation"
+          >
+            {{ orderStore.changingOrderId === selectedOrder?.id ? '요청 중...' : '주문 취소 요청' }}
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div
+      v-if="showRefundModal"
+      class="order-modal-backdrop"
+      role="presentation"
+      @click.self="closeRefundModal"
+    >
+      <section class="order-modal" role="dialog" aria-modal="true" aria-labelledby="refund-modal-title">
+        <div class="order-modal-head">
+          <div>
+            <span class="category-text">ORDER REFUND</span>
+            <h2 id="refund-modal-title">환불 요청</h2>
+          </div>
+          <button type="button" class="modal-close-button" @click="closeRefundModal">×</button>
+        </div>
+
+        <p class="order-modal-note">
+          배달 완료 주문에 대한 환불 요청 이력을 저장합니다.
+          현재 외부 플랫폼 Simulator에는 실제 지급 환불 API가 없어 지급 완료 상태까지 자동 확정하지 않습니다.
+        </p>
+
+        <label class="order-modal-field">
+          <span>환불 사유</span>
+          <select v-model="refundReasonCode">
+            <option
+              v-for="reason in refundReasonOptions"
+              :key="reason.value"
+              :value="reason.value"
+            >
+              {{ reason.label }}
+            </option>
+          </select>
+        </label>
+
+        <label class="order-modal-field">
+          <span>상세 사유</span>
+          <textarea
+            v-model="refundReasonText"
+            maxlength="500"
+            rows="4"
+            placeholder="메뉴 누락, 오배송, 음식 상태 등 상세 사유를 입력하세요."
+          ></textarea>
+        </label>
+
+        <div class="order-modal-actions">
+          <button type="button" class="sub-button" @click="closeRefundModal">닫기</button>
+          <button
+            type="button"
+            class="primary-button"
+            :disabled="orderStore.changingOrderId === selectedOrder?.id"
+            @click="submitRefund"
+          >
+            {{ orderStore.changingOrderId === selectedOrder?.id ? '요청 중...' : '환불 요청 저장' }}
+          </button>
+        </div>
+      </section>
+    </div>
+
          <button
       v-if="showDetailTopButton"
       type="button"
@@ -1477,6 +1731,7 @@ const changeOrderStatus = async (order) => {
    ============================================================ */
 .primary-button,
 .sub-button,
+.danger-button,
 .table-button,
 .order-number-button,
 .modal-close-button {
@@ -1485,7 +1740,7 @@ const changeOrderStatus = async (order) => {
   border-radius: 12px;
 }
 
-.primary-button, .sub-button {
+.primary-button, .sub-button, .danger-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2035,7 +2290,7 @@ const changeOrderStatus = async (order) => {
 }
 
 .table-scroll {
-  overflow-x: visible;
+  overflow-x: auto;
 }
 
 .order-table {
@@ -2497,6 +2752,180 @@ const changeOrderStatus = async (order) => {
   .processing-summary,
   .processing-stage-list {
     grid-template-columns: 1fr;
+  }
+}
+
+.order-no-cell .platform-order-number,
+.order-no-cell .platform-order-number span {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Use the actual content width: the persistent sidebar also consumes desktop space. */
+.orders-view { container-type: inline-size; }
+@container (max-width: 1500px) {
+  .orders-content { grid-template-columns: minmax(0, 1fr); }
+  .order-detail-panel { position: static; }
+}
+
+/* ============================================================
+   주문 취소 / 환불 액션
+   ============================================================ */
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fff;
+  color: #b91c1c;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: #f87171;
+  background: #fef2f2;
+}
+
+.danger-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.new-order-actions {
+  flex-wrap: wrap;
+}
+
+.order-command-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.order-command-actions > button {
+  width: 100%;
+}
+
+.order-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.order-modal {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 24px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.order-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.order-modal-head h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 24px;
+}
+
+.modal-close-button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #dbe3ee;
+  background: #fff;
+  color: #475569;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.order-modal-note {
+  margin: 18px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.order-modal-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.order-modal-field > span {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.order-modal-field select,
+.order-modal-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+}
+
+.order-modal-field select {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.order-modal-field textarea {
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.5;
+}
+
+.order-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+@media (max-width: 720px) {
+  .order-command-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .order-modal-backdrop {
+    padding: 12px;
+  }
+
+  .order-modal {
+    padding: 18px;
+  }
+
+  .order-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .order-modal-actions > button {
+    width: 100%;
   }
 }
 

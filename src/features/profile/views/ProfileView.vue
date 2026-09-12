@@ -1,12 +1,14 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useAuthStore } from '../../auth/stores/useAuthStore.js';
+import { fetchCurrentStore } from '../../store/api/storeApi.js';
 
 const authStore = useAuthStore();
 
 const isLoading = ref(false);
 const isSaving = ref(false);
 const originalEmail = ref('');
+const storeOperationStatus = ref('');
 
 const userInfo = reactive({
   email: '',
@@ -23,7 +25,20 @@ const findMyProfile = async () => {
     const profile = await authStore.fetchMyProfile();
 
     userInfo.email = profile?.email || '';
-    userInfo.storeName = profile?.storeName || '등록된 매장 없음';
+    // Store ownership is owned by Store Service, not the Auth profile cache.
+    try {
+      const storeResponse = await fetchCurrentStore();
+      const store = storeResponse?.data?.data;
+      userInfo.storeName = store?.storeName || '등록된 매장 없음';
+      storeOperationStatus.value = store?.operationStatus || '';
+    } catch (storeError) {
+      if (storeError?.response?.status === 404) {
+        userInfo.storeName = '등록된 매장 없음';
+        storeOperationStatus.value = '';
+      } else {
+        throw storeError;
+      }
+    }
     originalEmail.value = userInfo.email;
   } catch (error) {
     alert('내 정보 조회에 실패했습니다.');
@@ -45,7 +60,7 @@ const saveEmail = async () => {
     const profile = await authStore.updateMyEmail(email);
 
     userInfo.email = profile?.email || email;
-    userInfo.storeName = profile?.storeName || '등록된 매장 없음';
+    // An email update must not overwrite the Store Service source of truth.
     originalEmail.value = userInfo.email;
 
     alert('이메일이 수정되었습니다.');
@@ -96,6 +111,7 @@ onMounted(async () => {
         <div class="input-group">
           <label>연결 매장</label>
           <input type="text" :value="userInfo.storeName" readonly />
+          <small v-if="storeOperationStatus">운영 상태: {{ storeOperationStatus }}</small>
         </div>
 
         <div class="info-banner full-width">

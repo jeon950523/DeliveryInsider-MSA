@@ -1,15 +1,27 @@
 <script setup>
-import { onBeforeMount, reactive, computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { onBeforeMount, reactive, computed, nextTick, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useStoreStore } from '../stores/useStoreStore';
-import { usePlatformSettingStore } from '../../platform/settings/stores/usePlatformSettingStore';
+import PlatformSettingsPanel from '../../platform/connection/components/PlatformSettingsPanel.vue';
+import { isValidStorePhone } from '../utils/storeContactValidation.js';
 
 const router = useRouter();
+const route = useRoute();
 const store = useStoreStore();
-const platformSettingStore = usePlatformSettingStore();
 
 // 탭 상태 관리 ('basic', 'platform', 'operation')
-const activeTab = ref('basic');
+const activeTab = ref(route.query.tab === 'platform' ? 'platform' : 'basic');
+const isLoading = ref(true);
+const loadError = ref('');
+const saveError = ref('');
+const isSaving = ref(false);
+const isAddressSearchLoading = ref(false);
+const addressSelected = ref(false);
+const detailAddressInput = ref(null);
+
+const KAKAO_POSTCODE_SCRIPT_ID = 'kakao-postcode-script';
+const KAKAO_POSTCODE_SCRIPT_SRC =
+  'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
 
 // ==========================================
 // 1. [기본정보 탭] 상태 및 로직
@@ -21,29 +33,11 @@ const formData = reactive({
   address: '',
   detailAddress: '',
   industryType: '한식',
-  // TODO: Store Backend 계약에서 kitchenCapacity 제거 후 이 호환 필드도 삭제한다.
-  kitchenCapacity: 1,
   minimumOrderAmount: '',
   openTime: '',
   closeTime: '',
   operationStatus: 'OPERATING'
 });
-const platformNameMap = {
-  BAEMIN: '배달의민족',
-  COUPANG_EATS: '쿠팡이츠',
-  YOGIYO: '요기요',
-  DDANGYO: '땡겨요',
-};
-
-const toPlatformViewData = (setting) => {
-  return {
-    platformType: setting.platformType,
-    name: platformNameMap[setting.platformType] || setting.platformType,
-    commissionRate: Number(setting.commissionRate || 0),
-    deliveryFee: Number(setting.deliveryFee || 0),
-    couponCost: Number(setting.couponCost || 0),
-  };
-};
 
 
 const isOvernightBusiness = computed(() => {
@@ -132,69 +126,46 @@ const businessTimeGuide = computed(() => {
   return guideMessage;
 });
 
-const bizNumParts = reactive({ part1: '', part2: '', part3: '' });
-
-const setBusinessNumberParts = (businessNumber) => {
-  if (!businessNumber) {
-    bizNumParts.part1 = ''; bizNumParts.part2 = ''; bizNumParts.part3 = '';
-    return;
-  }
-  bizNumParts.part1 = businessNumber.slice(0, 3);
-  bizNumParts.part2 = businessNumber.slice(3, 5);
-  bizNumParts.part3 = businessNumber.slice(5, 10);
-};
-
-const getBusinessNumber = () => {
-  return [
-    bizNumParts.part1,
-    bizNumParts.part2,
-    bizNumParts.part3
-  ]
-    .map((part) => String(part ?? '').replace(/\D/g, ''))
-    .join('');
-};
-
 let originalData = {};
 const isExistingStore = computed(() => !!store.currentData);
 
-onBeforeMount(async () => {
+const loadStore = async () => {
+  isLoading.value = true; loadError.value = '';
   try {
     await store.currentStore();
     
     if (store.currentData) {
       formData.storeName = store.currentData.storeName || '';
       formData.phone = store.currentData.phone || '';
-      formData.businessNumber = store.currentData.businessNumber || '';
+      formData.businessNumber = store.currentData.businessRegistrationNumber || '';
       formData.address = store.currentData.address || '';
+      addressSelected.value = Boolean(formData.address);
       formData.detailAddress = store.currentData.addressDetail || '';
       formData.industryType = store.currentData.industryType || '';
-      formData.kitchenCapacity = store.currentData.kitchenCapacity || 1;
       formData.minimumOrderAmount = store.currentData.minimumOrderAmount ?? '';
       formData.openTime = store.currentData.openTime?.slice(0, 5) || '';
       formData.closeTime = store.currentData.closeTime?.slice(0, 5)  || '';
       formData.operationStatus = store.currentData.operationStatus || 'OPERATING';
 
-      setBusinessNumberParts(store.currentData.businessNumber);
 
       originalData = {
         storeName: formData.storeName,
         phone: formData.phone,
-        businessNumber: store.currentData.businessNumber || '',
+        businessNumber: store.currentData.businessRegistrationNumber || '',
         address: formData.address,
         detailAddress: formData.detailAddress,
         industryType: formData.industryType,
-        kitchenCapacity: String(formData.kitchenCapacity),
         minimumOrderAmount: String(formData.minimumOrderAmount),
         openTime: formData.openTime,
         closeTime: formData.closeTime,
         operationStatus: formData.operationStatus,
       };
-        await loadPlatformSettings();
     }
   } catch (error) {
-    console.warn('백엔드 API 연결 실패. 테스트를 위해 매장 미등록 상태로 화면을 초기화합니다.');
-  }
-});
+    loadError.value = error.response ? `매장 정보를 불러오지 못했습니다. (HTTP ${error.response.status})` : '매장 정보를 불러오지 못했습니다.';
+  } finally { isLoading.value = false; }
+};
+onBeforeMount(loadStore);
 /*
  * 브라우저 기본 required 메시지를
  * 필드별 안내 문구로 바꾸는 함수
@@ -210,42 +181,119 @@ const setInvalidMessage = (event, message) => {
 const clearInvalidMessage = (event) => {
   event.target.setCustomValidity('');
 };
-const handlePhoneInvalid = (event) => {
-  const input = event.target;
-  const value = String(input.value ?? '').trim();
+const loadKakaoPostcode = () => {
+  if (window.kakao?.Postcode) {
+    return Promise.resolve();
+  }
 
-   // 숫자 아닌 문자는 입력되자마자 제거
-  input.value = input.value.replace(/\D/g, '').slice(0, 11);
+  return new Promise((resolve, reject) => {
+    const existingScript =
+      document.getElementById(
+        KAKAO_POSTCODE_SCRIPT_ID
+      );
 
-  formData.phone = input.value;
+    const handleLoaded = () => {
+      if (window.kakao?.Postcode) {
+        resolve();
+        return;
+      }
 
-  if (!value) {
-    input.setCustomValidity('대표 전화번호를 입력해주세요. 예: 0212345678');
+      reject(
+        new Error(
+          'Kakao Postcode를 초기화하지 못했습니다.'
+        )
+      );
+    };
+
+    if (existingScript) {
+      existingScript.addEventListener(
+        'load',
+        handleLoaded,
+        { once: true }
+      );
+      existingScript.addEventListener(
+        'error',
+        () => reject(
+          new Error(
+            'Kakao Postcode 스크립트를 불러오지 못했습니다.'
+          )
+        ),
+        { once: true }
+      );
+      return;
+    }
+
+    const script =
+      document.createElement('script');
+
+    script.id = KAKAO_POSTCODE_SCRIPT_ID;
+    script.src = KAKAO_POSTCODE_SCRIPT_SRC;
+    script.async = true;
+
+    script.addEventListener(
+      'load',
+      handleLoaded,
+      { once: true }
+    );
+    script.addEventListener(
+      'error',
+      () => reject(
+        new Error(
+          'Kakao Postcode 스크립트를 불러오지 못했습니다.'
+        )
+      ),
+      { once: true }
+    );
+
+    document.head.appendChild(script);
+  });
+};
+
+const openAddressSearch = async () => {
+  if (isAddressSearchLoading.value || isSaving.value) {
     return;
   }
 
-  if (!/^\d+$/.test(value)) {
-    input.setCustomValidity('대표 전화번호는 숫자만 입력해주세요.');
-    return;
-  }
+  saveError.value = '';
+  isAddressSearchLoading.value = true;
 
-  if (value.length < 8) {
-    input.setCustomValidity('대표 전화번호가 너무 짧습니다. 8~11자리 숫자로 입력해주세요.');
-    return;
-  }
+  try {
+    await loadKakaoPostcode();
 
-  if (value.length > 11) {
-    input.setCustomValidity('대표 전화번호가 너무 깁니다. 8~11자리 숫자로 입력해주세요.');
-    return;
-  }
+    new window.kakao.Postcode({
+      oncomplete: async (data) => {
+        const selectedAddress =
+          data.userSelectedType === 'R'
+            ? data.roadAddress
+            : data.jibunAddress;
 
-  input.setCustomValidity('');
+        formData.address =
+          String(
+            selectedAddress
+              || data.address
+              || ''
+          ).trim();
+
+        addressSelected.value =
+          Boolean(formData.address);
+
+        await nextTick();
+        detailAddressInput.value?.focus();
+      },
+    }).open();
+  } catch (error) {
+    saveError.value =
+      error?.message
+      || '주소 검색 서비스를 불러오지 못했습니다.';
+  } finally {
+    isAddressSearchLoading.value = false;
+  }
 };
 
 // 유효성 검사
 
 const validateStoreForm = () => {
-  const currentBizNum = getBusinessNumber();
+
   const phoneValue = String(formData.phone ?? '').trim();
 
   if (!formData.storeName.trim()) {
@@ -254,32 +302,17 @@ const validateStoreForm = () => {
     return false;
   }
 
-  if (!phoneValue) {
-  alert('대표 전화번호를 입력해주세요.');
-  activeTab.value = 'basic';
-  return false;
-}
+  if (!isValidStorePhone(phoneValue)) {
+    alert('대표 전화번호 형식을 확인해 주세요. 예: 053-123-4567, 010-1234-5678');
+    activeTab.value = 'basic';
+    return false;
+  }
 
-if (!/^\d+$/.test(phoneValue)) {
-  alert('대표 전화번호는 숫자만 입력해주세요. 예: 0212345678');
-  activeTab.value = 'basic';
-  return false;
-}
-
-if (phoneValue.length < 8) {
-  alert('대표 전화번호가 너무 짧습니다. 8~11자리 숫자로 입력해주세요.');
-  activeTab.value = 'basic';
-  return false;
-}
-
-if (phoneValue.length > 11) {
-  alert('대표 전화번호가 너무 깁니다. 8~11자리 숫자로 입력해주세요.');
-  activeTab.value = 'basic';
-  return false;
-}
-
-  if (!formData.address.trim()) {
-    alert('주소를 입력해주세요.');
+  if (
+    !addressSelected.value
+    || !formData.address.trim()
+  ) {
+    alert('주소 검색을 통해 매장 주소를 선택해 주세요.');
     activeTab.value = 'basic';
     return false;
   }
@@ -290,11 +323,6 @@ if (phoneValue.length > 11) {
     return false;
   }
 
-  if (!currentBizNum || currentBizNum.length !== 10) {
-    alert('사업자번호 10자리를 입력해주세요.');
-    activeTab.value = 'basic';
-    return false;
-  }
 
   if (formData.minimumOrderAmount === '' || Number(formData.minimumOrderAmount) < 0) {
     alert('최소주문금액은 0 이상으로 입력해주세요.');
@@ -356,151 +384,31 @@ ${guideMessage}`
 };
 
 const handleBasicSubmit = async () => {
-   if (!validateStoreForm()) {
-    return;
-  }
-  const currentBizNum = getBusinessNumber();
-
-  if (isExistingStore.value) {
-    const changedFields = {};
-    if (formData.storeName !== originalData.storeName) changedFields.storeName = formData.storeName;
-    if (formData.phone !== originalData.phone) changedFields.phone = formData.phone;
-    if (formData.address !== originalData.address) changedFields.address = formData.address;
-    if (formData.detailAddress !== originalData.detailAddress) changedFields.addressDetail = formData.detailAddress;
-    if (formData.industryType !== originalData.industryType) changedFields.industryType = formData.industryType;
-    if (String(formData.kitchenCapacity) !== originalData.kitchenCapacity) changedFields.kitchenCapacity = Number(formData.kitchenCapacity);
-    if (String(formData.minimumOrderAmount) !== originalData.minimumOrderAmount) changedFields.minimumOrderAmount = Number(formData.minimumOrderAmount);
-    if (currentBizNum !== originalData.businessNumber) changedFields.businessNumber = currentBizNum;
-    if (formData.openTime !== originalData.openTime) changedFields.openTime = formData.openTime;
-    if (formData.closeTime !== originalData.closeTime) changedFields.closeTime = formData.closeTime;
-    if (formData.operationStatus !== originalData.operationStatus) {
-  changedFields.operationStatus = formData.operationStatus;
-}
-    if (Object.keys(changedFields).length === 0) {
-      alert('수정된 항목이 없습니다.');
-      return;
-    }
-
-    try {
-      await store.updateStore(changedFields);
-      alert('매장 정보가 성공적으로 수정되었습니다.');
-      Object.assign(originalData, {...changedFields,
-    kitchenCapacity: String(formData.kitchenCapacity),
-    minimumOrderAmount: String(formData.minimumOrderAmount),
-      });
-
-    if (changedFields.businessNumber) {
-      originalData.businessNumber = currentBizNum;
-    }
-
-    if (changedFields.operationStatus) {
-      originalData.operationStatus = formData.operationStatus;
-    }
-    } catch (error) {
-      console.error('수정 실패:', error);
-    }
-  } else {
-    const payload = {
-      storeName: formData.storeName,
-      phone: formData.phone,
-      businessNumber: currentBizNum,
-      address: formData.address,
-      addressDetail: formData.detailAddress,
-      industryType: formData.industryType,
-      kitchenCapacity: Number(formData.kitchenCapacity),
-      minimumOrderAmount: Number(formData.minimumOrderAmount),
-      openTime: formData.openTime,
-      closeTime: formData.closeTime,
-      operationStatus: formData.operationStatus,
-    };
-    
-    try {
-      await store.storeForm(payload);
-      alert('매장이 성공적으로 등록되었습니다.\n 등록확인 후  대시보드로 이동해주세요.');
-      await store.currentStore();
-    } catch (error) {
-      console.error('등록 실패:', error);
-    }
-  }
+  if (isSaving.value || isLoading.value || loadError.value) return;
+  if (!isExistingStore.value) { await router.push({ name: 'store-onboarding' }); return; }
+  if (!validateStoreForm()) return;
+  const fields = {
+    storeName: formData.storeName.trim(), phone: formData.phone,
+    address: formData.address.trim(), addressDetail: formData.detailAddress,
+    industryType: formData.industryType, minimumOrderAmount: Number(formData.minimumOrderAmount),
+    openTime: formData.openTime, closeTime: formData.closeTime, operationStatus: formData.operationStatus,
+  };
+  const changes = Object.fromEntries(Object.entries(fields).filter(([key, value]) => {
+    const oldKey = key === 'addressDetail' ? 'detailAddress' : key;
+    return String(value ?? '') !== String(originalData[oldKey] ?? '');
+  }));
+  if (!Object.keys(changes).length) { alert('수정된 항목이 없습니다.'); return; }
+  isSaving.value = true; saveError.value = '';
+  try { await store.updateStore(changes); await loadStore(); }
+  catch (error) { saveError.value = error.response?.data?.message || '매장 정보를 저장하지 못했습니다. 다시 조회 후 확인해 주세요.'; }
+  finally { isSaving.value = false; }
 };
-
 const handleCancel = () => {
   if (confirm('작성 중인 내용을 취소하시겠습니까?')) {
     window.location.reload(); 
   }
 };
 
-// ==========================================
-// 2. [플랫폼 수수료 설정 탭] 상태 및 로직
-// ==========================================
-const platforms = reactive([]);
-const loadPlatformSettings = async () => {
-  try {
-    const result =
-      await platformSettingStore.findAll();
-
-    platforms.splice(
-      0,
-      platforms.length,
-      ...result.map(toPlatformViewData)
-    );
-  } catch (error) {
-    console.error('플랫폼 설정 조회 실패:', error);
-  }
-};
-
-const handlePlatformSubmit = async (platform) => {
-  if (
-    platform.commissionRate === null ||
-    platform.commissionRate === undefined ||
-    platform.commissionRate < 0 ||
-    platform.commissionRate > 100
-  ) {
-    alert('수수료율은 0 이상 100 이하로 입력해주세요.');
-    return;
-  }
-
-  if (
-    platform.deliveryFee === null ||
-    platform.deliveryFee === undefined ||
-    platform.deliveryFee < 0
-  ) {
-    alert('배달비 부담금은 0 이상으로 입력해주세요.');
-    return;
-  }
-
-  if (
-    platform.couponCost === null ||
-    platform.couponCost === undefined ||
-    platform.couponCost < 0
-  ) {
-    alert('쿠폰 부담금은 0 이상으로 입력해주세요.');
-    return;
-  }
-
-  const payload = {
-    commissionRate: platform.commissionRate,
-    deliveryFee: platform.deliveryFee,
-    couponCost: platform.couponCost,
-  };
-
-  try {
-    const updatedSetting =
-      await platformSettingStore.update(
-        platform.platformType,
-        payload
-      );
-
-    Object.assign(
-      platform,
-      toPlatformViewData(updatedSetting)
-    );
-
-    alert(`${platform.name} 플랫폼 수수료 정보가 수정되었습니다.`);
-  } catch (error) {
-    console.error('플랫폼 설정 수정 실패:', error);
-  }
-};
 
 // ==========================================
 // 3. [운영 설정 탭] 상태 및 로직
@@ -515,12 +423,17 @@ const handleOperationSubmit = async () => {
   <section class="page-section">
     <div class="section-title-row">
       <h1 class="main-title">매장 관리</h1>
-      <p class="sub-desc">매장 기본정보, 플랫폼 수수료, 운영 기준을 관리합니다.</p>
+      <p class="sub-desc">매장 기본정보, 플랫폼 연결, 운영 기준을 관리합니다.</p>
     </div>
 
+    <p v-if="isLoading" role="status">매장 정보를 불러오는 중입니다.</p>
+    <div v-else-if="loadError" role="alert" data-testid="store-load-error"><p>{{ loadError }}</p><button type="button" @click="loadStore">다시 조회</button></div>
+    <div v-else-if="!isExistingStore"><p>등록된 매장이 없습니다.</p><RouterLink :to="{ name: 'store-onboarding' }">사업자 확인 후 매장 등록</RouterLink></div>
+    <template v-else>
+    <p v-if="saveError" role="alert">{{ saveError }}</p>
     <div class="tabs-mock">
       <button class="tab" :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">기본정보</button>
-      <button class="tab" :class="{ active: activeTab === 'platform' }" @click="activeTab = 'platform'">플랫폼 수수료 설정</button>
+      <button data-tour="platform-settings" class="tab" :class="{ active: activeTab === 'platform' }" @click="activeTab = 'platform'">플랫폼 연결 설정</button>
       <button class="tab" :class="{ active: activeTab === 'operation' }" @click="activeTab = 'operation'">운영 설정</button>
     </div>
 
@@ -550,22 +463,18 @@ const handleOperationSubmit = async () => {
           />
         </div>
         <div class="input-group" novalidate >
-          <label title="주문 처리나 매장 연락처로 사용할 대표 전화번호입니다. 숫자만 입력해주세요.">
-          대표 전화번호 <span>*</span>
+          <label title="주문 처리나 매장 연락처로 사용할 대표 전화번호입니다. 전화번호는 최대 30자입니다.">
+          대표 전화번호
           </label>
           <input
-          type="tel"
+            type="tel"
+            inputmode="tel"
             v-model="formData.phone"
-            required
-            inputmode="numeric"
-            pattern="\d{8,11}"
-            placeholder="예: 0212345678"
-            title="숫자만 입력하는 것을 권장합니다. 예: 0212345678"
-            @invalid="handlePhoneInvalid($event)"
-            @input="clearInvalidMessage($event)"
-            maxlength="11"
-            minlength="8"
-          />
+            maxlength="20"
+            placeholder="예: 053-123-4567"
+            title="지역번호, 휴대폰, 대표번호 형식을 사용할 수 있습니다."
+          >
+          <small>예: 02-1234-5678, 053-123-4567, 010-1234-5678</small>
         </div>
         
         <div class="input-group full-width">
@@ -573,9 +482,24 @@ const handleOperationSubmit = async () => {
           주소 <span>*</span>
           </label>
           <div class="input-with-btn">
-            <input type="text" v-model="formData.address" placeholder="주소를 검색해주세요">
-            <button type="button" class="btn-secondary">주소 검색</button>
+            <input
+              type="text"
+              :value="formData.address"
+              placeholder="주소 검색 버튼으로 주소를 선택해 주세요."
+              readonly
+              required
+              @click="openAddressSearch"
+            >
+            <button
+              type="button"
+              class="btn-secondary"
+              :disabled="isAddressSearchLoading || isSaving"
+              @click="openAddressSearch"
+            >
+              {{ isAddressSearchLoading ? '불러오는 중...' : '주소 검색' }}
+            </button>
           </div>
+          <small>기본 주소는 Kakao 우편번호 검색 결과만 사용합니다.</small>
         </div>
 
         <div class="input-group">
@@ -583,6 +507,7 @@ const handleOperationSubmit = async () => {
           상세주소
           </label>
           <input
+            ref="detailAddressInput"
             v-model="formData.detailAddress"
             placeholder="예: 101호, 2층, 푸드코트 A구역"
             title="예: 101호, 2층, 푸드코트 A구역"
@@ -599,7 +524,8 @@ const handleOperationSubmit = async () => {
             @invalid="setInvalidMessage($event, '매장 업종을 선택해주세요.')"
             @change="clearInvalidMessage($event)"
           >
-            <option value="">업종을 선택해주세요.</option>
+                        <option value="">업종을 선택해주세요.</option>
+            <option v-if="formData.industryType && !['한식','중식','일식','양식','카페/디저트','기타'].includes(formData.industryType)" :value="formData.industryType">{{ formData.industryType }}</option>
             <option value="한식">한식</option>
             <option value="중식">중식</option>
             <option value="일식">일식</option>
@@ -610,53 +536,12 @@ const handleOperationSubmit = async () => {
         </div>
 
         <div class="input-group">
-          <label title="사업자 식별용 번호입니다. 10자리 숫자로 입력합니다.">
-          사업자번호 <span>*</span>
-          </label>
-          <div class="input-with-btn">
-            <div class="biz-num-group">
-              <input
-                v-model="bizNumParts.part1"
-                required
-                inputmode="numeric"
-                maxlength="3"
-                pattern="[0-9]{3}"
-                placeholder="123"
-                title="사업자번호 앞 3자리입니다."
-                @invalid="setInvalidMessage($event, '사업자번호 앞 3자리를 입력해주세요.')"
-                @input="clearInvalidMessage($event)"
-              />
-              <span class="dash">-</span>
-              <input
-                v-model="bizNumParts.part2"
-                required
-                inputmode="numeric"
-                maxlength="2"
-                pattern="[0-9]{2}"
-                placeholder="45"
-                title="사업자번호 중간 2자리입니다."
-                @invalid="setInvalidMessage($event, '사업자번호 중간 2자리를 입력해주세요.')"
-                @input="clearInvalidMessage($event)"
-              >
-              <span class="dash">-</span>
-              <input
-                v-model="bizNumParts.part3"
-                required
-                inputmode="numeric"
-                maxlength="5"
-                pattern="[0-9]{5}"
-                placeholder="67890"
-                title="사업자번호 뒷 5자리입니다."
-                @invalid="setInvalidMessage($event, '사업자번호 뒷 5자리를 입력해주세요.')"
-                @input="clearInvalidMessage($event)"
-              >
-            </div>
-            <button type="button" class="btn-secondary">형식 확인</button>
-          </div>
+          <label for="verified-business-number">검증된 사업자번호</label>
+          <input id="verified-business-number" :value="formData.businessNumber || '-'" readonly>
+          <small>가입 시 검증된 번호입니다. 일반 매장 수정에서는 변경하지 않습니다.</small>
         </div>
-
         <div class="input-group">
-          <label title="Mock 주문 생성과 배달 주문 기준에 사용할 매장 최소주문금액입니다.">
+          <label title="매장에 저장된 최소주문금액입니다.">
           최소주문금액 <span>*</span>
           </label>
           <input
@@ -665,7 +550,7 @@ const handleOperationSubmit = async () => {
             required
             min="0"
             placeholder="예: 15000"
-            title="예: 15000이면 Mock 주문이 15,000원 이상으로 생성됩니다."
+            title="매장의 최소주문금액을 입력합니다."
             @invalid="setInvalidMessage($event, '최소주문금액을 입력해주세요. 예: 15000')"
             @input="clearInvalidMessage($event)"
           />
@@ -707,7 +592,7 @@ const handleOperationSubmit = async () => {
 
         <div class="form-actions full-width">
           <button type="button" class="btn-cancel" @click="handleCancel">취소</button>
-          <button type="submit" class="btn-submit">
+          <button type="submit" class="btn-submit" :disabled="isSaving">
             {{ isExistingStore ? '수정 저장' : '등록' }}
           </button>
         </div>
@@ -715,63 +600,8 @@ const handleOperationSubmit = async () => {
     </article>
 
     <article class="card" v-if="activeTab === 'platform'">
-      <div class="card-header">
-        <div class="title-area">
-          <h3>플랫폼 수수료 설정</h3>
-          <p class="required-note">매장 등록의 서브탭으로 이동된 설정입니다.</p>
-        </div>
-      </div>
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>플랫폼</th>
-              <th>수수료율</th>
-              <th>배달비 부담금</th>
-              <th>쿠폰 부담금</th>
-              <th>액션</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="platform in platforms" :key="platform.platformType">
-              <tr v-if="platforms.length === 0">
-                <td colspan="5" class="empty-message">
-                  플랫폼 수수료 설정을 조회할 수 없습니다. 매장 등록 후 다시 확인해주세요.
-                </td>
-              </tr>
-              <td><strong>{{ platform.name }}</strong></td>
-              <td>
-                <div class="input-wrapper">
-                  <input type="number" class="input-field" v-model.number="platform.commissionRate" step="0.1" min="0" max="100">
-                  <span class="input-unit">%</span>
-                </div>
-              </td>
-              <td>
-                <div class="input-wrapper">
-                  <input type="number" class="input-field" v-model.number="platform.deliveryFee" min="0" title="플랫폼 또는 프로모션 정책에 따라 매장이 부담하는 주문당 쿠폰 금액입니다.">
-                  <span class="input-unit">원</span>
-                </div>
-              </td>
-              <td>
-                <div class="input-wrapper">
-                  <input type="number" class="input-field" v-model.number="platform.couponCost  " min="0">
-                  <span class="input-unit">원</span>
-                </div>
-              </td>
-              <td>
-                <button
-                  type="button"
-                  class="btn-sm-primary"
-                  :disabled="platformSettingStore.savingPlatformType === platform.platformType"
-                  @click="handlePlatformSubmit(platform)"
-                  >
-                  {{ platformSettingStore.savingPlatformType === platform.platformType ? '저장 중...' : '수정 저장' }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <PlatformSettingsPanel v-if="isExistingStore" />
+      <p v-else>매장을 등록한 뒤 플랫폼 연결을 설정할 수 있습니다.</p>
     </article>
 
     <article class="card" v-if="activeTab === 'operation'">
@@ -804,10 +634,11 @@ const handleOperationSubmit = async () => {
 
         <div class="form-actions full-width">
           <button type="button" class="btn-cancel" @click="handleCancel">취소</button>
-          <button type="submit" class="btn-submit">저장</button>
+          <button type="submit" class="btn-submit" :disabled="isSaving">저장</button>
         </div>
       </form>
     </article>
+    </template>
   </section>
 </template>
 
@@ -964,6 +795,12 @@ const handleOperationSubmit = async () => {
   width: 100%;
   box-sizing: border-box;
 }
+.grid-form input[readonly] {
+  background-color: #f8fafc;
+  color: #334155;
+  cursor: pointer;
+}
+
 .grid-form input:focus,
 .grid-form select:focus {
   border-color: #3b82f6;

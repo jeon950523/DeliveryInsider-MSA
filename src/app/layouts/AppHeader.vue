@@ -1,17 +1,27 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../../features/auth/stores/useAuthStore.js'
 import { fetchTodayOrders } from '../../features/order/api/orderApi.js'
+import { useOrderRealtimeStore } from '../../features/notification/stores/useOrderRealtimeStore.js'
+import { createCoalescedRefresh } from '../../features/notification/utils/orderConnection.js'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const realtime = useOrderRealtimeStore()
+const emit = defineEmits(['open-guide'])
+let active = true
+let requestVersion = 0
+const refreshQueue = createCoalescedRefresh(() => findHeaderNotifications())
+watch(() => realtime.revision, refreshQueue.request)
+const realtimeLabels = { idle: '실시간 연결 대기', connecting: '실시간 연결 중', connected: '실시간 연결됨', reconnecting: '실시간 재연결 중', 'scope-error': '매장 연결 확인 필요' }
 
 const isNotiOpen = ref(false)
 const dropdownContainer = ref(null)
 const notifications = ref([])
 const isNotificationLoading = ref(false)
+const notificationError = ref('')
 
 const DISMISSED_NOTIFICATION_STORAGE_KEY = 'deliveryinsider.dismissedHeaderNotifications.v2'
 const ACTIVE_ORDER_STATUSES = ['WAITING', 'COOKING', 'READY_FOR_PICKUP', 'DELIVERING']
@@ -154,6 +164,7 @@ const buildNotificationsFromOrders = (todayOrders = []) => {
 }
 
 const findHeaderNotifications = async () => {
+  const request = ++requestVersion
   if (!authStore.isLoggedIn && !authStore.accessToken) {
     notifications.value = []
     return
@@ -161,21 +172,25 @@ const findHeaderNotifications = async () => {
 
   try {
     isNotificationLoading.value = true
+    notificationError.value = ''
 
     const result = await fetchTodayOrders()
+    if (!active || request !== requestVersion || !authStore.isLoggedIn) return
     const todayOrders = result.data.data || []
 
     notifications.value = buildNotificationsFromOrders(todayOrders)
   } catch (error) {
-    notifications.value = []
-    console.error(error)
+    if (active && request === requestVersion) {
+      notifications.value = []
+      notificationError.value = '알림을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'
+    }
   } finally {
-    isNotificationLoading.value = false
+    if (active && request === requestVersion) isNotificationLoading.value = false
   }
 }
 
 const handleNotificationRefreshRequest = async () => {
-  await findHeaderNotifications()
+  refreshQueue.request()
 }
 
 const toggleNoti = () => {
@@ -198,10 +213,11 @@ const closeNoti = (event) => {
 onMounted(async () => {
   document.addEventListener('click', closeNoti)
   window.addEventListener('deliveryinsider:notifications-refresh', handleNotificationRefreshRequest)
-  await findHeaderNotifications()
+  refreshQueue.request()
 })
 
 onUnmounted(() => {
+  active = false; requestVersion++; refreshQueue.stop()
   document.removeEventListener('click', closeNoti)
   window.removeEventListener('deliveryinsider:notifications-refresh', handleNotificationRefreshRequest)
 })
@@ -220,7 +236,7 @@ const logout = async () => {
 
     <!-- 중앙: 페이지 타이틀 -->
     <div class="header-center">
-      <h1 class="header-title">{{ route.meta.title || '헤더' }}</h1>
+      <div><h1 class="header-title">{{ route.meta.title || '헤더' }}</h1><span v-if="realtime.storeId" class="realtime-status" data-testid="realtime-connection" role="status">{{ realtimeLabels[realtime.status] }}</span></div>
     </div>
 
     <!-- 오른쪽: 알림 및 액션 버튼 -->
@@ -241,9 +257,14 @@ const logout = async () => {
           <div v-if="isNotificationLoading" class="notification-empty">
             알림을 불러오는 중입니다.
           </div>
+
+          <div v-else-if="notificationError" class="notification-empty notification-error" role="alert">
+            <span>{{ notificationError }}</span>
+            <button type="button" @click="findHeaderNotifications">다시 시도</button>
+          </div>
           
           <button 
-            v-for="(noti, index) in notifications" 
+            v-for="(noti, index) in notificationError ? [] : notifications"
             :key="`${noti.title}-${index}`"
             type="button" 
             class="notification-item" 
@@ -253,13 +274,19 @@ const logout = async () => {
             <small>{{ noti.description }}</small>
           </button>
 
-          <div v-if="!isNotificationLoading && !notifications.length" class="notification-empty">
+          <div v-if="!isNotificationLoading && !notificationError && !notifications.length" class="notification-empty">
             새로운 알림이 없습니다.
           </div>
         </div>
       </div>
 
       <!-- 직관적인 외부 액션 버튼 -->
+      <button
+        type="button"
+        class="header-action-button"
+        data-tour="guide-entry"
+        @click="emit('open-guide')"
+      >사용 가이드</button>
       <button type="button" class="header-action-button" @click="router.push('/profile')">내 정보</button>
       <button type="button" class="header-action-button logout" @click="logout">로그아웃</button>
 
@@ -268,6 +295,7 @@ const logout = async () => {
 </template>
 
 <style scoped>
+.realtime-status { display: block; text-align: center; font-size: 12px; color: #49718b; margin-top: 3px; }
 /* ============================================================
    메인 헤더 컨테이너 (Readability Pass 적용)
    ============================================================ */
@@ -445,4 +473,8 @@ const logout = async () => {
   font-size: 14px;
   font-weight: 600;
 }
+
+.notification-error { color: #b42318; }
+.notification-error span { display: block; }
+.notification-error button { margin-top: 10px; border: 0; border-radius: 8px; padding: 7px 12px; background: #fee4e2; color: #912018; font-weight: 800; cursor: pointer; }
 </style>

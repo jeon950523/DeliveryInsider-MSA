@@ -1,12 +1,11 @@
 <script setup>
 import { onBeforeMount, reactive, ref, computed, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useMenuStore } from '../stores/useMenuStore.js';
-import { usePlatformSettingStore } from '../../platform/settings/stores/usePlatformSettingStore.js';
 
 const store = useMenuStore();
-const platformSettingStore = usePlatformSettingStore();
 const route = useRoute();
+const router = useRouter();
 
 // 탭 상태 관리 (base: 메뉴 기준정보, platform: 플랫폼 수수료 기준 단품 수익 비교, loss: 숨은 손실 메뉴)
 const activeMenuTab = ref('base');
@@ -61,8 +60,7 @@ const applyRouteQuery = () => {
 onBeforeMount(async () => {
   await Promise.all([
     store.fetchMenus(),
-    store.fetchLossDismissals().catch(() => []),
-    platformSettingStore.findAll().catch(() => [])
+    store.fetchLossDismissals().catch(() => [])
   ]);
 
   applyRouteQuery();
@@ -86,6 +84,13 @@ const openAddModal = () => {
   selectedMenuId.value = null;
   Object.keys(formData).forEach(key => formData[key] = '');
   isModalOpen.value = true;
+};
+
+const goToPlatformMenuConnection = () => {
+  router.push({
+    path: '/store',
+    query: { tab: 'platform' },
+  });
 };
 
 const openEditModal = (menu) => {
@@ -136,14 +141,7 @@ const handleDelete = async () => {
 // ============================================================
 // 분석 및 계산 로직
 // ============================================================
-const platformNames = {
-  BAEMIN: '배민',
-  COUPANG_EATS: '쿠팡이츠',
-  YOGIYO: '요기요',
-  DDANGYO: '땡겨요',
-};
-
-const fallbackPlatformPolicies = [
+const referencePlatformPolicies = [
   { platformType: 'BAEMIN', name: '배민', commissionRate: 6.8 },
   { platformType: 'COUPANG_EATS', name: '쿠팡이츠', commissionRate: 9.8 },
   { platformType: 'YOGIYO', name: '요기요', commissionRate: 8.5 },
@@ -327,19 +325,15 @@ const platformCandidateMenus = computed(() => {
 });
 
 const platformPolicies = computed(() => {
-  const settings = platformSettingStore.platformSettings || [];
+  return referencePlatformPolicies;
+});
 
-  if (!settings.length) {
-    return fallbackPlatformPolicies;
-  }
+const hasRegisteredMenus = computed(() => {
+  return enrichedMenus.value.length > 0;
+});
 
-  return settings.map((setting) => {
-    return {
-      platformType: setting.platformType,
-      name: platformNames[setting.platformType] || setting.platformType,
-      commissionRate: toNumber(setting.commissionRate),
-    };
-  });
+const shouldShowMenuRegistrationOnboarding = computed(() => {
+  return store.isMenuListLoaded && !hasRegisteredMenus.value;
 });
 
 const selectedCompareMenu = computed(() => {
@@ -729,7 +723,7 @@ const restoreDismissedLossMenu = async (menu) => {
         메뉴 기준정보
       </button>
       <button class="tab" :class="{ 'active': activeMenuTab === 'platform' }" @click="setMenuTab('platform')">
-        플랫폼 수수료 비교
+        참고 수수료 비교
       </button>
       <button class="tab" :class="{ 'active': activeMenuTab === 'loss' }" @click="setMenuTab('loss')">
         숨은 손실 메뉴
@@ -788,7 +782,24 @@ const restoreDismissedLossMenu = async (menu) => {
           </thead>
           <tbody>
             <tr v-if="filteredBaseMenus.length === 0">
-              <td colspan="9" class="empty-state">조건에 맞는 메뉴가 없습니다.</td>
+              <td colspan="9" class="empty-state">
+                <template v-if="shouldShowMenuRegistrationOnboarding">
+                  <strong>등록된 메뉴가 없습니다.</strong>
+                  <p>외부 주문을 정상 처리하고 수익을 분석하려면 먼저 메뉴를 등록하고 플랫폼 메뉴와 연결해 주세요.</p>
+                  <div class="menu-empty-actions">
+                    <button type="button" class="primary-button" @click="openAddModal">메뉴 등록</button>
+                    <button type="button" class="sub-button" @click="goToPlatformMenuConnection">메뉴 등록/연결</button>
+                  </div>
+                </template>
+                <template v-else-if="store.menuListError">
+                  <strong>메뉴 목록을 불러오지 못했습니다.</strong>
+                  <p>{{ store.menuListError }}</p>
+                  <div class="menu-empty-actions">
+                    <button type="button" class="sub-button" @click="store.fetchMenus">다시 조회</button>
+                  </div>
+                </template>
+                <template v-else>조건에 맞는 메뉴가 없습니다.</template>
+              </td>
             </tr>
             <tr
               v-else
@@ -856,8 +867,8 @@ const restoreDismissedLossMenu = async (menu) => {
     <section v-if="activeMenuTab === 'platform'" class="card platform-compare-section">
       <div class="card-header border-bottom">
         <div class="title-area">
-          <h2>플랫폼 수수료 기준 단품 수익 비교</h2>
-          <p>동일 메뉴를 각 플랫폼에서 판매했을 때, 플랫폼 수수료만 반영한 단품 예상 순수익과 판매건수를 확인합니다.</p>
+          <h2>참고 수수료 기준 단품 수익 비교</h2>
+          <p>이 표는 비교를 위한 참고 수수료만 반영합니다. Store·Provider별 실제 비용, 쿠폰, 광고비를 반영한 금액은 운영 리포트에서 확인하세요.</p>
         </div>
       </div>
 
@@ -951,7 +962,7 @@ const restoreDismissedLossMenu = async (menu) => {
         </div>
 
         <div class="info-banner">
-          배달비와 쿠폰 부담금은 주문 단위 비용이므로 단품 비교에서는 제외했습니다. 실제 주문 기준 순수익은 운영 리포트에서 확인하세요.
+          이 화면의 수수료율은 설정값이나 정산값이 아닌 참고값입니다. 배달비·쿠폰 부담금·광고비를 포함한 실제 주문 기준 순수익은 운영 리포트에서 확인하세요.
         </div>
       </template>
       <div v-else class="empty-state" style="padding: 40px 0;">
@@ -1366,6 +1377,27 @@ const restoreDismissedLossMenu = async (menu) => {
   padding: 60px !important;
   color: #9ca3af;
   font-size: 16px;
+}
+
+.empty-state strong {
+  display: block;
+  color: #334155;
+  font-size: 18px;
+}
+
+.empty-state p {
+  max-width: 560px;
+  margin: 12px auto 0;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.menu-empty-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
 }
 
 /* 탭 2: 플랫폼 수수료 비교 */
