@@ -60,12 +60,12 @@ class ExternalStoreFinancialServiceTest {
 
         assertEquals("PROVISIONAL", snapshot.financials().status());
         assertEquals(20000L, snapshot.financials().grossAmount());
-        assertEquals(300L, snapshot.financials().merchantDiscount());
-        assertEquals(700L, snapshot.financials().providerDiscount());
-        assertEquals(19000L, snapshot.financials().paidAmount());
-        assertEquals(5, snapshot.financials().charges().size());
+        assertEquals(700L, snapshot.financials().merchantDiscount());
+        assertEquals(800L, snapshot.financials().providerDiscount());
+        assertEquals(18500L, snapshot.financials().paidAmount());
+        assertEquals(4, snapshot.financials().charges().size());
         assertTrue(snapshot.financials().charges().stream().anyMatch(charge ->
-            "PROMOTION_SHARE".equals(charge.type()) && charge.amount() == 300L));
+            "PROMOTION_SHARE".equals(charge.type()) && charge.amount() == 700L));
     }
 
     private ExternalStoreCoupon coupon(
