@@ -15,7 +15,6 @@ public record PaymentResponse(
     long amount,
 
     String provider,
-    String providerPaymentKey,
 
     LocalDateTime requestedAt,
     LocalDateTime approvedAt,
@@ -35,7 +34,6 @@ public record PaymentResponse(
             payment.getStatus().name(),
             payment.getAmount(),
             payment.getProvider(),
-            payment.getProviderPaymentKey(),
             payment.getRequestedAt(),
             payment.getApprovedAt(),
             payment.getFailureCode(),

@@ -3,6 +3,7 @@ import com.deliveryinsider.billing.domain.payment.entity.PaymentEntity;
 import com.deliveryinsider.billing.domain.payment.model.*;
 import com.deliveryinsider.billing.domain.payment.response.PaymentResponse;
 import org.junit.jupiter.api.Test;
+import java.util.Arrays;
 import static org.junit.jupiter.api.Assertions.*;
 class PaymentFailureSafetyTest {
     @Test void providerJsonKeepsOnlySafeCodeAndMessage() {
@@ -23,6 +24,12 @@ class PaymentFailureSafetyTest {
         assertFalse(PaymentResponse.from(payment).failureMessage().contains("fixture-sensitive"));
         payment.setStatus(PaymentStatus.UNKNOWN);
         assertTrue(PaymentResponse.from(payment).failureMessage().contains("확인 중"));
+    }
+    @Test void providerPaymentKeyIsNotPartOfBrowserResponse() {
+        assertFalse(
+            Arrays.stream(PaymentResponse.class.getRecordComponents())
+                .anyMatch(component -> component.getName().equals("providerPaymentKey"))
+        );
     }
     private PaymentProviderResult result(String raw) { return new PaymentProviderResult(PaymentProviderResultStatus.FAILED, null, null, null, null, "TOSS_CONFIRM_FAILED", raw); }
 }
