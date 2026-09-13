@@ -167,6 +167,18 @@ public class GeminiInsightClient {
                 response
             );
 
+        log.info(
+            "Gemini insight response metadata: questionType={}, finishReason={}, maxOutputTokens={}, thinkingBudget={}, candidatesTokenCount={}, thoughtsTokenCount={}, promptTokenCount={}, totalTokenCount={}",
+            questionType,
+            candidate.metadata().finishReason(),
+            contract.maxOutputTokens(),
+            contract.thinkingBudget(),
+            candidate.metadata().candidateTokenCount(),
+            candidate.metadata().thoughtsTokenCount(),
+            candidate.metadata().promptTokenCount(),
+            candidate.metadata().totalTokenCount()
+        );
+
         try {
             return jsonMapper.readValue(
                 candidate.text(),
@@ -447,22 +459,22 @@ public class GeminiInsightClient {
         if (questionType == ReportAiInsightQuestionType.PERIOD_SUMMARY) {
             return new OutputContract(
                 2,
-                2048,
+                4096,
                 512
             );
         }
 
         return new OutputContract(
             3,
-            2048,
-            null
+            4096,
+            512
         );
     }
 
     private OutputContract periodSummaryRetryContract() {
         return new OutputContract(
             2,
-            4096,
+            8192,
             256
         );
     }
