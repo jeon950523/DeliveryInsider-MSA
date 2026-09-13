@@ -4,5 +4,5 @@ export const requestReportAiInsight = (payload) =>
   httpClient.post(
     '/api/reports/ai-insights',
     payload,
-    { skipGlobalErrorRedirect: true }
+    { skipServerErrorRedirect: true }
   );
