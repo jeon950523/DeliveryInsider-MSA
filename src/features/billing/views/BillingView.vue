@@ -19,6 +19,8 @@ import {
 
 const subscription = ref(null);
 const plan = ref(null);
+const planState = ref('loading');
+const subscriptionState = ref('loading');
 const loading = ref(false);
 const errorMessage = ref('');
 
@@ -38,7 +40,7 @@ const statusLabel = computed(() => {
     case 'PAST_DUE':
       return '결제 필요';
     default:
-      return '무료 플랜 이용 중';
+      return '구독 중이 아닙니다';
   }
 });
 
@@ -110,38 +112,47 @@ const formatDateTime = (value) => {
 };
 
 const loadPlan = async () => {
-  const response =
-    await fetchBillingPlans();
+  planState.value = 'loading';
 
-  const plans =
-    Array.isArray(
-      response.data
-    )
-      ? response.data
-      : [];
+  try {
+    const response =
+      await fetchBillingPlans();
 
-  plan.value =
-    plans.find(
-      (item) =>
-        item.code === 'STANDARD'
-    )
-    ?? plans[0]
-    ?? null;
+    const plans =
+      Array.isArray(
+        response.data
+      )
+        ? response.data
+        : [];
 
-  if (!plan.value) {
-    throw new Error(
-      '사용 가능한 구독 요금제가 없습니다.'
-    );
+    plan.value =
+      plans.find(
+        (item) =>
+          item.code === 'STANDARD'
+      )
+      ?? plans[0]
+      ?? null;
+
+    planState.value = plan.value
+      ? 'success'
+      : 'empty';
+
+  } catch (error) {
+    plan.value = null;
+    planState.value = 'error';
   }
 };
 
 const loadSubscription = async () => {
+  subscriptionState.value = 'loading';
+
   try {
     const response =
       await fetchCurrentSubscription();
 
     subscription.value =
       response.data;
+    subscriptionState.value = 'success';
 
   } catch (error) {
     if (
@@ -149,10 +160,12 @@ const loadSubscription = async () => {
       === 404
     ) {
       subscription.value = null;
+      subscriptionState.value = 'empty';
       return;
     }
 
-    throw error;
+    subscription.value = null;
+    subscriptionState.value = 'error';
   }
 };
 
@@ -175,6 +188,7 @@ const startSubscription = async () => {
 
     subscription.value =
       response.data;
+    subscriptionState.value = 'success';
 
   } catch (error) {
     errorMessage.value =
@@ -286,10 +300,17 @@ const cancel = async () => {
     const response =
       await cancelSubscription();
 
-    subscription.value =
-      response.data?.status === 'EXPIRED'
-        ? null
-        : response.data;
+    if (
+      response.data?.status
+      === 'EXPIRED'
+    ) {
+      subscription.value = null;
+      subscriptionState.value = 'empty';
+
+    } else {
+      subscription.value = response.data;
+      subscriptionState.value = 'success';
+    }
 
   } catch (error) {
     errorMessage.value =
@@ -300,19 +321,9 @@ const cancel = async () => {
   }
 };
 
-onMounted(async () => {
-  try {
-    await Promise.all([
-      loadPlan(),
-      loadSubscription(),
-    ]);
-
-  } catch (error) {
-
-
-    errorMessage.value =
-      billingErrorMessage(error, '구독 정보를 조회하지 못했습니다.');
-  }
+onMounted(() => {
+  loadPlan();
+  loadSubscription();
 });
 </script>
 
@@ -332,25 +343,76 @@ onMounted(async () => {
           {{ plan?.name || 'STANDARD' }}
         </strong>
 
-        <p>
+        <p v-if="planState === 'loading'">
+          요금제를 불러오는 중입니다.
+        </p>
+
+        <p v-else-if="planState === 'success'">
           월 {{ planPriceLabel }}
         </p>
+
+        <p v-else-if="planState === 'empty'">
+          현재 이용 가능한 요금제가 없습니다.
+        </p>
+
+        <div
+          v-else
+          class="state-message error-state"
+        >
+          <p>요금제 정보를 불러오지 못했습니다.</p>
+          <button
+            type="button"
+            class="inline-action"
+            @click="loadPlan"
+          >
+            다시 시도
+          </button>
+        </div>
         <ul class="premium-feature-list">
           <li>AI 운영 인사이트</li>
           <li>리포트 CSV 전체 조건 내보내기</li>
         </ul>
       </div>
 
-      <span class="status">
+      <span
+        v-if="subscriptionState === 'loading'"
+        class="status"
+      >
+        구독 정보를 확인하는 중입니다
+      </span>
+
+      <span
+        v-else-if="subscriptionState !== 'error'"
+        class="status"
+      >
         {{ statusLabel }}
       </span>
 
-      <template v-if="!subscription">
+      <div
+        v-else
+        class="state-message error-state"
+      >
+        <p>구독 정보를 조회하지 못했습니다.</p>
+        <button
+          type="button"
+          class="inline-action"
+          @click="loadSubscription"
+        >
+          다시 시도
+        </button>
+      </div>
+
+      <template
+        v-if="
+          subscriptionState === 'empty'
+          && !subscription
+        "
+      >
         <button
           type="button"
           :disabled="
             loading
-            || !plan
+            || planState !== 'success'
           "
           @click="startSubscription"
         >
@@ -360,7 +422,7 @@ onMounted(async () => {
 
       <template
         v-else-if="
-          subscription.status
+          subscription?.status
           === 'PENDING'
         "
       >
@@ -390,7 +452,7 @@ onMounted(async () => {
 
       <template
         v-else-if="
-          subscription.status
+          subscription?.status
           === 'ACTIVE'
         "
       >
@@ -405,7 +467,7 @@ onMounted(async () => {
 
       <template
         v-else-if="
-          subscription.status
+          subscription?.status
           === 'CANCELED'
         "
       >
@@ -417,7 +479,7 @@ onMounted(async () => {
 
       <template
         v-else-if="
-          subscription.status
+          subscription?.status
           === 'PAST_DUE'
         "
       >
@@ -597,5 +659,25 @@ button:disabled {
   margin-top: 16px;
   color: #dc2626;
   font-weight: 700;
+}
+
+.state-message {
+  margin: 18px 0;
+}
+
+.state-message p {
+  margin: 0;
+}
+
+.error-state p {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.inline-action {
+  width: auto;
+  min-height: 36px;
+  margin-top: 10px;
+  padding: 0 14px;
 }
 </style>
