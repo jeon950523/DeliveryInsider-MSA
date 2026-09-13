@@ -5,6 +5,7 @@ import com.deliveryinsider.auth.entity.UserStatus;
 import com.deliveryinsider.auth.global.error.*;
 import com.deliveryinsider.auth.global.security.jwt.JwtTokenProvider;
 import com.deliveryinsider.auth.mapper.UserMapper;
+import com.deliveryinsider.auth.request.ChangePasswordRequest;
 import com.deliveryinsider.auth.request.LoginRequest;
 import com.deliveryinsider.auth.request.RegisterRequest;
 import com.deliveryinsider.auth.service.model.LoginResult;
@@ -97,6 +98,54 @@ public class AuthService {
     public void logout(String refreshToken) {
         refreshTokenService.revoke(refreshToken);
     }
+
+    @Transactional
+    public void changePassword(
+        Long userId,
+        ChangePasswordRequest request
+    ) {
+        UserEntity user = userMapper.findById(userId)
+            .orElseThrow(UserNotFoundException::new);
+
+        validateActiveUser(user);
+
+        String currentPasswordHash = user.getPasswordHash();
+
+        if (
+            currentPasswordHash == null ||
+                !passwordEncoder.matches(
+                    request.currentPassword(),
+                    currentPasswordHash
+                )
+        ) {
+            throw new BusinessException(
+                AuthErrorCode.CURRENT_PASSWORD_MISMATCH
+            );
+        }
+
+        if (
+            passwordEncoder.matches(
+                request.newPassword(),
+                currentPasswordHash
+            )
+        ) {
+            throw new BusinessException(
+                AuthErrorCode.PASSWORD_SAME_AS_CURRENT
+            );
+        }
+
+        int updated = userMapper.updatePasswordHash(
+            userId,
+            passwordEncoder.encode(request.newPassword())
+        );
+
+        if (updated != 1) {
+            throw new UserNotFoundException();
+        }
+
+        refreshTokenService.revokeAll(userId);
+    }
+
     @Transactional(readOnly = true)
     public UserEntity getCurrentUser(Long userId) {
         return userMapper.findById(userId)

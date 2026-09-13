@@ -1,15 +1,13 @@
 package com.deliveryinsider.auth.request;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-public record RegisterRequest(
+public record ChangePasswordRequest(
 
     @NotBlank
-    @Email
-    String email,
+    String currentPassword,
 
     @NotBlank
     @Size(
@@ -21,6 +19,6 @@ public record RegisterRequest(
         regexp = PasswordPolicy.REGEXP,
         message = PasswordPolicy.COMPOSITION_MESSAGE
     )
-    String password
+    String newPassword
 ) {
 }

@@ -119,6 +119,13 @@
         AND status != #{status}
     </update>
 
+    <update id="updatePasswordHash">
+        UPDATE users
+        SET password_hash = #{passwordHash},
+            updated_at = CURRENT_TIMESTAMP(6)
+        WHERE id = #{id}
+    </update>
+
     <select id="countAll" resultType="long">
         SELECT COUNT(*) FROM users
     </select>

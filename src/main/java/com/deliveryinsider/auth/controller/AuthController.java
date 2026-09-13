@@ -7,6 +7,7 @@ import com.deliveryinsider.auth.global.response.LoginResponse;
 import com.deliveryinsider.auth.global.response.TokenReissueResponse;
 import com.deliveryinsider.auth.global.security.jwt.RefreshTokenCookieManager;
 import com.deliveryinsider.auth.request.LoginRequest;
+import com.deliveryinsider.auth.request.ChangePasswordRequest;
 import com.deliveryinsider.auth.request.RegisterRequest;
 import com.deliveryinsider.auth.service.AuthService;
 import com.deliveryinsider.auth.service.model.LoginResult;
@@ -104,6 +105,28 @@ public class AuthController {
             .body(
                 GlobalResponse.success(
                     "로그아웃되었습니다.",
+                    null
+                )
+            );
+    }
+    @PatchMapping("/password")
+    public ResponseEntity<GlobalResponse<Void>> changePassword(
+        @RequestHeader(USER_ID_HEADER) Long userId,
+        @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        authService.changePassword(userId, request);
+
+        ResponseCookie expiredCookie =
+            refreshTokenCookieManager.expire();
+
+        return ResponseEntity.ok()
+            .header(
+                HttpHeaders.SET_COOKIE,
+                expiredCookie.toString()
+            )
+            .body(
+                GlobalResponse.success(
+                    "비밀번호가 변경되었습니다. 다시 로그인해 주세요.",
                     null
                 )
             );

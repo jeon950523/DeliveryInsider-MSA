@@ -70,6 +70,11 @@ public class RefreshTokenService {
             .ifPresent(refreshTokenMapper::revokeByTokenHash);
         }
 
+    @Transactional
+    public void revokeAll(Long userId) {
+        refreshTokenMapper.revokeByUserId(userId);
+    }
+
     private Claims parseRefreshToken(String refreshToken){
         try {
             return jwtTokenProvider.parseRefreshToken(refreshToken);

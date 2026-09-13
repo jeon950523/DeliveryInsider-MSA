@@ -22,4 +22,6 @@ public interface RefreshTokenMapper {
 
     int revokeByTokenHash(@Param("tokenHash") String tokenHash);
 
+    int revokeByUserId(@Param("userId") Long userId);
+
 }

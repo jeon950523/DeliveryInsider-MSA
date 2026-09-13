@@ -23,7 +23,9 @@ public enum AuthErrorCode implements ErrorCode {
     KAKAO_LOGIN_CANCELED("AUTH-018", HttpStatus.BAD_REQUEST, "카카오 로그인이 취소되었습니다."),
     KAKAO_EMAIL_REQUIRED("AUTH-019", HttpStatus.UNPROCESSABLE_ENTITY, "카카오 계정 이메일 제공 동의가 필요합니다."),
     OAUTH_ACCOUNT_CONFLICT("AUTH-020", HttpStatus.CONFLICT, "이미 다른 카카오 계정이 연결되어 있습니다."),
-    KAKAO_PROVIDER_ERROR("AUTH-021", HttpStatus.BAD_GATEWAY, "카카오 로그인 처리 중 오류가 발생했습니다.");
+    KAKAO_PROVIDER_ERROR("AUTH-021", HttpStatus.BAD_GATEWAY, "카카오 로그인 처리 중 오류가 발생했습니다."),
+    CURRENT_PASSWORD_MISMATCH("AUTH-022", HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),
+    PASSWORD_SAME_AS_CURRENT("AUTH-023", HttpStatus.BAD_REQUEST, "현재 비밀번호와 다른 비밀번호를 사용해 주세요.");
 
     private final String code;
     private final HttpStatus status;
