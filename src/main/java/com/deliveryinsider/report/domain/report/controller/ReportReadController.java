@@ -7,7 +7,7 @@ import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
 import com.deliveryinsider.report.domain.report.response.*;
 import com.deliveryinsider.report.domain.report.service.ReportAiInsightService;
 import com.deliveryinsider.report.domain.report.service.ReportReadService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,6 +16,9 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import jakarta.validation.Valid;
 
@@ -23,12 +26,37 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequiredArgsConstructor
 @RequestMapping("/api/reports")
 public class ReportReadController {
 
     private final ReportReadService reportReadService;
     private final ReportAiInsightService reportAiInsightService;
+    private final com.deliveryinsider.report.domain.report.service.ReportXlsxExportService reportXlsxExportService;
+
+    @Autowired
+    public ReportReadController(ReportReadService reportReadService, ReportAiInsightService reportAiInsightService,
+        com.deliveryinsider.report.domain.report.service.ReportXlsxExportService reportXlsxExportService) {
+        this.reportReadService = reportReadService;
+        this.reportAiInsightService = reportAiInsightService;
+        this.reportXlsxExportService = reportXlsxExportService;
+    }
+
+    /** Keeps existing focused controller tests source-compatible. */
+    public ReportReadController(ReportReadService reportReadService, ReportAiInsightService reportAiInsightService) {
+        this(reportReadService, reportAiInsightService, null);
+    }
+
+    @GetMapping(value = "/export.xlsx", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    public ResponseEntity<byte[]> exportXlsx(@RequestHeader("X-User-Id") Long userId,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+        @RequestParam(required = false) String platformType, @RequestParam(required = false) String status,
+        @RequestParam(required = false) String keyword, @RequestParam(required = false) String historyType) {
+        byte[] body = reportXlsxExportService.export(userId, from, to, platformType, status, keyword, historyType);
+        String filename = "DeliveryInsider_Report_" + (from == null ? "all" : from.toLocalDate()) + "_" + (to == null ? "all" : to.toLocalDate()) + ".xlsx";
+        return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+            .header(HttpHeaders.CACHE_CONTROL, "no-store").contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).body(body);
+    }
 
     @GetMapping("/summary")
     public ReportSummaryResponse getSummary(

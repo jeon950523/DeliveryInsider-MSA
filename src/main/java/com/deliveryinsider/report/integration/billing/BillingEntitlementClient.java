@@ -12,6 +12,7 @@ public class BillingEntitlementClient {
 
     public static final String AI_REPORT_INSIGHT =
         "AI_REPORT_INSIGHT";
+    public static final String REPORT_EXPORT = "REPORT_EXPORT";
 
     private final RestClient restClient;
 
