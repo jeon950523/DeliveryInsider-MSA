@@ -15,6 +15,7 @@ public record ReportSummaryResponse(
 
     long estimatedMenuCost,
     long estimatedPackagingCost,
+    long estimatedNetProfit,
 
     List<String> financialDataStatuses
 ) {

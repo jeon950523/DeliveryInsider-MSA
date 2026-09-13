@@ -13,6 +13,7 @@ import com.deliveryinsider.report.domain.report.response.ReportOrderResponse;
 import com.deliveryinsider.report.domain.report.response.ReportOrderHistoryResponse;
 import com.deliveryinsider.report.domain.report.response.ReportSummaryResponse;
 import com.deliveryinsider.report.domain.report.response.ReportMenuEstimatedProfitResponse;
+import com.deliveryinsider.report.domain.report.response.ReportPlatformMetricResponse;
 import com.deliveryinsider.report.global.error.BusinessException;
 import com.deliveryinsider.report.global.error.ReportErrorCode;
 import com.deliveryinsider.report.integration.store.CurrentStoreClient;
@@ -108,6 +109,12 @@ public class ReportReadService {
             summary.getProviderChargeAmount(),
             summary.getEstimatedMenuCost(),
             summary.getEstimatedPackagingCost(),
+            summary.getGrossOrderAmount()
+                - (summary.getProviderChargeAmount() == null
+                    ? 0
+                    : summary.getProviderChargeAmount())
+                - summary.getEstimatedMenuCost()
+                - summary.getEstimatedPackagingCost(),
             financialDataStatuses
         );
     }
@@ -295,6 +302,31 @@ public class ReportReadService {
             )
             .stream()
             .map(ReportDailyTrendResponse::from)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReportPlatformMetricResponse> getPlatformMetrics(
+        Long userId,
+        ReportSummaryRequest request
+    ) {
+        validateRangeAndPlatform(
+            request.from(),
+            request.to(),
+            request.platformType()
+        );
+
+        CurrentStoreResponse store = resolveStore(userId);
+
+        return reportReadMapper
+            .findPlatformMetrics(
+                store.storeId(),
+                request.from(),
+                request.to(),
+                request.platformType()
+            )
+            .stream()
+            .map(ReportPlatformMetricResponse::from)
             .toList();
     }
 

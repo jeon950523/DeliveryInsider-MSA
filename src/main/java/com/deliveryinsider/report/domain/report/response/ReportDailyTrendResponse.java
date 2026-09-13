@@ -16,6 +16,7 @@ public record ReportDailyTrendResponse(
     long providerChargeAmount,
     long estimatedMenuCost,
     long estimatedPackagingCost,
+    long estimatedNetProfit,
     List<String> financialDataStatuses
 ) {
 
@@ -32,6 +33,10 @@ public record ReportDailyTrendResponse(
             projection.getProviderChargeAmount(),
             projection.getEstimatedMenuCost(),
             projection.getEstimatedPackagingCost(),
+            projection.getGrossSales()
+                - projection.getProviderChargeAmount()
+                - projection.getEstimatedMenuCost()
+                - projection.getEstimatedPackagingCost(),
             parseStatuses(
                 projection.getFinancialDataStatusesCsv()
             )

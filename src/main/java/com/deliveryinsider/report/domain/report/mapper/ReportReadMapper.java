@@ -1,6 +1,7 @@
 package com.deliveryinsider.report.domain.report.mapper;
 
 import com.deliveryinsider.report.domain.report.projection.ReportDailyTrendProjection;
+import com.deliveryinsider.report.domain.report.projection.ReportPlatformMetricProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportCancellationReasonProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportMenuPerformanceProjection;
 import com.deliveryinsider.report.domain.report.projection.ReportMenuProfitChargeProjection;
@@ -89,6 +90,13 @@ public interface ReportReadMapper {
     );
 
     List<ReportDailyTrendProjection> findDailyTrend(
+        @Param("storeId") Long storeId,
+        @Param("from") LocalDateTime from,
+        @Param("to") LocalDateTime to,
+        @Param("platformType") String platformType
+    );
+
+    List<ReportPlatformMetricProjection> findPlatformMetrics(
         @Param("storeId") Long storeId,
         @Param("from") LocalDateTime from,
         @Param("to") LocalDateTime to,

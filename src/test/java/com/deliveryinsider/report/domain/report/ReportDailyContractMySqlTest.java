@@ -150,15 +150,38 @@ class ReportDailyContractMySqlTest {
             .andExpect(jsonPath("$[0].providerChargeAmount").value(5000))
             .andExpect(jsonPath("$[0].estimatedMenuCost").value(7000))
             .andExpect(jsonPath("$[0].estimatedPackagingCost").value(700))
+            .andExpect(jsonPath("$[0].estimatedNetProfit").value(23300))
             .andExpect(jsonPath("$[0].financialDataStatuses[0]").value("AVAILABLE"))
             .andExpect(jsonPath("$[0].financialDataStatuses[1]").value("UNAVAILABLE"))
-            .andExpect(jsonPath("$[1].grossSales").value(8000));
+            .andExpect(jsonPath("$[1].grossSales").value(8000))
+            .andExpect(jsonPath("$[1].estimatedNetProfit").value(8000));
         var summary = mapper.findSummary(1L, null, null, null);
         long dailyTotal = mapper.findDailyTrend(1L, null, null, null).stream()
             .mapToLong(ReportDailyTrendProjection::getGrossSales).sum();
         long knownOrderTotal = mapper.findOrders(1L, null, null, null, "DELIVERED", 0, 100, "orderedAt", "asc")
             .stream().map(order -> order.getGrossOrderAmount()).filter(Objects::nonNull).mapToLong(Long::longValue).sum();
         assertThat(dailyTotal).isEqualTo(44000).isEqualTo(summary.getGrossOrderAmount()).isEqualTo(knownOrderTotal);
+    }
+
+    @Test
+    void platformMetricsUseTheSameDeliveredRevenueContract() throws Exception {
+        mvc.perform(get("/api/reports/platforms/metrics").header("X-User-Id", 10))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(4))
+            .andExpect(jsonPath("$[0].platformType").value("BAEMIN"))
+            .andExpect(jsonPath("$[0].totalOrderCount").value(4))
+            .andExpect(jsonPath("$[0].completedOrderCount").value(2))
+            .andExpect(jsonPath("$[0].canceledOrderCount").value(1))
+            .andExpect(jsonPath("$[0].grossSales").value(22000))
+            .andExpect(jsonPath("$[1].platformType").value("COUPANG_EATS"))
+            .andExpect(jsonPath("$[1].grossSales").value(14000));
+
+        mvc.perform(get("/api/reports/platforms/metrics")
+                .header("X-User-Id", 10)
+                .param("platformType", "BAEMIN"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].platformType").value("BAEMIN"));
     }
 
     @Test
@@ -200,14 +223,21 @@ class ReportDailyContractMySqlTest {
     }
     @Test
     void summaryDistinguishesUnknownRealZeroAndKnownPartialSums() throws Exception {
+        mvc.perform(get("/api/reports/summary").header("X-User-Id", 10))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.grossOrderAmount").value(44000))
+            .andExpect(jsonPath("$.estimatedNetProfit").value(31300));
+
         mvc.perform(get("/api/reports/summary").header("X-User-Id", 10).param("platformType", "YOGIYO"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.customerPaidAmount").value(org.hamcrest.Matchers.nullValue()))
             .andExpect(jsonPath("$.providerChargeAmount").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.estimatedNetProfit").value(0))
             .andExpect(jsonPath("$.financialDataStatuses[0]").value("UNAVAILABLE"));
         mvc.perform(get("/api/reports/summary").header("X-User-Id", 10).param("from", "2099-01-01T00:00:00"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.totalOrderCount").value(0))
             .andExpect(jsonPath("$.grossOrderAmount").value(0))
+            .andExpect(jsonPath("$.estimatedNetProfit").value(0))
             .andExpect(jsonPath("$.customerPaidAmount").value(org.hamcrest.Matchers.nullValue()))
             .andExpect(jsonPath("$.providerChargeAmount").value(org.hamcrest.Matchers.nullValue()));
         var partial = mapper.findSummary(1L, null, null, null);

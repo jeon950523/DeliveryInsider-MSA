@@ -206,6 +206,23 @@ public class ReportReadController {
         );
     }
 
+    @GetMapping("/platforms/metrics")
+    public List<ReportPlatformMetricResponse> getPlatformMetrics(
+        @RequestHeader("X-User-Id") Long userId,
+        @RequestParam(required = false)
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+        LocalDateTime from,
+        @RequestParam(required = false)
+        @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+        LocalDateTime to,
+        @RequestParam(required = false) String platformType
+    ) {
+        return reportReadService.getPlatformMetrics(
+            userId,
+            new ReportSummaryRequest(from, to, platformType)
+        );
+    }
+
     @PostMapping("/ai-insights")
     public ReportAiInsightResponse getAiInsight(
         @RequestHeader("X-User-Id")
