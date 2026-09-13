@@ -20,6 +20,14 @@ export const fetchExternalStores = async (platformType) => {
   return response.data;
 };
 
+export const createExternalStore = async (platformType, payload) => {
+  const response = await simulatorApi.post(
+    `/api/control/providers/${platformType}/stores`,
+    payload,
+  );
+  return response.data;
+};
+
 export const fetchExternalMenus = async (platformType, externalStoreId) => {
   const response = await simulatorApi.get(
     `/api/catalog/providers/${platformType}/stores/${externalStoreId}/menus`,

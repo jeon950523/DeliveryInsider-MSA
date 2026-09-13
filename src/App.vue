@@ -9,6 +9,7 @@ import {
   changeExternalOrderStatus,
   createExternalOrder,
   createExternalMenu,
+  createExternalStore,
   createAdSpend,
   createCoupon,
   fetchAdSpend,
@@ -40,11 +41,13 @@ const deliveryAddress = ref('대구광역시 동구 동대구로 475');
 const customerRequest = ref('문 앞에 놓아주세요.');
 const isLoadingCatalog = ref(false);
 const isCreating = ref(false);
+const isCreatingStore = ref(false);
 const isCreatingMenu = ref(false);
 const isSavingFeePolicy = ref(false);
 const isCreatingCoupon = ref(false);
 const isCreatingAdSpend = ref(false);
 const newMenuExternalId = ref('');
+const newStoreName = ref('');
 const newMenuCatalogKey = ref('');
 const newMenuName = ref('');
 const newMenuPrice = ref('');
@@ -112,6 +115,7 @@ const menuNameMap = computed(() => {
 const hasSelectedExternalStore = computed(() => Boolean(selectedExternalStoreId.value));
 const isSelectionLocked = computed(() => isLoadingCatalog.value
   || isCreating.value
+  || isCreatingStore.value
   || isCreatingMenu.value
   || isSavingFeePolicy.value
   || isCreatingCoupon.value
@@ -275,6 +279,53 @@ const selectStore = async () => {
     if (generation === selectionGeneration) {
       isLoadingCatalog.value = false;
     }
+  }
+};
+
+const createStore = async () => {
+  const provider = selectedProvider.value;
+  const storeName = newStoreName.value.trim();
+
+  if (!storeName) {
+    return;
+  }
+
+  isCreatingStore.value = true;
+  errorMessage.value = '';
+  successMessage.value = '';
+
+  try {
+    const created = await createExternalStore(provider, { storeName });
+    const providerStores = await fetchExternalStores(provider);
+
+    if (provider !== selectedProvider.value) {
+      return;
+    }
+
+    const createdStore = providerStores.find(
+      (externalStore) => externalStore.externalStoreId === created.externalStoreId,
+    );
+    if (!createdStore) {
+      throw new Error('생성된 외부 매장을 목록에서 확인하지 못했습니다.');
+    }
+
+    const generation = ++selectionGeneration;
+    stores.value = providerStores;
+    selectedExternalStoreId.value = createdStore.externalStoreId;
+    resetStoreScopedState();
+    await loadStoreScope(provider, createdStore.externalStoreId, generation);
+
+    if (isCurrentScope(provider, createdStore.externalStoreId, generation)) {
+      newStoreName.value = '';
+      successMessage.value = `${createdStore.externalStoreId} 외부 매장을 등록했습니다.`;
+      clearMessageLater();
+    }
+  } catch (error) {
+    if (provider === selectedProvider.value) {
+      setError(error, '외부 매장을 등록하지 못했습니다.');
+    }
+  } finally {
+    isCreatingStore.value = false;
   }
 };
 
@@ -519,13 +570,33 @@ onMounted(async () => {
       </section>
 
       <section class="panel store-select-panel">
-        <label for="external-store-select">외부 매장</label>
-        <select id="external-store-select" v-model="selectedExternalStoreId" :disabled="isSelectionLocked" @change="selectStore">
-          <option value="" disabled>외부 매장을 선택하세요</option>
-          <option v-for="externalStore in stores" :key="externalStore.externalStoreId" :value="externalStore.externalStoreId">
-            {{ externalStore.externalStoreId }} / {{ externalStore.storeName }}
-          </option>
-        </select>
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">EXTERNAL STORE</span>
+            <h2>외부 매장 선택·등록</h2>
+          </div>
+          <small>현재 Provider 안에 새 Simulator 매장을 만듭니다.</small>
+        </div>
+        <div class="store-select-grid">
+          <label for="external-store-select">
+            외부 매장
+            <select id="external-store-select" v-model="selectedExternalStoreId" :disabled="isSelectionLocked" @change="selectStore">
+              <option value="" disabled>외부 매장을 선택하세요</option>
+              <option v-for="externalStore in stores" :key="externalStore.externalStoreId" :value="externalStore.externalStoreId">
+                {{ externalStore.externalStoreId }} / {{ externalStore.storeName }}
+              </option>
+            </select>
+          </label>
+          <form class="store-create-form" @submit.prevent="createStore">
+            <label for="external-store-name">
+              새 외부 매장명
+              <input id="external-store-name" v-model="newStoreName" maxlength="120" required placeholder="예: 동대구 신규 매장" :disabled="isSelectionLocked">
+            </label>
+            <button type="submit" :disabled="isSelectionLocked || !newStoreName.trim()">
+              {{ isCreatingStore ? '등록 중...' : '+ 외부 매장 등록' }}
+            </button>
+          </form>
+        </div>
         <p>이 화면은 8101 Simulator Backend만 호출합니다.</p>
       </section>
 
