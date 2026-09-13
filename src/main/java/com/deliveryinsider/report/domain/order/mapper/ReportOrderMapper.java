@@ -36,6 +36,9 @@ public interface ReportOrderMapper {
         @Param("eventVersion")
         long eventVersion,
 
+        @Param("readyForPickupAt")
+        LocalDateTime readyForPickupAt,
+
         @Param("pickedUpAt")
         LocalDateTime pickedUpAt,
 

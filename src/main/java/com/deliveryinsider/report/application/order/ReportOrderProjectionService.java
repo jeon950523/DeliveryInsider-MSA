@@ -279,6 +279,13 @@ public class ReportOrderProjectionService {
                 ? occurredAt
                 : null;
 
+        LocalDateTime readyForPickupAt =
+            "READY_FOR_PICKUP".equals(
+                data.operationStatus()
+            )
+                ? occurredAt
+                : null;
+
         LocalDateTime completedAt =
             "DELIVERED".equals(
                 data.status()
@@ -301,6 +308,7 @@ public class ReportOrderProjectionService {
                     operationStatus,
                     data.sourceSequence(),
                     event.eventVersion(),
+                    readyForPickupAt,
                     pickedUpAt,
                     completedAt,
                     canceledAt
@@ -502,6 +510,9 @@ public class ReportOrderProjectionService {
         }
 
         return switch (data.status()) {
+
+            case "READY_FOR_PICKUP" ->
+                "READY_FOR_PICKUP";
 
             case "PICKED_UP" ->
                 "DELIVERING";

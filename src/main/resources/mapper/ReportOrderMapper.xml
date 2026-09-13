@@ -256,6 +256,12 @@
         last_event_version =
         #{eventVersion},
 
+        ready_for_pickup_at =
+        COALESCE(
+        #{readyForPickupAt},
+        ready_for_pickup_at
+        ),
+
         picked_up_at =
         COALESCE(
         #{pickedUpAt},
