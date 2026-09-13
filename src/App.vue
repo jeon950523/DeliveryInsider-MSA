@@ -488,7 +488,9 @@ const changeOrderStatus = async (order, status) => {
   successMessage.value = '';
 
   try {
-    const payload = status === 'CANCELED'
+    const payload = status === 'COOKING'
+      ? { operationStatus: 'COOKING' }
+      : status === 'CANCELED'
       ? {
         status,
         cancelCode: 'CUSTOMER_CANCEL',

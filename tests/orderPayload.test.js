@@ -44,10 +44,17 @@ test('주문 합계는 외부 플랫폼 판매가와 수량으로 계산한다',
   assert.equal(total, 22000);
 });
 
-test('외부 플랫폼은 매장 픽업 준비 이후에만 배송 상태를 진행한다', () => {
-  assert.deepEqual(resolveAllowedActions('CREATED'), ['CANCELED']);
-  assert.deepEqual(resolveAllowedActions('READY_FOR_PICKUP'), ['PICKED_UP']);
-  assert.deepEqual(resolveAllowedActions('PICKED_UP'), ['DELIVERED']);
-  assert.deepEqual(resolveAllowedActions('DELIVERED'), []);
-  assert.deepEqual(resolveAllowedActions('CANCELED'), []);
+test('외부 플랫폼이 조리부터 배달 완료까지 정상 lifecycle을 소유한다', () => {
+  assert.deepEqual(
+    resolveAllowedActions({ status: 'CREATED', operationStatus: 'WAITING' }),
+    ['COOKING', 'CANCELED'],
+  );
+  assert.deepEqual(
+    resolveAllowedActions({ status: 'CREATED', operationStatus: 'COOKING' }),
+    ['READY_FOR_PICKUP', 'CANCELED'],
+  );
+  assert.deepEqual(resolveAllowedActions({ status: 'READY_FOR_PICKUP' }), ['PICKED_UP']);
+  assert.deepEqual(resolveAllowedActions({ status: 'PICKED_UP' }), ['DELIVERED']);
+  assert.deepEqual(resolveAllowedActions({ status: 'DELIVERED' }), []);
+  assert.deepEqual(resolveAllowedActions({ status: 'CANCELED' }), []);
 });

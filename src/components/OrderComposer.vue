@@ -92,8 +92,8 @@ const formatMoney = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원
     </button>
 
     <p class="ownership-note">
-      이 화면은 CREATED 주문 생성과 고객 취소·기사 픽업·배달 완료만 제어합니다.
-      조리 상태는 DeliveryInsider 점주 화면이 소유합니다.
+      이 화면에서 주문 생성부터 조리 시작·완료, 기사 픽업, 배달 완료까지 정상 lifecycle을 제어합니다.
+      DeliveryInsider 점주 화면은 상태를 읽기 전용으로 관제합니다.
     </p>
   </aside>
 </template>

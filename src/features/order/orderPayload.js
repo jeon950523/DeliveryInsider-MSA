@@ -31,16 +31,20 @@ export const calculateOrderTotal = (menus, quantities) => {
   }, 0);
 };
 
-export const resolveAllowedActions = (status) => {
-  if (status === 'CREATED') {
-    return ['CANCELED'];
+export const resolveAllowedActions = (order) => {
+  if (order?.status === 'CREATED' && order?.operationStatus === 'WAITING') {
+    return ['COOKING', 'CANCELED'];
   }
 
-  if (status === 'READY_FOR_PICKUP') {
+  if (order?.status === 'CREATED' && order?.operationStatus === 'COOKING') {
+    return ['READY_FOR_PICKUP', 'CANCELED'];
+  }
+
+  if (order?.status === 'READY_FOR_PICKUP') {
     return ['PICKED_UP'];
   }
 
-  if (status === 'PICKED_UP') {
+  if (order?.status === 'PICKED_UP') {
     return ['DELIVERED'];
   }
 

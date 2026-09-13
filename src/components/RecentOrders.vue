@@ -41,18 +41,28 @@ const formatDateTime = (value) => {
 };
 
 const actionLabel = {
+  COOKING: '조리 시작',
+  READY_FOR_PICKUP: '조리 완료',
   PICKED_UP: '기사 픽업',
   DELIVERED: '배달 완료',
   CANCELED: '고객 취소',
 };
 
 const actionClass = {
+  COOKING: 'action-button action-button--primary',
+  READY_FOR_PICKUP: 'action-button action-button--primary',
   PICKED_UP: 'action-button action-button--primary',
   DELIVERED: 'action-button action-button--success',
   CANCELED: 'action-button action-button--danger',
 };
 
 const hasOrders = computed(() => props.orders.length > 0);
+
+const displayStatus = (order) => (
+  order.status === 'CREATED' && order.operationStatus === 'COOKING'
+    ? 'COOKING'
+    : order.status
+);
 </script>
 
 <template>
@@ -78,8 +88,8 @@ const hasOrders = computed(() => props.orders.length > 0);
             <strong>{{ order.externalOrderId }}</strong>
             <small>{{ formatDateTime(order.orderedAt) }}</small>
           </div>
-          <span class="status-badge" :class="`status-${order.status.toLowerCase()}`">
-            {{ ORDER_STATUS_LABELS[order.status] || order.status }}
+          <span class="status-badge" :class="`status-${displayStatus(order).toLowerCase()}`">
+            {{ ORDER_STATUS_LABELS[displayStatus(order)] || displayStatus(order) }}
           </span>
         </div>
 
@@ -105,7 +115,7 @@ const hasOrders = computed(() => props.orders.length > 0);
 
         <div class="order-actions">
           <button
-            v-for="action in resolveAllowedActions(order.status)"
+            v-for="action in resolveAllowedActions(order)"
             :key="action"
             type="button"
             :class="actionClass[action]"

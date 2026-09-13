@@ -7,6 +7,7 @@ export const PROVIDERS = [
 
 export const ORDER_STATUS_LABELS = {
   CREATED: '주문 접수',
+  COOKING: '조리 중',
   READY_FOR_PICKUP: '매장 픽업 준비 완료',
   PICKED_UP: '기사 픽업',
   DELIVERED: '배달 완료',
