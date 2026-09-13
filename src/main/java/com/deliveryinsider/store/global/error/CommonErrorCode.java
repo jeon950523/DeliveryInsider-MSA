@@ -8,6 +8,7 @@ public enum CommonErrorCode implements ErrorCode {
     TYPE_MISMATCH("COMMON-400-003", HttpStatus.BAD_REQUEST, "요청 파라미터 타입을 확인해 주세요."),
     INTERNAL_API_UNAUTHORIZED("COMMON-401-001", HttpStatus.UNAUTHORIZED, "내부 서비스 인증에 실패했습니다."),
     INTERNAL_API_NOT_CONFIGURED("COMMON-503-001", HttpStatus.SERVICE_UNAVAILABLE, "내부 서비스 인증 설정이 없습니다."),
+    ADMIN_FORBIDDEN("COMMON-403-001", HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다."),
     INTERNAL_SERVER_ERROR("COMMON-500-001", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
     private final String code;

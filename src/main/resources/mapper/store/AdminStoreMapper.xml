@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.store.domain.store.admin.AdminStoreMapper">
+    <resultMap id="adminStoreRowMap" type="com.deliveryinsider.store.domain.store.admin.AdminStoreRow">
+        <id column="store_id" property="storeId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="store_name" property="storeName"/>
+        <result column="business_registration_number" property="businessRegistrationNumber"/>
+        <result column="business_status" property="businessStatus"/>
+        <result column="operation_status" property="operationStatus"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <select id="countAllActive" resultType="long">
+        SELECT COUNT(*) FROM stores WHERE deleted_at IS NULL
+    </select>
+
+    <select id="countByOperationStatus" resultType="long">
+        SELECT COUNT(*) FROM stores
+        WHERE deleted_at IS NULL AND operation_status = #{operationStatus}
+    </select>
+
+    <select id="countBusinessVerified" resultType="long">
+        SELECT COUNT(*) FROM stores s
+        INNER JOIN business_verifications bv ON bv.id = s.business_verification_id
+        WHERE s.deleted_at IS NULL AND bv.business_status_code = '01'
+    </select>
+
+    <select id="findPage" resultMap="adminStoreRowMap">
+        SELECT
+            s.id AS store_id,
+            s.user_id AS owner_user_id,
+            s.store_name,
+            s.business_registration_number,
+            COALESCE(bv.business_status_name, bv.business_status_code, '미확인') AS business_status,
+            s.operation_status,
+            s.created_at
+        FROM stores s
+        LEFT JOIN business_verifications bv ON bv.id = s.business_verification_id
+        WHERE s.deleted_at IS NULL
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+</mapper>
