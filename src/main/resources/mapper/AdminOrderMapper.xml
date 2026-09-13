@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.order.domain.order.admin.AdminOrderMapper">
+    <select id="findSummary" resultType="com.deliveryinsider.order.domain.order.admin.AdminOrderSummaryResponse">
+        SELECT
+            COUNT(*) AS today_order_count,
+            COALESCE(SUM(CASE WHEN operation_status IN ('WAITING', 'COOKING', 'READY_FOR_PICKUP', 'DELIVERING') THEN 1 ELSE 0 END), 0) AS active_order_count,
+            COALESCE(SUM(CASE WHEN operation_status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS completed_order_count,
+            COALESCE(SUM(CASE WHEN operation_status = 'CANCELED' THEN 1 ELSE 0 END), 0) AS canceled_order_count
+        FROM orders
+        WHERE ordered_at &gt;= #{startAt}
+          AND ordered_at &lt; #{endAt}
+    </select>
+</mapper>
