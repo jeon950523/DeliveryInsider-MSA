@@ -26,7 +26,6 @@ import StoreOnboardingView from '../../features/onboarding/views/StoreOnboarding
 import DashboardView from '../../features/dashboard/views/DashboardView.vue';
 import MenusView from '../../features/menu/views/MenusView.vue';
 import StoreView from '../../features/store/views/StoreView.vue';
-import MockDataView from '../../features/mock/views/MockDataView.vue';
 
 import ProfileView from '../../features/profile/views/ProfileView.vue';
 import OrdersView from '../../features/order/views/OrdersView.vue';
@@ -191,13 +190,6 @@ const routes = [
     name: 'store',
     component: StoreView,
     meta: { isAuthenticated: true, title: '매장 관리', allowWithoutStore: true },
-  },
-
-  {
-    path: '/mockdata',
-    name: 'mockdata',
-    component: MockDataView,
-    meta: { isAuthenticated: true, title: 'Mock 데이터' },
   },
 
   /*

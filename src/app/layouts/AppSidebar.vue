@@ -26,7 +26,6 @@ const navItems = ref([
   { name: '매장 관리', path: '/store', tour: 'store-navigation' },
   { name: '운영 리포트', path: '/reports', tour: 'report-navigation' },
   { name: '구독 관리', path: '/billing', tour: 'billing-navigation' },
-  { name: 'Mock 데이터', path: '/mockdata', tour: 'mock-navigation' },
 ])
 
 const REQUEST_ATTENTION_TYPES = [

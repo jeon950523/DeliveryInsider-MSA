@@ -336,7 +336,6 @@ const goToSalesReport = () => {
   });
 };
 
-const handleSimulate = () => router.push('/mockdata');
 const handleExport = () => router.push('/reports');
 const goToPlatformConnection = () => router.push({ path: '/store', query: { tab: 'platform' } });
 const handlePlatformNoticeAction = () => {
@@ -378,7 +377,6 @@ onBeforeUnmount(() => {
       <div class="header-actions">
         <button type="button" class="sub-button" @click="router.push('/reports')">운영 리포트</button>
         <button type="button" class="sub-button" @click="refreshDashboard">새로고침</button>
-        <button type="button" class="sub-button" @click="handleSimulate">Mock 주문 생성</button>
         <button type="button" class="primary-button" @click="handleExport">리포트/CSV 확인</button>
       </div>
     </header>
