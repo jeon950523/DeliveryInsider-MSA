@@ -35,7 +35,7 @@ const steps = [
     route: '/orders',
     selector: '[data-tour="order-management"]',
     title: '통합 주문 관리',
-    body: '주문을 확인하고 조리 시작부터 픽업 준비까지 매장 운영 상태를 변경합니다.',
+    body: '외부 플랫폼에서 처리되는 주문 상태를 한 화면에서 확인하고 예외 상황을 관리합니다.',
   },
   {
     route: '/store',

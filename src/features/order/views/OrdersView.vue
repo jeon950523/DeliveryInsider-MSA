@@ -209,7 +209,7 @@ watch(
 
 
 // 요청사항 확인은 접수대기 주문만 대상으로 삼는다.
-// 조리 시작 이후에는 점주가 요청사항을 확인하고 접수한 것으로 보고 알림에서 제외한다.
+// 외부 플랫폼에서 조리가 시작되면 정상 lifecycle이 진행 중이므로 접수대기 알림에서 제외한다.
 const requestAttentionOrders = computed(() => {
   return orders.value.filter((order) => {
     return isRequestAttentionOrder(order) && (order.riskBadges || []).length > 0;
@@ -404,6 +404,8 @@ const getCurrentStageElapsedMinutes = (order) => {
 };
 
 const getStateActionHint = (status) => ({
+  WAITING: '외부 플랫폼 접수 대기',
+  COOKING: '외부 플랫폼 조리 중',
   READY_FOR_PICKUP: '픽업 대기 중',
   DELIVERING: '배달 진행 중',
   COMPLETED: '배달 완료',
@@ -903,10 +905,6 @@ const bindDetailScrollContainer = async () => {
   updateDetailTopButtonVisible();
 };
 
-// 상태 변경 로직
-const getNextStatus = (status) => ({ WAITING: 'COOKING', COOKING: 'READY_FOR_PICKUP' }[status] || null);
-const getNextActionName = (status) => ({ WAITING: '조리 시작', COOKING: '조리 완료' }[status] || '');
-
 const applyUpdatedOrder = (updatedDetail, baseOrder = {}) => {
   const updatedOrder =
     toOrderDetailViewData(updatedDetail, baseOrder);
@@ -925,26 +923,6 @@ const applyUpdatedOrder = (updatedDetail, baseOrder = {}) => {
 };
 
 const refreshOrderAfterWrite = async () => { await loadTodayOrders(true); return selectedOrder.value; };
-
-const changeOrderStatus = async (order) => {
-  const nextStatus = getNextStatus(order.orderStatus);
-
-  if (!nextStatus) {
-    return;
-  }
-
-  try {
-    await orderStore.updateStatus(
-      order.id,
-      { orderStatus: nextStatus }
-    );
-
-    if (viewActive) await refreshOrderAfterWrite(order.id);
-    refreshHeaderNotifications();
-  } catch (error) {
-    console.error('주문 상태 변경 실패:', error);
-  }
-};
 
 const openCancelModal = (order) => {
   if (!canCancelOrder(order)) return;
@@ -1027,7 +1005,7 @@ const submitRefund = async () => {
       <div>
         <span class="category-text">TODAY ORDER</span>
         <h1>통합 주문 관리</h1>
-        <p>당일 주문만 빠르게 처리합니다. 이전 주문 내역은 운영 리포트에서 조회하세요.</p>
+        <p>당일 주문 상태와 예외를 한눈에 관제합니다. 이전 주문 내역은 운영 리포트에서 조회하세요.</p>
       </div>
       <div class="header-actions">
         <button
@@ -1091,14 +1069,7 @@ const submitRefund = async () => {
             주문 취소
           </button>
 
-          <button
-            type="button"
-            class="primary-button"
-            :disabled="orderStore.changingOrderId === nextWaitingOrder.id"
-            @click="changeOrderStatus(nextWaitingOrder)"
-          >
-            {{ orderStore.changingOrderId === nextWaitingOrder.id ? '변경 중...' : '조리 시작' }}
-          </button>
+          <span class="done-text">외부 플랫폼에서 조리 시작을 기다리는 중</span>
         </div>
       </div>
     </section>
@@ -1265,16 +1236,7 @@ const submitRefund = async () => {
                 </td>
 
                 <td>
-                  <button
-                    v-if="getNextStatus(order.orderStatus)"
-                    type="button"
-                    class="table-button"
-                    :disabled="orderStore.changingOrderId === order.id"
-                    @click.stop="changeOrderStatus(order)"
-                  >
-                    {{ orderStore.changingOrderId === order.id ? '변경 중...' : getNextActionName(order.orderStatus) }}
-                  </button>
-                  <span v-else class="done-text">{{ getStateActionHint(order.orderStatus) }}</span>
+                  <span class="done-text">{{ getStateActionHint(order.orderStatus) }}</span>
                 </td>
               </tr>
               <tr v-if="filteredOrders.length === 0">
@@ -1516,17 +1478,7 @@ const submitRefund = async () => {
           </button>
 
           <button
-            v-if="getNextStatus(selectedOrder.orderStatus)"
-            type="button"
-            class="primary-button state-action-button"
-            :disabled="orderStore.changingOrderId === selectedOrder.id"
-            @click="changeOrderStatus(selectedOrder)"
-          >
-            {{ orderStore.changingOrderId === selectedOrder.id ? '변경 중...' : getNextActionName(selectedOrder.orderStatus) }}
-          </button>
-
-          <button
-            v-else-if="canRefundOrder(selectedOrder)"
+            v-if="canRefundOrder(selectedOrder)"
             type="button"
             class="primary-button state-action-button"
             :disabled="orderStore.changingOrderId === selectedOrder.id"
@@ -1536,7 +1488,7 @@ const submitRefund = async () => {
           </button>
 
           <button
-            v-else
+            v-if="!canCancelOrder(selectedOrder) && !canRefundOrder(selectedOrder)"
             type="button"
             class="sub-button state-action-button"
             disabled
