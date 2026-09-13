@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useReportStore } from '../stores/useReportStore.js';
 import { useReportAiInsightStore } from '../stores/useReportAiInsightStore.js';
 import ReportAiInsightPanel from '../components/ReportAiInsightPanel.vue';
+import ReportChartCard from '../components/ReportChartCard.vue';
 import { fetchBillingFeatures } from '../../billing/api/billingApi.js';
 import {
   hasPremiumFeature,
@@ -48,6 +49,7 @@ const defaultStartDate = today;
 // 1. 상태 관리
 // ==========================================
 const activeTab = ref('sales');
+const platformMetricMode = ref('revenue');
 
 const filters = ref({
   startDate: defaultStartDate,
@@ -127,6 +129,11 @@ const reportHistory = computed(() => reportStore.reportHistory);
 const reportSummary = computed(() => reportStore.reportSummary);
 const processingTimes = computed(() => reportStore.processingTimes);
 const estimatedMenuProfits = computed(() => reportStore.estimatedMenuProfits);
+const dailyTrend = computed(() => reportStore.dailyTrend);
+const platformMetrics = computed(() => reportStore.platformMetrics);
+const canShowReportDetails = computed(() => (
+  !reportStore.isLoading && !reportStore.loadError
+));
 
 const getReportSortValue = (order) => {
   const rawDateTime =
@@ -230,15 +237,7 @@ const summaryStats = computed(() => {
   const summary = reportSummary.value || {};
 
   const totalSales = Number(summary.grossOrderAmount || 0);
-  const providerChargeAmount = Number(summary.providerChargeAmount || 0);
-  const menuCost = Number(summary.estimatedMenuCost || 0);
-  const packagingCost = Number(summary.estimatedPackagingCost || 0);
-
-  const totalProfit =
-    totalSales
-    - providerChargeAmount
-    - menuCost
-    - packagingCost;
+  const totalProfit = Number(summary.estimatedNetProfit || 0);
 
   const totalCount = Number(summary.totalOrderCount || 0);
   const cancelCount = Number(summary.canceledOrderCount || 0);
@@ -262,10 +261,117 @@ const summaryStats = computed(() => {
   };
 });
 
-const hasUnavailableFinancialData = computed(() => {
+const hasIncompleteFinancialData = computed(() => {
   return (reportSummary.value?.financialDataStatuses || [])
-    .includes('UNAVAILABLE');
+    .some((status) => status !== 'AVAILABLE');
 });
+
+const chartDateLabels = computed(() => dailyTrend.value.map((point) => {
+  const value = String(point.reportDate || '');
+  const [, month, day] = value.split('-');
+  return month && day ? `${month}.${day}` : value;
+}));
+
+const revenueChartDatasets = computed(() => [
+  {
+    label: '매출',
+    data: dailyTrend.value.map((point) => Number(point.grossSales || 0)),
+    unit: 'currency',
+    borderColor: '#2784b8',
+    backgroundColor: 'rgba(39, 132, 184, 0.12)',
+    pointBackgroundColor: '#2784b8',
+    pointStyle: 'circle',
+    pointRadius: 4,
+    borderWidth: 2,
+    tension: 0.28,
+    fill: true,
+  },
+  {
+    label: '추정 순수익',
+    data: dailyTrend.value.map((point) => Number(point.estimatedNetProfit || 0)),
+    unit: 'currency',
+    borderColor: '#16a34a',
+    backgroundColor: 'rgba(22, 163, 74, 0.08)',
+    pointBackgroundColor: '#ffffff',
+    pointBorderColor: '#16a34a',
+    pointStyle: 'rectRot',
+    pointRadius: 5,
+    borderWidth: 2,
+    borderDash: [6, 4],
+    tension: 0.28,
+    fill: false,
+  },
+]);
+
+const orderChartDatasets = computed(() => [
+  {
+    label: '주문 수',
+    data: dailyTrend.value.map((point) => Number(point.totalOrderCount || 0)),
+    unit: 'count',
+    borderColor: '#7c3aed',
+    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+    pointBackgroundColor: '#7c3aed',
+    pointStyle: 'circle',
+    pointRadius: 4,
+    borderWidth: 2,
+    tension: 0.28,
+    fill: true,
+  },
+  {
+    label: '취소 수',
+    data: dailyTrend.value.map((point) => Number(point.canceledOrderCount || 0)),
+    unit: 'count',
+    borderColor: '#dc2626',
+    backgroundColor: 'rgba(220, 38, 38, 0.08)',
+    pointBackgroundColor: '#ffffff',
+    pointBorderColor: '#dc2626',
+    pointStyle: 'triangle',
+    pointRadius: 5,
+    borderWidth: 2,
+    borderDash: [6, 4],
+    tension: 0.28,
+    fill: false,
+  },
+]);
+
+const platformChartLabels = computed(() => platformMetrics.value.map((metric) => (
+  platformNames[metric.platformType] || metric.platformType
+)));
+
+const platformChartDatasets = computed(() => {
+  const revenueMode = platformMetricMode.value === 'revenue';
+
+  return [{
+    label: revenueMode ? '매출' : '주문 수',
+    data: platformMetrics.value.map((metric) => Number(
+      revenueMode ? metric.grossSales : metric.totalOrderCount
+    ) || 0),
+    unit: revenueMode ? 'currency' : 'count',
+    backgroundColor: ['#2784b8', '#7c3aed', '#f97316', '#0f766e'],
+    borderColor: ['#1f6f99', '#6d28d9', '#ea580c', '#115e59'],
+    borderWidth: 1,
+    borderRadius: 8,
+    maxBarThickness: 72,
+  }];
+});
+
+const revenueChartRows = computed(() => dailyTrend.value.map((point) => [
+  point.reportDate,
+  formatMoney(point.grossSales),
+  formatMoney(point.estimatedNetProfit),
+]));
+
+const orderChartRows = computed(() => dailyTrend.value.map((point) => [
+  point.reportDate,
+  `${Number(point.totalOrderCount || 0).toLocaleString('ko-KR')}건`,
+  `${Number(point.canceledOrderCount || 0).toLocaleString('ko-KR')}건`,
+]));
+
+const platformChartRows = computed(() => platformMetrics.value.map((metric) => [
+  platformNames[metric.platformType] || metric.platformType,
+  formatMoney(metric.grossSales),
+  `${Number(metric.totalOrderCount || 0).toLocaleString('ko-KR')}건`,
+]));
 
 const formatProcessingMetric = (metric) => {
   return formatDurationSeconds(
@@ -413,7 +519,14 @@ const applyRouteQueryToReport = () => {
 const searchReports = async () => {
   salesCurrentPage.value = 1;
   reportAiStore.clear();
-  await reportStore.findReports(filters.value);
+
+  try {
+    await reportStore.findReports(filters.value);
+    return true;
+  } catch {
+    // Store의 inline error 상태가 사용자에게 실패와 retry 경로를 제공한다.
+    return false;
+  }
 };
 
 const loadPremiumFeatures = async () => {
@@ -622,15 +735,171 @@ onMounted(async () => {
       <button type="button" class="primary-button" @click="moveToBilling">Standard 플랜 보기</button>
     </section>
 
-    <ReportAiInsightPanel
-      data-tour="ai-insights"
-      :filters="filters"
-      :can-use-ai="canUseAi"
-      :has-loaded="reportStore.hasLoaded"
-      @request-billing="moveToBilling"
-    />
+    <section class="card report-overview-filter" aria-labelledby="report-period-filter-title">
+      <div class="report-overview-filter-header">
+        <div class="title-area">
+          <h2 id="report-period-filter-title">조회 기간</h2>
+          <p class="required-note">기간과 플랫폼 조건은 KPI와 모든 차트에 동일하게 적용됩니다.</p>
+        </div>
+        <div class="header-actions">
+          <button
+            type="button"
+            class="sub-button"
+            :disabled="reportStore.isLoading"
+            @click="clearFilters"
+          >
+            초기화
+          </button>
+          <button
+            type="button"
+            class="primary-button"
+            :disabled="reportStore.isLoading"
+            @click="searchReports"
+          >
+            {{ reportStore.isLoading ? '조회 중...' : '조회' }}
+          </button>
+        </div>
+      </div>
+      <div class="report-overview-filter-grid">
+        <div class="filter-group">
+          <label for="report-start-date">시작일</label>
+          <input id="report-start-date" v-model="filters.startDate" type="date">
+        </div>
+        <div class="filter-group">
+          <label for="report-end-date">종료일</label>
+          <input id="report-end-date" v-model="filters.endDate" type="date">
+        </div>
+        <div class="filter-group">
+          <label for="report-platform">플랫폼</label>
+          <select id="report-platform" v-model="filters.platform">
+            <option value="">전체 플랫폼</option>
+            <option value="BAEMIN">배달의민족</option>
+            <option value="COUPANG_EATS">쿠팡이츠</option>
+            <option value="YOGIYO">요기요</option>
+            <option value="DDANGYO">땡겨요</option>
+          </select>
+        </div>
+      </div>
+    </section>
 
-    <div class="tabs-mock report-tabs report-tabs-under-title">
+    <section
+      v-if="reportStore.isLoading"
+      class="report-overview-state report-overview-loading"
+      aria-live="polite"
+    >
+      리포트 핵심 지표를 불러오는 중입니다.
+    </section>
+    <section
+      v-else-if="reportStore.loadError"
+      class="report-overview-state report-overview-error"
+      role="alert"
+    >
+      <div>
+        <strong>운영 리포트를 불러오지 못했습니다.</strong>
+        <p>{{ reportStore.loadError }}</p>
+      </div>
+      <button type="button" class="primary-button" @click="searchReports">다시 조회</button>
+    </section>
+    <section v-else class="report-summary-grid report-overview-kpis" aria-label="운영 리포트 핵심 지표">
+      <article class="summary-box">
+        <span>매출</span>
+        <strong data-testid="report-kpi-revenue">{{ formatMoney(summaryStats.totalSales) }}</strong>
+        <p>완료 주문 기준</p>
+      </article>
+      <article
+        class="summary-box profit-box"
+        :class="{ 'profit-loss-box': summaryStats.totalProfit < 0 }"
+      >
+        <span>추정 순수익</span>
+        <strong data-testid="report-kpi-estimated-profit">{{ formatMoney(summaryStats.totalProfit) }}</strong>
+        <p v-if="hasIncompleteFinancialData">일부 금융 정보가 미확보된 잠정 집계</p>
+        <p v-else>플랫폼 비용·원가·포장비 반영</p>
+      </article>
+      <article class="summary-box">
+        <span>완료 주문</span>
+        <strong data-testid="report-kpi-completed">{{ summaryStats.completedCount }}건</strong>
+        <p>현재 조회 기간</p>
+      </article>
+      <article class="summary-box cancel-box">
+        <span>취소율</span>
+        <strong data-testid="report-kpi-cancel-rate">{{ summaryStats.cancelRate }}%</strong>
+        <p>취소 {{ summaryStats.cancelCount }}건 / 전체 {{ summaryStats.totalCount }}건</p>
+      </article>
+    </section>
+
+    <p v-if="hasIncompleteFinancialData && !reportStore.isLoading && !reportStore.loadError" class="financial-coverage-note">
+      플랫폼 금융 정보가 일부 미확보되어 매출과 추정 순수익은 현재 확보된 주문 스냅샷 기준입니다. 미확보 비용을 0원 확정치로 간주하지 않습니다.
+    </p>
+
+    <section class="report-chart-grid" aria-label="운영 추이 차트">
+      <ReportChartCard
+        chart-id="revenue-profit-trend"
+        title="매출 / 추정 순수익 추이"
+        description="완료 주문의 일별 매출과 Report가 계산한 추정 순수익을 비교합니다."
+        :labels="chartDateLabels"
+        :datasets="revenueChartDatasets"
+        :loading="reportStore.isLoading"
+        :error="reportStore.loadError"
+        :empty="dailyTrend.length === 0"
+        :table-headers="['날짜', '매출', '추정 순수익']"
+        :table-rows="revenueChartRows"
+        data-testid="revenue-profit-chart"
+        @retry="searchReports"
+      />
+      <ReportChartCard
+        chart-id="order-cancel-trend"
+        title="주문 / 취소 추이"
+        description="같은 조회 기간의 전체 주문 수와 취소 주문 수를 일별로 비교합니다."
+        :labels="chartDateLabels"
+        :datasets="orderChartDatasets"
+        :loading="reportStore.isLoading"
+        :error="reportStore.loadError"
+        :empty="dailyTrend.length === 0"
+        :table-headers="['날짜', '주문 수', '취소 수']"
+        :table-rows="orderChartRows"
+        data-testid="order-cancel-chart"
+        @retry="searchReports"
+      />
+      <ReportChartCard
+        class="report-platform-chart"
+        chart-id="platform-performance"
+        title="플랫폼별 성과 비교"
+        description="Provider별 완료 매출 또는 전체 주문 수를 같은 기간에서 비교합니다."
+        chart-type="bar"
+        :labels="platformChartLabels"
+        :datasets="platformChartDatasets"
+        :loading="reportStore.isLoading"
+        :error="reportStore.loadError"
+        :empty="platformMetrics.length === 0"
+        :table-headers="['플랫폼', '매출', '주문 수']"
+        :table-rows="platformChartRows"
+        data-testid="platform-performance-chart"
+        @retry="searchReports"
+      >
+        <template #action>
+          <div class="chart-metric-toggle" aria-label="플랫폼 비교 지표 선택">
+            <button
+              type="button"
+              :class="{ active: platformMetricMode === 'revenue' }"
+              :aria-pressed="platformMetricMode === 'revenue'"
+              @click="platformMetricMode = 'revenue'"
+            >
+              매출
+            </button>
+            <button
+              type="button"
+              :class="{ active: platformMetricMode === 'orders' }"
+              :aria-pressed="platformMetricMode === 'orders'"
+              @click="platformMetricMode = 'orders'"
+            >
+              주문 수
+            </button>
+          </div>
+        </template>
+      </ReportChartCard>
+    </section>
+
+    <div v-if="canShowReportDetails" class="tabs-mock report-tabs report-tabs-under-title">
       <button class="tab" :class="{ active: activeTab === 'sales' }" @click="activeTab = 'sales'">매출 리포트</button>
       <button class="tab" :class="{ active: activeTab === 'menu-profit' }" @click="activeTab = 'menu-profit'">메뉴별 추정 순수익</button>
       <button class="tab" :class="{ active: activeTab === 'processing' }" @click="activeTab = 'processing'">처리시간 분석</button>
@@ -639,34 +908,7 @@ onMounted(async () => {
       <button class="tab" :class="{ active: activeTab === 'export' }" @click="activeTab = 'export'">필터/엑셀 내보내기</button>
     </div>
 
-    <section v-if="activeTab === 'sales'" class="sales-report-page-block">
-      <section class="report-summary-grid sales-summary-grid">
-        <article class="summary-box">
-          <span>완료 매출</span>
-          <strong>{{ formatMoney(summaryStats.totalSales) }}</strong>
-          <p>Report 완료 주문 기준 실제 집계</p>
-        </article>
-        <article
-          class="summary-box profit-box"
-          :class="{ 'profit-loss-box': summaryStats.totalProfit < 0 }"
-        >
-          <span>예상 순수익</span>
-          <strong>{{ formatMoney(summaryStats.totalProfit) }}</strong>
-          <p v-if="hasUnavailableFinancialData">일부 주문의 플랫폼 비용 미반영</p>
-          <p v-else>확보된 플랫폼 비용·원가·포장비 반영</p>
-        </article>
-        <article class="summary-box cancel-box">
-          <span>취소 주문</span>
-          <strong>{{ summaryStats.cancelCount }}건</strong>
-          <p>취소율 {{ summaryStats.cancelRate }}%</p>
-        </article>
-        <article class="summary-box">
-          <span>주문 조회</span>
-          <strong>{{ summaryStats.totalCount }}건</strong>
-          <p>현재 조회 기간 전체 주문</p>
-        </article>
-      </section>
-
+    <section v-if="canShowReportDetails && activeTab === 'sales'" class="sales-report-page-block">
       <article class="card report-card sales-report-card">
         <div class="card-header">
           <div class="title-area">
@@ -763,7 +1005,7 @@ onMounted(async () => {
       </article>
     </section>
 
-    <section v-if="activeTab === 'menu-profit'" class="sales-report-page-block">
+    <section v-if="canShowReportDetails && activeTab === 'menu-profit'" class="sales-report-page-block">
       <article class="card report-card menu-profit-card">
         <div class="card-header">
           <div class="title-area">
@@ -803,7 +1045,7 @@ onMounted(async () => {
       </article>
     </section>
 
-    <section v-if="activeTab === 'processing'" class="processing-report-section">
+    <section v-if="canShowReportDetails && activeTab === 'processing'" class="processing-report-section">
       <section class="processing-kpi-grid">
         <article class="summary-box processing-summary-box">
           <span>평균 전체 처리</span>
@@ -891,7 +1133,7 @@ onMounted(async () => {
       </article>
     </section>
 
-   <section v-if="activeTab === 'cancel'" class="grid-12 report-cancel-layout">
+<section v-if="canShowReportDetails && activeTab === 'cancel'" class="grid-12 report-cancel-layout">
   <article class="card col-4 cancel-summary-card">
     <div class="card-header">
       <div class="title-area">
@@ -1009,7 +1251,7 @@ onMounted(async () => {
   </article>
 </section>
 
-    <article v-if="activeTab === 'platform'" class="card report-card">
+    <article v-if="canShowReportDetails && activeTab === 'platform'" class="card report-card">
       <div class="card-header">
         <div class="title-area">
           <h2>플랫폼별 운영 요약</h2>
@@ -1047,7 +1289,7 @@ onMounted(async () => {
       </div>
     </article>
 
-    <section v-if="activeTab === 'export'" class="report-filter-export-layout">
+    <section v-if="canShowReportDetails && activeTab === 'export'" class="report-filter-export-layout">
       <section class="card">
         <div class="card-header border-bottom">
       <div class="title-area">
@@ -1231,6 +1473,16 @@ onMounted(async () => {
       </section>
     </section>
 
+    <ReportAiInsightPanel
+      v-if="canShowReportDetails"
+      class="report-ai-panel"
+      data-tour="ai-insights"
+      :filters="filters"
+      :can-use-ai="canUseAi"
+      :has-loaded="reportStore.hasLoaded"
+      @request-billing="moveToBilling"
+    />
+
   </section>
 </template>
 
@@ -1245,6 +1497,116 @@ onMounted(async () => {
   font-family: 'Pretendard', sans-serif;
   color: #164E68;
   box-sizing: border-box;
+}
+
+.report-overview-filter {
+  margin-bottom: 20px;
+}
+
+.report-overview-filter-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.report-overview-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.report-overview-state {
+  display: flex;
+  min-height: 130px;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 20px;
+  padding: 24px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #475569;
+  box-sizing: border-box;
+}
+
+.report-overview-loading {
+  background: linear-gradient(90deg, #f8fafc, #ffffff, #f8fafc);
+}
+
+.report-overview-error {
+  justify-content: space-between;
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.report-overview-error strong {
+  color: #991b1b;
+  font-size: 17px;
+}
+
+.report-overview-error p {
+  margin: 5px 0 0;
+  color: #7f1d1d;
+}
+
+.report-overview-kpis {
+  margin-bottom: 20px;
+}
+
+.financial-coverage-note {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.report-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 26px;
+}
+
+.report-platform-chart {
+  grid-column: 1 / -1;
+}
+
+.chart-metric-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 4px;
+  border-radius: 11px;
+  background: #f1f5f9;
+}
+
+.chart-metric-toggle button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 8px;
+  color: #64748b;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chart-metric-toggle button.active {
+  color: #ffffff;
+  background: #2784b8;
+}
+
+.report-ai-panel {
+  margin-top: 24px;
 }
 
 .page-header {
@@ -1822,6 +2184,8 @@ onMounted(async () => {
 }
 
 @media (max-width: 1100px) {
+  .report-chart-grid { grid-template-columns: 1fr; }
+  .report-platform-chart { grid-column: auto; }
   .report-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .report-cancel-layout .col-4,
   .report-cancel-layout .col-8 { grid-column: span 12; }
@@ -1833,11 +2197,24 @@ onMounted(async () => {
   .report-page { padding: 20px; }
   .page-header { flex-direction: column; align-items: stretch; gap: 16px; }
   .header-actions { justify-content: flex-start; }
+  .report-overview-filter-header,
+  .report-overview-error { flex-direction: column; align-items: stretch; }
+  .report-overview-filter-grid { grid-template-columns: 1fr; }
   .report-filter-grid,
   .report-filter-grid .filter-group.wide { grid-template-columns: 1fr; grid-column: span 1; }
   .report-summary-grid { grid-template-columns: 1fr; }
   .filter-export-row { flex-direction: column; align-items: stretch; }
   .filter-export-row .primary-button { width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .report-page { padding: 16px 12px; }
+  .card { padding: 22px 16px; }
+  .header-actions { flex-wrap: wrap; }
+  .header-actions .primary-button,
+  .header-actions .sub-button { flex: 1 1 140px; }
+  .summary-box { padding: 22px 18px; }
+  .summary-box strong { font-size: 28px; }
 }
 
 
@@ -2418,7 +2795,7 @@ onMounted(async () => {
 }
 
 
-/* 예상 순수익이 음수인 경우 수익 숫자를 빨간색으로 강조한다. */
+/* 추정 순수익이 음수인 경우 수익 숫자를 빨간색으로 강조한다. */
 .profit-strong.loss-text,
 .data-table .profit-strong.loss-text {
   color: #dc2626;

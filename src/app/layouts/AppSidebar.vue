@@ -472,6 +472,13 @@ onMounted(async () => {
   color: #2784B8;
 }
 
+@media (max-width: 768px) {
+  .side-bar.is-collapsed {
+    width: 0 !important;
+    border-right: 0;
+  }
+}
+
 .arrow-icon { font-size: 20px; font-weight: 1000; display: flex; transition: transform var(--transition-speed) ease; }
 .arrow-icon.rotated { transform: rotate(180deg); }
 </style>

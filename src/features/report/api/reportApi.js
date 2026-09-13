@@ -9,6 +9,12 @@ export const fetchReportHistory = (params = {}) =>
 export const fetchReportSummary = (params = {}) =>
   httpClient.get('/api/reports/summary', { params });
 
+export const fetchReportDailyTrend = (params = {}) =>
+  httpClient.get('/api/reports/daily', { params });
+
+export const fetchReportPlatformMetrics = (params = {}) =>
+  httpClient.get('/api/reports/platforms/metrics', { params });
+
 export const fetchEstimatedMenuProfit = (params = {}) =>
   httpClient.get('/api/reports/menus/estimated-profit', { params });
 

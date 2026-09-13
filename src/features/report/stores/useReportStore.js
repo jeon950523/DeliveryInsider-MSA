@@ -4,14 +4,19 @@ import {
   fetchReportOrders,
   fetchReportHistory,
   fetchEstimatedMenuProfit,
+  fetchReportDailyTrend,
   fetchReportProcessingTimes,
+  fetchReportPlatformMetrics,
   fetchReportSummary,
 } from '../api/reportApi.js';
 import {
   formatKstDate,
   formatKstDateTime,
 } from '../../../shared/utils/timeFormatters.js';
-import { escapeCsvCell } from '../utils/reportHelpers.js';
+import {
+  buildAnalysisParams as buildReportAnalysisParams,
+  escapeCsvCell,
+} from '../utils/reportHelpers.js';
 
 const createEmptySummary = () => ({
   totalOrderCount: 0,
@@ -22,6 +27,7 @@ const createEmptySummary = () => ({
   providerChargeAmount: 0,
   estimatedMenuCost: 0,
   estimatedPackagingCost: 0,
+  estimatedNetProfit: 0,
   financialDataStatuses: [],
 });
 
@@ -54,56 +60,19 @@ export const useReportStore = defineStore('report', () => {
   const reportSummary = ref(createEmptySummary());
   const processingTimes = ref(createEmptyProcessingTimes());
   const estimatedMenuProfits = ref([]);
+  const dailyTrend = ref([]);
+  const platformMetrics = ref([]);
 
   const isLoading = ref(false);
   const isExporting = ref(false);
   const hasLoaded = ref(false);
+  const loadError = ref('');
   const lastSearchParams = ref({});
 
-  /*
-   * Report DB는 UTC LocalDateTime을 저장한다.
-   * 사용자가 선택한 한국 날짜 경계를 UTC LocalDateTime으로 변환해서 보낸다.
-   */
-  const toUtcLocalDateTime = (dateText, endOfDay = false) => {
-    if (!dateText) {
-      return null;
-    }
-
-    const localTime = endOfDay
-      ? '23:59:59.999'
-      : '00:00:00.000';
-
-    const date = new Date(`${dateText}T${localTime}+09:00`);
-
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-
-    return date.toISOString().slice(0, 19);
-  };
-
-  const buildAnalysisParams = (filters = {}) => {
-    const params = {};
-
-    const from = toUtcLocalDateTime(filters.startDate);
-    const to = toUtcLocalDateTime(filters.endDate, true);
-
-    if (from) {
-      params.from = from;
-    }
-
-    if (to) {
-      params.to = to;
-    }
-
-    const platformType = filters.platformType || filters.platform;
-
-    if (platformType) {
-      params.platformType = platformType;
-    }
-
-    return params;
-  };
+  const buildAnalysisParams = (filters = {}) => buildReportAnalysisParams({
+    ...filters,
+    platform: filters.platformType || filters.platform || '',
+  });
 
   const buildOrderParams = (filters = {}) => ({
     ...buildAnalysisParams(filters),
@@ -298,9 +267,22 @@ export const useReportStore = defineStore('report', () => {
     return estimatedMenuProfits.value;
   };
 
+  const findDailyTrend = async (filters = {}) => {
+    const result = await fetchReportDailyTrend(buildAnalysisParams(filters));
+    dailyTrend.value = Array.isArray(result.data) ? result.data : [];
+    return dailyTrend.value;
+  };
+
+  const findPlatformMetrics = async (filters = {}) => {
+    const result = await fetchReportPlatformMetrics(buildAnalysisParams(filters));
+    platformMetrics.value = Array.isArray(result.data) ? result.data : [];
+    return platformMetrics.value;
+  };
+
   const findReports = async (filters = {}) => {
     try {
       isLoading.value = true;
+      loadError.value = '';
 
       const params = buildAnalysisParams(filters);
       lastSearchParams.value = { ...params };
@@ -311,13 +293,16 @@ export const useReportStore = defineStore('report', () => {
         findSummary(filters),
         findProcessingTimes(filters),
         findEstimatedMenuProfits(filters),
+        findDailyTrend(filters),
+        findPlatformMetrics(filters),
       ]);
 
       hasLoaded.value = true;
       return orders;
     } catch (error) {
       console.error(error);
-      alert('운영 리포트 조회에 실패했습니다.');
+      hasLoaded.value = false;
+      loadError.value = '잠시 후 다시 조회해 주세요.';
       throw error;
     } finally {
       isLoading.value = false;
@@ -453,9 +438,12 @@ export const useReportStore = defineStore('report', () => {
     reportSummary.value = createEmptySummary();
     processingTimes.value = createEmptyProcessingTimes();
     estimatedMenuProfits.value = [];
+    dailyTrend.value = [];
+    platformMetrics.value = [];
     isLoading.value = false;
     isExporting.value = false;
     hasLoaded.value = false;
+    loadError.value = '';
     lastSearchParams.value = {};
   };
 
@@ -465,9 +453,12 @@ export const useReportStore = defineStore('report', () => {
     reportSummary,
     processingTimes,
     estimatedMenuProfits,
+    dailyTrend,
+    platformMetrics,
     isLoading,
     isExporting,
     hasLoaded,
+    loadError,
     lastSearchParams,
 
     findOrders,
@@ -475,6 +466,8 @@ export const useReportStore = defineStore('report', () => {
     findSummary,
     findProcessingTimes,
     findEstimatedMenuProfits,
+    findDailyTrend,
+    findPlatformMetrics,
     findReports,
     downloadOrdersCsv,
     downloadHistoryCsv,

@@ -28,7 +28,6 @@ import MenusView from '../../features/menu/views/MenusView.vue';
 import StoreView from '../../features/store/views/StoreView.vue';
 import MockDataView from '../../features/mock/views/MockDataView.vue';
 
-import AllReportView from '../../features/report/views/AllReportView.vue';
 import ProfileView from '../../features/profile/views/ProfileView.vue';
 import OrdersView from '../../features/order/views/OrdersView.vue';
 import NotFoundView from '../error/NotFoundView.vue';
@@ -39,6 +38,8 @@ import AdminUsersView from '../../features/admin/views/AdminUsersView.vue';
 import AdminStoresView from '../../features/admin/views/AdminStoresView.vue';
 import AdminPlatformsView from '../../features/admin/views/AdminPlatformsView.vue';
 import AdminSubscriptionsView from '../../features/admin/views/AdminSubscriptionsView.vue';
+
+const AllReportView = () => import('../../features/report/views/AllReportView.vue');
 
 /*
  * 라우트마다 사용할 meta 정보를 생성한다.

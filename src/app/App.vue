@@ -25,6 +25,7 @@ const newOrderNoticeCount = ref(0);
 const newOrderNoticeLastOrderId = ref(null);
 const isNewOrderNoticeVisible = ref(false);
 let newOrderNoticeTimer;
+let isCompactViewport = false;
 
 const hideNewOrderNotice = () => {
   isNewOrderNoticeVisible.value = false;
@@ -81,7 +82,22 @@ const dashboardRefresh = createCoalescedRefresh(() => {
 }, { delay: 350 });
 watch(() => realtime.revision, dashboardRefresh.request);
 const refreshOnFocus = () => dashboardRefresh.request();
-onMounted(() => window.addEventListener('focus', refreshOnFocus));
+const syncSidebarForViewport = () => {
+  const nextCompactViewport = window.innerWidth <= 768;
+
+  if (nextCompactViewport === isCompactViewport) {
+    return;
+  }
+
+  isCompactViewport = nextCompactViewport;
+  isSidebarOpen.value = !nextCompactViewport;
+};
+
+onMounted(() => {
+  syncSidebarForViewport();
+  window.addEventListener('focus', refreshOnFocus);
+  window.addEventListener('resize', syncSidebarForViewport);
+});
 watch(() => [auth.isLoggedIn, store.currentData?.id, Boolean(route.meta.isAuthenticated && !route.meta.hideLayout)], ([loggedIn, storeId, visible]) => {
   if (!loggedIn) { hideNewOrderNotice(); realtime.stop(); store.clearStoreState(); orders.clearOrders(); dashboard.clearDashboard(); return; }
   if (visible && storeId) { if (realtime.storeId !== storeId) { dashboard.clearDashboard(); dashboardRefresh.request(); } realtime.start(storeId); }
@@ -93,6 +109,7 @@ onBeforeUnmount(() => {
   dashboardRefresh.stop();
   dashboard.clearDashboard();
   window.removeEventListener('focus', refreshOnFocus);
+  window.removeEventListener('resize', syncSidebarForViewport);
 });
 </script>
 

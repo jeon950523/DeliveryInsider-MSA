@@ -53,7 +53,7 @@ const steps = [
     route: '/reports',
     selector: '[data-tour="report-overview"]',
     title: '운영 리포트',
-    body: '완료 매출, 실제 처리시간, 메뉴별 추정 순수익을 기간별로 확인합니다.',
+    body: '기간별 매출과 추정 순수익의 변화를 확인하고 플랫폼·메뉴별 성과를 비교할 수 있습니다.',
   },
   {
     route: '/reports',
