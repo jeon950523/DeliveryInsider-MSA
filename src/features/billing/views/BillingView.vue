@@ -370,7 +370,7 @@ onMounted(() => {
         </div>
         <ul class="premium-feature-list">
           <li>AI 운영 인사이트</li>
-          <li>리포트 CSV 전체 조건 내보내기</li>
+          <li>리포트 엑셀 전체 조건 내보내기</li>
         </ul>
       </div>
 

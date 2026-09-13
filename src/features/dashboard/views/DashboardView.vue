@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
       <div class="header-actions">
         <button type="button" class="sub-button" @click="router.push('/reports')">운영 리포트</button>
         <button type="button" class="sub-button" @click="refreshDashboard">새로고침</button>
-        <button type="button" class="primary-button" @click="handleExport">리포트/CSV 확인</button>
+        <button type="button" class="primary-button" @click="handleExport">리포트/엑셀 확인</button>
       </div>
     </header>
 
