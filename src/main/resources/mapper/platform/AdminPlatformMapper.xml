@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.platform.domain.admin.AdminPlatformMapper">
+    <resultMap id="connectionRowMap" type="com.deliveryinsider.platform.domain.admin.AdminConnectionRow">
+        <id column="setting_id" property="settingId"/>
+        <result column="store_id" property="storeId"/>
+        <result column="provider" property="provider"/>
+        <result column="external_store_id" property="externalStoreId"/>
+        <result column="enabled" property="enabled"/>
+        <result column="connection_status" property="connectionStatus"/>
+        <result column="last_error_code" property="lastErrorCode"/>
+        <result column="last_error_at" property="lastErrorAt"/>
+        <result column="unresolved_blocked_count" property="unresolvedBlockedCount"/>
+    </resultMap>
+
+    <resultMap id="incidentRowMap" type="com.deliveryinsider.platform.domain.admin.AdminIncidentRow">
+        <id column="inbox_id" property="inboxId"/>
+        <result column="store_id" property="storeId"/>
+        <result column="provider" property="provider"/>
+        <result column="external_store_id" property="externalStoreId"/>
+        <result column="external_order_id" property="externalOrderId"/>
+        <result column="processing_status" property="processingStatus"/>
+        <result column="last_error_code" property="lastErrorCode"/>
+        <result column="last_error_at" property="lastErrorAt"/>
+    </resultMap>
+
+    <select id="countConnections" resultType="long">
+        SELECT COUNT(*) FROM store_platform_settings
+    </select>
+
+    <select id="countActiveConnections" resultType="long">
+        SELECT COUNT(*) FROM store_platform_settings
+        WHERE enabled = 1 AND connection_status = 'ACTIVE'
+    </select>
+
+    <select id="countBlockedIncidents" resultType="long">
+        SELECT COUNT(*) FROM provider_webhook_inbox WHERE status = 'BLOCKED'
+    </select>
+
+    <select id="countRetryableIncidents" resultType="long">
+        SELECT COUNT(*) FROM provider_webhook_inbox WHERE status = 'RETRYABLE_FAILED'
+    </select>
+
+    <select id="findConnectionPage" resultMap="connectionRowMap">
+        SELECT
+            s.id AS setting_id,
+            s.store_id,
+            s.platform_type AS provider,
+            s.external_store_id,
+            s.enabled,
+            s.connection_status,
+            s.last_error_code,
+            MAX(CASE WHEN i.status IN ('BLOCKED', 'RETRYABLE_FAILED') THEN i.updated_at END) AS last_error_at,
+            SUM(CASE WHEN i.status = 'BLOCKED' THEN 1 ELSE 0 END) AS unresolved_blocked_count
+        FROM store_platform_settings s
+        LEFT JOIN provider_webhook_inbox i ON i.resolved_setting_id = s.id
+        GROUP BY s.id, s.store_id, s.platform_type, s.external_store_id, s.enabled,
+                 s.connection_status, s.last_error_code
+        ORDER BY COALESCE(last_error_at, s.last_webhook_at, s.last_success_at) DESC, s.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="findIncidentPage" resultMap="incidentRowMap">
+        SELECT
+            i.id AS inbox_id,
+            s.store_id,
+            i.platform_type AS provider,
+            s.external_store_id,
+            i.external_order_id,
+            i.status AS processing_status,
+            i.last_error_code,
+            i.updated_at AS last_error_at
+        FROM provider_webhook_inbox i
+        LEFT JOIN store_platform_settings s ON s.id = i.resolved_setting_id
+        WHERE i.status IN ('BLOCKED', 'RETRYABLE_FAILED')
+        ORDER BY i.updated_at DESC, i.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+</mapper>

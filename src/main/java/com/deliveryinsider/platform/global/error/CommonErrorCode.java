@@ -10,6 +10,7 @@ public enum CommonErrorCode implements ErrorCode {
     INTERNAL_API_NOT_CONFIGURED("COMMON-503-001", HttpStatus.SERVICE_UNAVAILABLE, "내부 서비스 인증 설정이 없습니다."),
     EXTERNAL_API_UNAUTHORIZED("COMMON-401-002", HttpStatus.UNAUTHORIZED, "외부 연동 인증에 실패했습니다."),
     EXTERNAL_API_NOT_CONFIGURED("COMMON-503-002", HttpStatus.SERVICE_UNAVAILABLE, "외부 연동 인증 설정이 없습니다."),
+    ADMIN_FORBIDDEN("COMMON-403-001", HttpStatus.FORBIDDEN, "관리자 권한이 필요합니다."),
     INTERNAL_SERVER_ERROR("COMMON-500-001", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다."),
     PROVIDER_EVENT_ID_PAYLOAD_CONFLICT("PLATFORM-005", HttpStatus.CONFLICT, "동일한 외부 이벤트 ID에 서로 다른 Payload가 수신되었습니다."),
     WEBHOOK_INBOX_UNAVAILABLE("PLATFORM-006", HttpStatus.SERVICE_UNAVAILABLE, "Webhook 접수 저장소를 사용할 수 없습니다.");
