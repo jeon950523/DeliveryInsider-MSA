@@ -32,6 +32,7 @@ import java.util.Set;
 public class JwtAuthenticationWebFilter implements WebFilter {
 
     public static final String USER_ID_HEADER = "X-User-Id";
+    public static final String USER_ROLE_HEADER = "X-User-Role";
 
     private static final String INTERNAL_API_KEY_HEADER =
         "X-Internal-Api-Key";
@@ -77,18 +78,24 @@ public class JwtAuthenticationWebFilter implements WebFilter {
                         InvalidAccessTokenException::new
                     );
 
-            Long userId =
+            var principal =
                 jwtAccessTokenVerifier
-                    .verifyAndExtractUserId(accessToken);
+                    .verify(accessToken);
+
+            if (path.startsWith("/api/admin/")
+                && !"ADMIN".equals(principal.role())) {
+                return forbidden(sanitizedExchange);
+            }
 
             ServerHttpRequest authenticatedRequest =
                 request.mutate()
-                    .headers(headers ->
+                    .headers(headers -> {
                         headers.set(
                             USER_ID_HEADER,
-                            String.valueOf(userId)
-                        )
-                    )
+                            String.valueOf(principal.userId())
+                        );
+                        headers.set(USER_ROLE_HEADER, principal.role());
+                    })
                     .build();
 
             return chain.filter(
@@ -109,6 +116,7 @@ public class JwtAuthenticationWebFilter implements WebFilter {
             .request(builder ->
                 builder.headers(headers -> {
                     headers.remove(USER_ID_HEADER);
+                    headers.remove(USER_ROLE_HEADER);
                     headers.remove(INTERNAL_API_KEY_HEADER);
                 })
             )
@@ -176,6 +184,24 @@ public class JwtAuthenticationWebFilter implements WebFilter {
                 )
             );
 
+        } catch (JacksonException e) {
+            return response.setComplete();
+        }
+    }
+
+    private Mono<Void> forbidden(ServerWebExchange exchange) {
+        var response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.FORBIDDEN);
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+
+        GatewayErrorResponse<Void> errorResponse = GatewayErrorResponse.of(
+            "AUTH-007",
+            "관리자 권한이 필요합니다."
+        );
+
+        try {
+            byte[] body = jsonMapper.writeValueAsBytes(errorResponse);
+            return response.writeWith(Mono.just(response.bufferFactory().wrap(body)));
         } catch (JacksonException e) {
             return response.setComplete();
         }

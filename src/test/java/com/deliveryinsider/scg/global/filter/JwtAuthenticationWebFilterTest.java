@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JwtAuthenticationWebFilterTest {
 
@@ -79,6 +80,63 @@ class JwtAuthenticationWebFilterTest {
         ).verifyComplete();
 
         assertEquals("11", forwardedUserId.get());
+    }
+
+    @Test
+    void validAccessTokenReplacesSpoofedRoleHeader() {
+        String accessToken = createToken("11", "ACCESS", "USER");
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+            MockServerHttpRequest.get("/api/stores/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .header("X-User-Role", "ADMIN")
+                .build()
+        );
+        AtomicReference<String> forwardedRole = new AtomicReference<>();
+
+        StepVerifier.create(filter.filter(exchange, currentExchange -> {
+            forwardedRole.set(currentExchange.getRequest().getHeaders().getFirst("X-User-Role"));
+            return Mono.empty();
+        })).verifyComplete();
+
+        assertEquals("USER", forwardedRole.get());
+    }
+
+    @Test
+    void userTokenCannotCallAdminApi() {
+        String accessToken = createToken("11", "ACCESS", "USER");
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+            MockServerHttpRequest.get("/api/admin/store/stores")
+                .header("Authorization", "Bearer " + accessToken)
+                .build()
+        );
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        StepVerifier.create(filter.filter(exchange, currentExchange -> {
+            chainCalled.set(true);
+            return Mono.empty();
+        })).verifyComplete();
+
+        assertFalse(chainCalled.get());
+        assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    void adminTokenCanCallAdminApi() {
+        String accessToken = createToken("11", "ACCESS", "ADMIN");
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+            MockServerHttpRequest.get("/api/admin/auth/users")
+                .header("Authorization", "Bearer " + accessToken)
+                .build()
+        );
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        StepVerifier.create(filter.filter(exchange, currentExchange -> {
+            chainCalled.set(true);
+            assertEquals("ADMIN", currentExchange.getRequest().getHeaders().getFirst("X-User-Role"));
+            return Mono.empty();
+        })).verifyComplete();
+
+        assertTrue(chainCalled.get());
     }
 
     @Test
@@ -217,6 +275,14 @@ class JwtAuthenticationWebFilterTest {
         String subject,
         String tokenType
     ) {
+        return createToken(subject, tokenType, null);
+    }
+
+    private String createToken(
+        String subject,
+        String tokenType,
+        String role
+    ) {
         SecretKey secretKey =
             Keys.hmacShaKeyFor(
                 Decoders.BASE64.decode(TEST_SECRET)
@@ -224,7 +290,7 @@ class JwtAuthenticationWebFilterTest {
 
         Instant issuedAt = Instant.now();
 
-        return Jwts.builder()
+        var builder = Jwts.builder()
             .issuer("deliveryinsider")
             .subject(subject)
             .issuedAt(Date.from(issuedAt))
@@ -233,8 +299,12 @@ class JwtAuthenticationWebFilterTest {
                     issuedAt.plusSeconds(300)
                 )
             )
-            .claim("tokenType", tokenType)
-            .signWith(secretKey)
-            .compact();
+            .claim("tokenType", tokenType);
+
+        if (role != null) {
+            builder.claim("role", role);
+        }
+
+        return builder.signWith(secretKey).compact();
     }
 }

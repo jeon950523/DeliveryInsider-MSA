@@ -19,6 +19,26 @@ spring:
                 allowed-headers: "*"
                 allow-credentials: true
           routes:
+            - id: admin-auth-service
+              uri: ${AUTH_SERVICE_URI:http://localhost:8091}
+              predicates:
+                - Path=/api/admin/auth/**
+            - id: admin-store-service
+              uri: ${STORE_SERVICE_URI:http://localhost:8092}
+              predicates:
+                - Path=/api/admin/store/**
+            - id: admin-platform-service
+              uri: ${PLATFORM_SERVICE_URI:http://localhost:8093}
+              predicates:
+                - Path=/api/admin/platform/**
+            - id: admin-order-service
+              uri: ${ORDER_SERVICE_URI:http://localhost:8094}
+              predicates:
+                - Path=/api/admin/order/**
+            - id: admin-billing-service
+              uri: ${BILLING_SERVICE_URI:http://localhost:8097}
+              predicates:
+                - Path=/api/admin/billing/**
             - id: notification-api
               uri: ${NOTIFICATION_SERVICE_URI:http://localhost:8096}
               predicates:
