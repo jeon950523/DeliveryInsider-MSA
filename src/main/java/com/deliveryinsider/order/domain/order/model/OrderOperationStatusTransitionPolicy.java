@@ -8,10 +8,7 @@ public class OrderOperationStatusTransitionPolicy {
     public boolean isMerchantControllable(
         OrderOperationStatus targetStatus
     ) {
-        return targetStatus
-            == OrderOperationStatus.COOKING
-            || targetStatus
-            == OrderOperationStatus.READY_FOR_PICKUP;
+        return false;
     }
 
     public boolean canTransition(
@@ -30,15 +27,22 @@ public class OrderOperationStatusTransitionPolicy {
 
             case WAITING ->
                 targetStatus
-                    == OrderOperationStatus.COOKING;
+                    == OrderOperationStatus.COOKING
+                    || targetStatus == OrderOperationStatus.CANCELED;
 
             case COOKING ->
                 targetStatus
-                    == OrderOperationStatus.READY_FOR_PICKUP;
+                    == OrderOperationStatus.READY_FOR_PICKUP
+                    || targetStatus == OrderOperationStatus.CANCELED;
 
-            case READY_FOR_PICKUP,
-                 DELIVERING,
-                 COMPLETED,
+            case READY_FOR_PICKUP ->
+                targetStatus == OrderOperationStatus.DELIVERING
+                    || targetStatus == OrderOperationStatus.CANCELED;
+
+            case DELIVERING ->
+                targetStatus == OrderOperationStatus.COMPLETED;
+
+            case COMPLETED,
                  CANCELED ->
                 false;
         };

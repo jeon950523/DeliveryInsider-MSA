@@ -1,6 +1,5 @@
 package com.deliveryinsider.order.application.order;
 
-import com.deliveryinsider.order.api.order.response.OrderOperationStatusResponse;
 import com.deliveryinsider.order.domain.order.entity.OrderEntity;
 import com.deliveryinsider.order.domain.order.entity.OrderItemEntity;
 import com.deliveryinsider.order.domain.order.entity.OutboxEventEntity;
@@ -58,7 +57,7 @@ class OrderOperationTransactionServiceTest {
     }
 
     @Test
-    void unresolvedMenuPreventsCookingBeforeTheStatusChanges() {
+    void manualCookingIsRejectedBeforeMenuMappingOrStateChange() {
         OrderEntity order = waitingOrder();
         OrderItemEntity unresolvedItem = new OrderItemEntity();
 
@@ -73,9 +72,10 @@ class OrderOperationTransactionServiceTest {
         );
 
         assertEquals(
-            OrderErrorCode.ORDER_MENU_MAPPING_REQUIRED,
+            OrderErrorCode.OPERATION_STATUS_PROVIDER_CONTROLLED,
             exception.errorCode()
         );
+        verify(orderItemMapper, never()).findAllByOrderId(anyLong());
         verify(orderMapper, never()).updateOperationStatus(
             anyLong(), any(), anyLong(), anyLong(),
             any(), any(), any(), any(), any()
@@ -84,35 +84,27 @@ class OrderOperationTransactionServiceTest {
     }
 
     @Test
-    void mappedMenuAllowsTheExistingCookingTransition() {
+    void mappedMenuDoesNotReopenManualCookingControl() {
         OrderEntity order = waitingOrder();
         OrderItemEntity mappedItem = new OrderItemEntity();
         mappedItem.setMenuId(28L);
 
         when(orderMapper.findByIdForUpdate(100L))
             .thenReturn(Optional.of(order));
-        when(orderItemMapper.findAllByOrderId(100L))
-            .thenReturn(List.of(mappedItem));
-        when(orderMapper.updateOperationStatus(
-            anyLong(), any(), anyLong(), anyLong(),
-            any(), any(), any(), any(), any()
-        )).thenReturn(1);
-        when(outboxFactory.createOrderOperationStatusChanged(
-            any(), any(), any(), any()
-        )).thenReturn(mock(OutboxEventEntity.class));
-
-        OrderOperationStatusResponse response =
-            service.change(7L, 100L, OrderOperationStatus.COOKING);
+        BusinessException exception = assertThrows(
+            BusinessException.class,
+            () -> service.change(7L, 100L, OrderOperationStatus.COOKING)
+        );
 
         assertEquals(
-            OrderOperationStatus.COOKING,
-            response.orderStatus()
+            OrderErrorCode.OPERATION_STATUS_PROVIDER_CONTROLLED,
+            exception.errorCode()
         );
-        verify(orderMapper).updateOperationStatus(
+        verify(orderMapper, never()).updateOperationStatus(
             anyLong(), any(), anyLong(), anyLong(),
             any(), any(), any(), any(), any()
         );
-        verify(outboxEventMapper).insert(any());
+        verify(outboxEventMapper, never()).insert(any());
     }
 
     private OrderEntity waitingOrder() {

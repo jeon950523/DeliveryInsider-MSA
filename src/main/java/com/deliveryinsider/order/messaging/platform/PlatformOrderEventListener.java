@@ -66,7 +66,9 @@ public class PlatformOrderEventListener {
                     message
                 );
 
-            case "ORDER_PICKED_UP",
+            case "ORDER_COOKING_STARTED",
+                 "ORDER_READY_FOR_PICKUP",
+                 "ORDER_PICKED_UP",
                  "ORDER_DELIVERED",
                  "ORDER_CANCELED" ->
                 orderStatusService.handle(

@@ -19,6 +19,10 @@ public class OrderStatusTransitionPolicy {
 
         return switch (currentStatus) {
             case CREATED ->
+                targetStatus == OrderStatus.READY_FOR_PICKUP
+                    || targetStatus == OrderStatus.CANCELED;
+
+            case READY_FOR_PICKUP ->
                 targetStatus == OrderStatus.PICKED_UP
                     || targetStatus == OrderStatus.CANCELED;
 

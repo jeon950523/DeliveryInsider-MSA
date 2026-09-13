@@ -302,7 +302,7 @@
 
         UPDATE orders
         SET
-        status = #{status},
+        status = COALESCE(#{status}, status),
 
         operation_status = #{operationStatus},
 
@@ -315,6 +315,18 @@
         event_version = #{eventVersion},
 
         operation_version = #{operationVersion},
+
+        cooking_started_at =
+        COALESCE(
+        #{cookingStartedAt},
+        cooking_started_at
+        ),
+
+        ready_for_pickup_at =
+        COALESCE(
+        #{readyForPickupAt},
+        ready_for_pickup_at
+        ),
 
         picked_up_at =
         COALESCE(

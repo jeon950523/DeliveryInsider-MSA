@@ -64,6 +64,12 @@ public interface OrderMapper {
         @Param("operationVersion")
         long operationVersion,
 
+        @Param("cookingStartedAt")
+        LocalDateTime cookingStartedAt,
+
+        @Param("readyForPickupAt")
+        LocalDateTime readyForPickupAt,
+
         @Param("pickedUpAt")
         LocalDateTime pickedUpAt,
 

@@ -2,19 +2,24 @@ package com.deliveryinsider.order.application.order;
 
 import com.deliveryinsider.order.application.order.exception.DuplicatePlatformEventException;
 import com.deliveryinsider.order.domain.order.entity.OrderEntity;
+import com.deliveryinsider.order.domain.order.entity.OrderItemEntity;
 import com.deliveryinsider.order.domain.order.entity.OutboxEventEntity;
 import com.deliveryinsider.order.domain.order.entity.ProcessedPlatformEvent;
 import com.deliveryinsider.order.domain.order.mapper.OrderMapper;
+import com.deliveryinsider.order.domain.order.mapper.OrderItemMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderCancellationMapper;
 import com.deliveryinsider.order.domain.order.mapper.OutboxEventMapper;
 import com.deliveryinsider.order.domain.order.mapper.ProcessedPlatformEventMapper;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatusTransitionPolicy;
+import com.deliveryinsider.order.domain.order.model.OrderOperationStatusTransitionPolicy;
 import com.deliveryinsider.order.domain.order.model.CancellationReasonCode;
 import com.deliveryinsider.order.domain.order.model.ProcessedPlatformEventResult;
 import com.deliveryinsider.order.messaging.platform.dto.PlatformOrderEventMessage;
 import com.deliveryinsider.order.messaging.platform.exception.RetryableOrderEventProcessingException;
+import com.deliveryinsider.order.global.error.BusinessException;
+import com.deliveryinsider.order.global.error.OrderErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -24,23 +29,26 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class PlatformOrderStatusTransactionService {
 
     private final OrderMapper orderMapper;
+    private final OrderItemMapper orderItemMapper;
     private final OrderCancellationMapper cancellationMapper;
     private final ProcessedPlatformEventMapper processedEventMapper;
     private final OutboxEventMapper outboxEventMapper;
     private final OrderOutboxEventFactory outboxFactory;
     private final OrderStatusTransitionPolicy transitionPolicy;
+    private final OrderOperationStatusTransitionPolicy operationTransitionPolicy;
     private final Clock clock;
 
     @Transactional
     public OrderEventHandlingResult apply(
         PlatformOrderEventMessage message,
-        OrderStatus targetStatus
+        PlatformOrderTransition transition
     ) {
         OrderEntity order =
             orderMapper
@@ -60,7 +68,7 @@ public class PlatformOrderStatusTransactionService {
             determineResult(
                 order,
                 message,
-                targetStatus
+                transition
             );
 
         insertProcessedEvent(
@@ -75,10 +83,15 @@ public class PlatformOrderStatusTransactionService {
         OrderStatus previousStatus =
             order.getStatus();
 
-        OrderOperationStatus targetOperationStatus =
-            resolveTargetOperationStatus(
-                targetStatus
-            );
+        OrderOperationStatus previousOperationStatus =
+            order.getOperationStatus();
+
+        OrderStatus targetStatus = transition.providerStatus();
+        OrderOperationStatus targetOperationStatus = transition.operationStatus();
+
+        if (targetOperationStatus == OrderOperationStatus.COOKING) {
+            requireResolvedMenuMappings(order);
+        }
 
         long nextEventVersion =
             order.getEventVersion() + 1;
@@ -86,10 +99,22 @@ public class PlatformOrderStatusTransactionService {
         long nextOperationVersion =
             order.getOperationVersion() + 1;
 
+        Instant domainOccurredAt = message.data().providerOccurredAt() != null
+            ? message.data().providerOccurredAt()
+            : clock.instant();
+
         LocalDateTime providerOccurredAt =
-            resolveProviderOccurredAt(
-                message.data().providerOccurredAt()
-            );
+            LocalDateTime.ofInstant(domainOccurredAt, ZoneOffset.UTC);
+
+        LocalDateTime cookingStartedAt =
+            targetOperationStatus == OrderOperationStatus.COOKING
+                ? providerOccurredAt
+                : null;
+
+        LocalDateTime readyForPickupAt =
+            targetOperationStatus == OrderOperationStatus.READY_FOR_PICKUP
+                ? providerOccurredAt
+                : null;
 
         LocalDateTime pickedUpAt =
             targetStatus == OrderStatus.PICKED_UP
@@ -114,6 +139,8 @@ public class PlatformOrderStatusTransactionService {
                 message.data().sourceSequence(),
                 nextEventVersion,
                 nextOperationVersion,
+                cookingStartedAt,
+                readyForPickupAt,
                 pickedUpAt,
                 completedAt,
                 canceledAt
@@ -133,6 +160,8 @@ public class PlatformOrderStatusTransactionService {
             message.data().sourceSequence(),
             nextEventVersion,
             nextOperationVersion,
+            cookingStartedAt,
+            readyForPickupAt,
             pickedUpAt,
             completedAt,
             canceledAt
@@ -155,13 +184,18 @@ public class PlatformOrderStatusTransactionService {
             );
         }
 
-        OutboxEventEntity outboxEvent =
-            outboxFactory
-                .createOrderStatusChanged(
-                    order,
-                    previousStatus,
-                    message
-                );
+        OutboxEventEntity outboxEvent = targetStatus == null
+            ? outboxFactory.createOrderOperationStatusChanged(
+                order,
+                previousOperationStatus,
+                domainOccurredAt,
+                message.traceId()
+            )
+            : outboxFactory.createOrderStatusChanged(
+                order,
+                previousStatus,
+                message
+            );
 
         outboxEventMapper.insert(
             outboxEvent
@@ -173,7 +207,7 @@ public class PlatformOrderStatusTransactionService {
     private OrderEventHandlingResult determineResult(
         OrderEntity order,
         PlatformOrderEventMessage message,
-        OrderStatus targetStatus
+        PlatformOrderTransition transition
     ) {
         Long incomingSequence =
             message.data().sourceSequence();
@@ -190,49 +224,24 @@ public class PlatformOrderStatusTransactionService {
                 .STALE_IGNORED;
         }
 
-        if (!transitionPolicy.canTransition(
-            order.getStatus(),
-            targetStatus
+        if (transition.providerStatus() != null
+            && !transitionPolicy.canTransition(
+                order.getStatus(),
+                transition.providerStatus()
+            )) {
+            return OrderEventHandlingResult
+                .INVALID_TRANSITION_IGNORED;
+        }
+
+        if (!operationTransitionPolicy.canTransition(
+            order.getOperationStatus(),
+            transition.operationStatus()
         )) {
             return OrderEventHandlingResult
                 .INVALID_TRANSITION_IGNORED;
         }
 
         return OrderEventHandlingResult.APPLIED;
-    }
-
-    private OrderOperationStatus resolveTargetOperationStatus(
-        OrderStatus targetStatus
-    ) {
-        return switch (targetStatus) {
-            case PICKED_UP ->
-                OrderOperationStatus.DELIVERING;
-
-            case DELIVERED ->
-                OrderOperationStatus.COMPLETED;
-
-            case CANCELED ->
-                OrderOperationStatus.CANCELED;
-
-            case CREATED ->
-                throw new IllegalArgumentException(
-                    "CREATED는 Platform 상태변경 대상이 아닙니다."
-                );
-        };
-    }
-
-    private LocalDateTime resolveProviderOccurredAt(
-        Instant providerOccurredAt
-    ) {
-        Instant occurredAt =
-            providerOccurredAt != null
-                ? providerOccurredAt
-                : clock.instant();
-
-        return LocalDateTime.ofInstant(
-            occurredAt,
-            ZoneOffset.UTC
-        );
     }
 
     private void applyUpdatedState(
@@ -242,13 +251,15 @@ public class PlatformOrderStatusTransactionService {
         Long sourceSequence,
         long eventVersion,
         long operationVersion,
+        LocalDateTime cookingStartedAt,
+        LocalDateTime readyForPickupAt,
         LocalDateTime pickedUpAt,
         LocalDateTime completedAt,
         LocalDateTime canceledAt
     ) {
-        order.setStatus(
-            targetStatus
-        );
+        if (targetStatus != null) {
+            order.setStatus(targetStatus);
+        }
 
         order.setOperationStatus(
             targetOperationStatus
@@ -268,6 +279,14 @@ public class PlatformOrderStatusTransactionService {
             );
         }
 
+        if (cookingStartedAt != null) {
+            order.setCookingStartedAt(cookingStartedAt);
+        }
+
+        if (readyForPickupAt != null) {
+            order.setReadyForPickupAt(readyForPickupAt);
+        }
+
         if (pickedUpAt != null) {
             order.setPickedUpAt(
                 pickedUpAt
@@ -283,6 +302,18 @@ public class PlatformOrderStatusTransactionService {
         if (canceledAt != null) {
             order.setCanceledAt(
                 canceledAt
+            );
+        }
+    }
+
+    private void requireResolvedMenuMappings(OrderEntity order) {
+        List<OrderItemEntity> items =
+            orderItemMapper.findAllByOrderId(order.getId());
+
+        if (items.isEmpty()
+            || items.stream().anyMatch(item -> item.getMenuId() == null)) {
+            throw new BusinessException(
+                OrderErrorCode.ORDER_MENU_MAPPING_REQUIRED
             );
         }
     }

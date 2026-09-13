@@ -371,6 +371,7 @@ class OrderCreatedTransactionServiceIntegrationTest {
                 Instant.parse(
                     "2026-08-24T06:01:00Z"
                 ),
+                null,
                 "대구광역시 동구 테스트 주소",
                 "문 앞에 놓아주세요.",
                 List.of(

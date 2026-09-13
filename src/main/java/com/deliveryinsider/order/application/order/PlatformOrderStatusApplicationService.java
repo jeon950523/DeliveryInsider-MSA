@@ -2,6 +2,7 @@ package com.deliveryinsider.order.application.order;
 
 import com.deliveryinsider.order.application.order.exception.DuplicatePlatformEventException;
 import com.deliveryinsider.order.domain.order.mapper.ProcessedPlatformEventMapper;
+import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatus;
 import com.deliveryinsider.order.messaging.platform.dto.PlatformOrderEventMessage;
 import com.deliveryinsider.order.messaging.platform.exception.NonRetryableOrderEventProcessingException;
@@ -26,15 +27,17 @@ public class PlatformOrderStatusApplicationService {
             return OrderEventHandlingResult.DUPLICATE_IGNORED;
         }
 
-        OrderStatus targetStatus =
-            resolveTargetStatus(
+        PlatformOrderTransition transition =
+            resolveTargetTransition(
                 message.eventType()
             );
+
+        validateOperationStatus(message, transition);
 
         try {
             return transactionService.apply(
                 message,
-                targetStatus
+                transition
             );
 
         } catch (DuplicatePlatformEventException e) {
@@ -86,12 +89,12 @@ public class PlatformOrderStatusApplicationService {
             );
         }
 
-        resolveTargetStatus(
+        resolveTargetTransition(
             message.eventType()
         );
     }
 
-    private OrderStatus resolveTargetStatus(
+    private PlatformOrderTransition resolveTargetTransition(
         String eventType
     ) {
         if (eventType == null) {
@@ -99,18 +102,38 @@ public class PlatformOrderStatusApplicationService {
         }
 
         return switch (eventType) {
+            case "ORDER_COOKING_STARTED" ->
+                new PlatformOrderTransition(null, OrderOperationStatus.COOKING);
+
+            case "ORDER_READY_FOR_PICKUP" ->
+                new PlatformOrderTransition(OrderStatus.READY_FOR_PICKUP, OrderOperationStatus.READY_FOR_PICKUP);
+
             case "ORDER_PICKED_UP" ->
-                OrderStatus.PICKED_UP;
+                new PlatformOrderTransition(OrderStatus.PICKED_UP, OrderOperationStatus.DELIVERING);
 
             case "ORDER_DELIVERED" ->
-                OrderStatus.DELIVERED;
+                new PlatformOrderTransition(OrderStatus.DELIVERED, OrderOperationStatus.COMPLETED);
 
             case "ORDER_CANCELED" ->
-                OrderStatus.CANCELED;
+                new PlatformOrderTransition(OrderStatus.CANCELED, OrderOperationStatus.CANCELED);
 
             default ->
                 throw unsupportedEventType();
         };
+    }
+
+    private void validateOperationStatus(
+        PlatformOrderEventMessage message,
+        PlatformOrderTransition transition
+    ) {
+        String supplied = message.data().operationStatus();
+        if (supplied != null
+            && !transition.operationStatus().name().equals(supplied)) {
+            throw new NonRetryableOrderEventProcessingException(
+                "PLATFORM_EVENT_OPERATION_STATUS_MISMATCH",
+                "Platform 주문 이벤트의 운영 상태가 이벤트 타입과 일치하지 않습니다."
+            );
+        }
     }
 
     private NonRetryableOrderEventProcessingException
