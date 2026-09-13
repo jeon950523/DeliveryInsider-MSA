@@ -16,6 +16,10 @@
                 property="status"
                 column="status"
                 javaType="com.deliveryinsider.auth.entity.UserStatus"/>
+        <result
+                property="role"
+                column="role"
+                javaType="com.deliveryinsider.auth.entity.UserRole"/>
         <result property="phoneNumber" column="phone_number"/>
         <result property="phoneVerifiedAt" column="phone_verified_at"/>
         <result property="createdAt" column="created_at"/>
@@ -30,12 +34,14 @@
         INSERT INTO users (
             email,
             password_hash,
-            status
+            status,
+            role
         )
         VALUES (
                    #{email},
                    #{passwordHash},
-                   #{status}
+                   #{status},
+                   COALESCE(#{role}, 'USER')
                )
 
     </insert>
@@ -49,6 +55,7 @@
             email,
             password_hash,
             status,
+            role,
             phone_number,
             phone_verified_at,
             created_at,
@@ -67,6 +74,7 @@
             email,
             password_hash,
             status,
+            role,
             phone_number,
             phone_verified_at,
             created_at,
@@ -85,6 +93,7 @@
             email,
             password_hash,
             status,
+            role,
             phone_number,
             phone_verified_at,
             created_at,
@@ -109,5 +118,34 @@
         WHERE id = #{id}
         AND status != #{status}
     </update>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM users
+    </select>
+
+    <select id="countByStatus" resultType="long">
+        SELECT COUNT(*) FROM users WHERE status = #{status}
+    </select>
+
+    <select id="countPhoneVerified" resultType="long">
+        SELECT COUNT(*) FROM users WHERE phone_verified_at IS NOT NULL
+    </select>
+
+    <select id="countByRole" resultType="long">
+        SELECT COUNT(*) FROM users WHERE role = #{role}
+    </select>
+
+    <select id="findAdminPage" resultMap="userResultMap">
+        SELECT
+            id,
+            email,
+            status,
+            role,
+            phone_verified_at,
+            created_at
+        FROM users
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
 
 </mapper>

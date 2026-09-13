@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.List;
 
 @Mapper
 public interface UserMapper {
@@ -22,4 +23,13 @@ public interface UserMapper {
         @Param("phoneVerifiedAt") LocalDateTime phoneVerifiedAt
     );
     int updateStatus(@Param("id")Long id, @Param("status")String status);
+
+    long countAll();
+    long countByStatus(@Param("status") String status);
+    long countPhoneVerified();
+    long countByRole(@Param("role") String role);
+    List<UserEntity> findAdminPage(
+        @Param("limit") int limit,
+        @Param("offset") int offset
+    );
 }

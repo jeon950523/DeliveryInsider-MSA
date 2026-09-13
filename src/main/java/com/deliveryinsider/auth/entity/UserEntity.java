@@ -14,6 +14,7 @@ public class UserEntity {
     private String email;
     private String passwordHash;
     private UserStatus status;
+    private UserRole role;
     private String phoneNumber;
     private LocalDateTime phoneVerifiedAt;
     private LocalDateTime createdAt;
@@ -23,10 +24,12 @@ public class UserEntity {
     public UserEntity(
         String email,
         String passwordHash,
-        UserStatus status
+        UserStatus status,
+        UserRole role
     ){
         this.email = email;
         this.passwordHash = passwordHash;
         this.status = status;
+        this.role = role == null ? UserRole.USER : role;
     }
 }

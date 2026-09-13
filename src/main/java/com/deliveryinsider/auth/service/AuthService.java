@@ -43,13 +43,14 @@ public class AuthService {
         validateActiveUser(user);
 
         String accessToken =
-            jwtTokenProvider.createAccessToken(user.getId());
+            jwtTokenProvider.createAccessToken(user.getId(), user.getRole());
 
         String refreshToken =
             refreshTokenService.issue(user.getId());
 
         return new LoginResult(
             user.getId(),
+            user.getRole(),
             accessToken,
             refreshToken
         );
@@ -73,13 +74,20 @@ public class AuthService {
         RefreshTokenRotation rotation =
             refreshTokenService.rotate(currentRefreshToken);
 
+        UserEntity user = userMapper.findById(rotation.userId())
+            .orElseThrow(UserNotFoundException::new);
+
+        validateActiveUser(user);
+
         String accessToken =
             jwtTokenProvider.createAccessToken(
-                rotation.userId()
+                rotation.userId(),
+                user.getRole()
             );
 
         return new TokenReissueResult(
             rotation.userId(),
+            user.getRole(),
             accessToken,
             rotation.refreshToken()
         );

@@ -1,6 +1,7 @@
 package com.deliveryinsider.auth.global.security.jwt;
 
 import com.deliveryinsider.auth.global.config.JwtProperties;
+import com.deliveryinsider.auth.entity.UserRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import org.junit.jupiter.api.Test;
@@ -209,5 +210,17 @@ class JwtTokenProviderTest {
             firstRefreshToken,
             secondRefreshToken
         );
+    }
+
+    @Test
+    void accessTokenContainsVerifiedUserRole() {
+        JwtTokenProvider jwtTokenProvider = new JwtTokenProvider(
+            createJwtProperties(TEST_SECRET, 1_800_000L)
+        );
+
+        String accessToken = jwtTokenProvider.createAccessToken(1L, UserRole.ADMIN);
+        Claims claims = jwtTokenProvider.parseAccessToken(accessToken);
+
+        assertEquals("ADMIN", claims.get("role", String.class));
     }
 }

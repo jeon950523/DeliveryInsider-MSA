@@ -48,6 +48,7 @@ public class AuthController {
                     "로그인에 성공했습니다.",
                     LoginResponse.from(
                         result.userId(),
+                        result.role(),
                         result.accessToken()
                     )
                 )

@@ -2,6 +2,7 @@ package com.deliveryinsider.auth.global.response;
 
 import com.deliveryinsider.auth.entity.UserEntity;
 import com.deliveryinsider.auth.entity.UserStatus;
+import com.deliveryinsider.auth.entity.UserRole;
 
 import java.time.LocalDateTime;
 
@@ -9,6 +10,7 @@ public record CurrentUserResponse(
     Long userId,
     String email,
     UserStatus status,
+    UserRole role,
     String phoneNumber,
     LocalDateTime phoneVerifiedAt
 ) {
@@ -18,6 +20,7 @@ public record CurrentUserResponse(
             user.getId(),
             user.getEmail(),
             user.getStatus(),
+            user.getRole(),
             user.getPhoneNumber(),
             user.getPhoneVerifiedAt()
         );
