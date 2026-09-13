@@ -20,3 +20,6 @@ export const fetchEstimatedMenuProfit = (params = {}) =>
 
 export const fetchReportProcessingTimes = (params = {}) =>
   httpClient.get('/api/reports/processing-times', { params });
+
+export const downloadReportXlsx = (params = {}) =>
+  httpClient.get('/api/reports/export.xlsx', { params, responseType: 'blob' });

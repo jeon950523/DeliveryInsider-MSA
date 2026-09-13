@@ -8,6 +8,7 @@ import {
   fetchReportProcessingTimes,
   fetchReportPlatformMetrics,
   fetchReportSummary,
+  downloadReportXlsx as downloadReportXlsxApi,
 } from '../api/reportApi.js';
 import {
   formatKstDate,
@@ -15,7 +16,6 @@ import {
 } from '../../../shared/utils/timeFormatters.js';
 import {
   buildAnalysisParams as buildReportAnalysisParams,
-  escapeCsvCell,
 } from '../utils/reportHelpers.js';
 
 const createEmptySummary = () => ({
@@ -309,122 +309,28 @@ export const useReportStore = defineStore('report', () => {
     }
   };
 
-  /*
-   * Report Backend에는 현재 CSV export endpoint가 없다.
-   * 존재하지 않는 API를 호출하지 않고, 화면에 조회된 실제 데이터만 CSV로 저장한다.
-   */
-  const downloadOrdersCsv = async (filters = {}) => {
+  const downloadReportXlsx = async (filters = {}) => {
     try {
       isExporting.value = true;
-
-      const rows = applyClientReportFilter(
-        allReportOrders.value,
-        filters
-      );
-
-      const headers = [
-        '내부 주문번호',
-        '플랫폼 주문번호',
-        '플랫폼',
-        '상태',
-        '주문금액',
-        '고객 실결제액',
-        '정산정보 상태',
-        '주문일시',
-      ];
-
-      const bodyRows = rows.map((order) => [
-        order.orderNo,
-        order.platformOrderNo,
-        order.platformType,
-        order.orderStatus,
-        order.totalAmount ?? '',
-        order.customerPaidAmount ?? '',
-        order.financialDataStatus,
-        order.orderedAtText,
-      ]);
-
-      const csv = '\uFEFF' + [headers, ...bodyRows]
-        .map((row) => row.map(escapeCsvCell).join(','))
-        .join('\n');
-
-      const blob = new Blob([csv], {
-        type: 'text/csv;charset=utf-8;',
+      const response = await downloadReportXlsxApi({
+        ...buildAnalysisParams(filters),
+        ...(filters.status && { status: filters.status }),
+        ...(filters.keyword && { keyword: filters.keyword.trim() }),
+        ...(filters.historyType && { historyType: filters.historyType }),
       });
+      const blob = response.data;
 
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-
       link.href = downloadUrl;
-      link.download = `deliveryinsider-orders-${new Date()
-        .toISOString()
-        .slice(0, 10)}.csv`;
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch (error) {
-      console.error(error);
-      alert('CSV 다운로드에 실패했습니다.');
-      throw error;
-    } finally {
-      isExporting.value = false;
-    }
-  };
-
-  const downloadHistoryCsv = async (historyType) => {
-    try {
-      isExporting.value = true;
-
-      const rows = reportHistory.value.filter((history) => (
-        history.historyType === historyType
-      ));
-      const headers = [
-        '내부 주문번호',
-        '플랫폼 주문번호',
-        '플랫폼',
-        '이력 유형',
-        '환불 요청 상태',
-        '사유 코드',
-        '상세 사유',
-        '환불 요청 금액',
-        '처리 일시',
-        '정산 확인 상태',
-      ];
-      const bodyRows = rows.map((history) => [
-        history.orderNo,
-        history.platformOrderNo,
-        history.platformType,
-        history.historyType,
-        history.refundStatus || '',
-        history.reasonCode || '',
-        history.reasonText || '',
-        history.amount ?? '',
-        history.occurredAtText,
-        history.historyType === 'REFUND_REQUESTED'
-          ? '확인되지 않음'
-          : '',
-      ]);
-      const csv = '\uFEFF' + [headers, ...bodyRows]
-        .map((row) => row.map(escapeCsvCell).join(','))
-        .join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-
-      link.href = downloadUrl;
-      link.download = `deliveryinsider-${historyType.toLowerCase()}-${new Date()
-        .toISOString()
-        .slice(0, 10)}.csv`;
+      link.download = 'DeliveryInsider_Report.xlsx';
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(downloadUrl);
     } catch (error) {
       console.error(error);
-      alert('이력 CSV 다운로드에 실패했습니다.');
+      alert(error?.response?.status === 403 ? 'Excel 내보내기는 Standard 기능입니다.' : 'Excel 다운로드에 실패했습니다.');
       throw error;
     } finally {
       isExporting.value = false;
@@ -469,8 +375,7 @@ export const useReportStore = defineStore('report', () => {
     findDailyTrend,
     findPlatformMetrics,
     findReports,
-    downloadOrdersCsv,
-    downloadHistoryCsv,
+    downloadReportXlsx,
     clearReports,
   };
 });

@@ -59,6 +59,7 @@ const filters = ref({
   risk: '',
   keyword: '',
 });
+const appliedFilters = ref({ ...filters.value });
 
 const salesCurrentPage = ref(1);
 const salesPageSize = 10;
@@ -465,7 +466,7 @@ const platformStats = computed(() => {
 });
 
 const filterSummaryText = computed(() => {
-  const currentFilters = filters.value;
+  const currentFilters = appliedFilters.value;
 
   const platformName = currentFilters.platform
     ? platformNames[currentFilters.platform]
@@ -501,7 +502,7 @@ const applyRouteQueryToReport = () => {
    * 대시보드에서 /reports?tab=sales&status=COMPLETED 로 들어오면
    * 전체 조회 데이터가 COMPLETED로만 제한되어 취소율/주문 조회가 0으로 보일 수 있다.
    * 그래서 라우트의 status query는 운영 리포트 기본 조회에는 적용하지 않는다.
-   * CSV 내보내기 버튼은 exportExcel()에서 필요한 상태값을 별도로 넣는다.
+   * Excel 내보내기 버튼은 exportExcel()에서 필요한 상태값을 별도로 넣는다.
    */
 
   if (query.platform) {
@@ -522,6 +523,7 @@ const searchReports = async () => {
 
   try {
     await reportStore.findReports(filters.value);
+    appliedFilters.value = { ...filters.value };
     return true;
   } catch {
     // Store의 inline error 상태가 사용자에게 실패와 retry 경로를 제공한다.
@@ -561,9 +563,7 @@ const exportExcel = async (type = '전체') => {
   }
 
   showExportPremiumGate.value = false;
-  const exportFilters = {
-    ...filters.value,
-  };
+  const exportFilters = { ...appliedFilters.value };
 
   /*
    * 각 탭의 내보내기는 현재 필터를 기본으로 하되,
@@ -574,16 +574,15 @@ const exportExcel = async (type = '전체') => {
   }
 
   if (type === '취소') {
-    await reportStore.downloadHistoryCsv('CANCELED');
-    return;
+    exportFilters.status = 'CANCELED';
+    exportFilters.historyType = 'CANCELED';
   }
 
   if (type === '환불') {
-    await reportStore.downloadHistoryCsv('REFUND_REQUESTED');
-    return;
+    exportFilters.historyType = 'REFUND_REQUESTED';
   }
 
-  await reportStore.downloadOrdersCsv(exportFilters);
+  await reportStore.downloadReportXlsx(exportFilters);
 };
 
 // ==========================================
@@ -730,7 +729,7 @@ onMounted(async () => {
       class="info-banner"
       data-testid="export-premium-gate"
     >
-      <strong>CSV 내보내기는 Standard 기능입니다.</strong>
+      <strong>Excel 내보내기는 Standard 기능입니다.</strong>
       <span>기본 리포트 조회는 계속 이용할 수 있습니다.</span>
       <button type="button" class="primary-button" @click="moveToBilling">Standard 플랜 보기</button>
     </section>
@@ -1170,10 +1169,10 @@ onMounted(async () => {
 
       <div class="header-actions">
         <button class="sub-button" @click="exportExcel('취소')">
-          취소 CSV
+          취소 Excel
         </button>
         <button class="primary-button" @click="exportExcel('환불')">
-          환불 CSV
+          환불 Excel
         </button>
       </div>
     </div>
@@ -1257,7 +1256,7 @@ onMounted(async () => {
           <h2>플랫폼별 운영 요약</h2>
           <p class="required-note">현재 조회 기간의 주문 건수, 완료 매출과 실제 평균 처리시간을 비교합니다.</p>
         </div>
-        <button class="primary-button" @click="exportExcel('플랫폼 정산')">현재 주문 CSV 내보내기</button>
+        <button class="primary-button" @click="exportExcel('플랫폼 정산')">현재 조건 Excel 내보내기</button>
       </div>
       <div class="table-scroll">
         <table class="data-table">
@@ -1295,7 +1294,7 @@ onMounted(async () => {
       <div class="title-area">
         <h2>필터 설정</h2>
         <p class="required-note">
-          조건을 잡은 뒤, 같은 조건으로 화면 조회와 CSV 내보내기를 진행합니다.
+          조건을 조회한 뒤, 적용된 조건으로 Excel 내보내기를 진행합니다.
         </p>
       </div>
 
@@ -1354,7 +1353,7 @@ onMounted(async () => {
         </div>
         
         <p class="report-filter-contract-note">
-          요약·처리시간 지표에는 기간과 플랫폼 조건이 적용됩니다. 상태와 주문번호 검색은 주문 목록·CSV에만 적용됩니다.
+          요약·처리시간 지표에는 기간과 플랫폼 조건이 적용됩니다. 상태와 주문번호 검색은 주문목록 Excel에 적용됩니다.
         </p>
 
         <div class="filter-result-line">
@@ -1365,7 +1364,7 @@ onMounted(async () => {
         <div class="export-preview-box">
         <div class="export-preview-header">
           <div>
-            <h3>CSV 내보내기 미리보기</h3>
+            <h3>Excel 내보내기 미리보기</h3>
             <p>
               현재 필터 조건으로 조회된 주문 중 최대 5건을 먼저 보여줍니다.
             </p>
@@ -1422,7 +1421,7 @@ onMounted(async () => {
             @click="exportExcel('전체')"
             :disabled="reportStore.isExporting"
           >
-            {{ reportStore.isExporting ? 'CSV 생성 중...' : '현재 필터 결과 CSV 내보내기' }}
+            {{ reportStore.isExporting ? 'Excel 생성 중...' : '현재 필터 결과 Excel 내보내기' }}
           </button>
         </div>
       </section>
@@ -1432,9 +1431,9 @@ onMounted(async () => {
           <div class="card-header">
             <div class="title-area">
               <h2>현재 필터 결과 전체 내보내기</h2>
-              <p class="required-note">기간, 플랫폼, 상태, 위험/확인, 검색어 조건을 그대로 적용합니다.</p>
+              <p class="required-note">조회 완료된 기간, 플랫폼, 상태, 검색어 조건을 그대로 적용합니다.</p>
             </div>
-            <button class="primary-button" @click="exportExcel('전체')">필터 결과 전체 CSV 생성</button>
+          <button class="primary-button" @click="exportExcel('전체')">필터 결과 전체 Excel 생성</button>
           </div>
           <div class="info-banner" style="margin-bottom:0;">{{ filterSummaryText }} · 총 {{ filteredOrders.length }}건</div>
         </article>
@@ -1442,32 +1441,32 @@ onMounted(async () => {
         <article class="card col-4 export-card">
           <h3>매출 내보내기</h3>
           <p>현재 필터 결과 중 완료 주문 {{ salesOrders.length }}건의 상세 매출 항목을 저장합니다.</p>
-          <button class="primary-button card-button" @click="exportExcel('매출')">필터 매출 CSV 생성</button>
+          <button class="primary-button card-button" @click="exportExcel('매출')">필터 매출 Excel 생성</button>
         </article>
         
         <article class="card col-4 export-card">
           <h3>취소 이력 내보내기</h3>
           <p>현재 필터 결과 중 취소 이력 {{ cancellationHistory.length }}건의 상세 사유를 저장합니다.</p>
-          <button class="primary-button card-button" @click="exportExcel('취소')">필터 취소 CSV 생성</button>
+          <button class="primary-button card-button" @click="exportExcel('취소')">필터 취소 Excel 생성</button>
         </article>
 
         <article class="card col-4 export-card">
           <h3>환불 이력 내보내기</h3>
           <p>현재 필터 결과 중 환불 요청 이력 {{ refundHistory.length }}건의 상세 사유를 저장합니다.</p>
           <button class="primary-button card-button" @click="exportExcel('환불')">
-            필터 환불 CSV 생성
+            필터 환불 Excel 생성
           </button>
         </article>
         
         <article class="card col-4 export-card">
           <h3>플랫폼 정산 요약</h3>
           <p>현재 필터 결과 기준 플랫폼별 요약 통계를 저장합니다.</p>
-          <button class="primary-button card-button" @click="exportExcel('플랫폼 정산')">필터 정산 CSV 생성</button>
+          <button class="primary-button card-button" @click="exportExcel('플랫폼 정산')">필터 정산 Excel 생성</button>
         </article>
 
         <article class="card col-12">
           <div class="info-banner" style="margin-bottom:0;">
-            HTML 시안에서는 브라우저 단독 실행을 위해 엑셀에서 열 수 있는 .xls 형식으로 내려받습니다. 실제 Spring Boot 구현에서는 Apache POI로 .xlsx 파일을 생성하면 됩니다.
+            Excel 파일은 서버의 Report Projection 결과로 생성됩니다. 금액과 추정 순수익은 파일에서 다시 계산하지 않습니다.
           </div>
         </article>
       </section>
