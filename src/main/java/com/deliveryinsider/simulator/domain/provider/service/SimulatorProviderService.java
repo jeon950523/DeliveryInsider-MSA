@@ -3,6 +3,7 @@ package com.deliveryinsider.simulator.domain.provider.service;
 import com.deliveryinsider.simulator.domain.provider.dto.*;
 import com.deliveryinsider.simulator.domain.provider.PlatformType;
 import com.deliveryinsider.simulator.domain.provider.SimulatorOrderStatus;
+import com.deliveryinsider.simulator.domain.provider.SimulatorOrderOperationStatus;
 import com.deliveryinsider.simulator.domain.provider.model.SimulatorOrder;
 import com.deliveryinsider.simulator.domain.provider.repository.SimulatorOrderRepository;
 import com.deliveryinsider.simulator.domain.provider.webhook.SimulatorWebhookClient;
@@ -47,6 +48,7 @@ public class SimulatorProviderService {
             .orderId(orderId == null ? provider.prefix() + "-ORDER-" + UUID.randomUUID() : orderId)
             .createdEventId(eventId == null ? provider.prefix() + "-EVENT-" + UUID.randomUUID() : eventId)
             .storeId(financialSnapshot.storeId()).sequence(1L).status(SimulatorOrderStatus.CREATED)
+            .operationStatus(SimulatorOrderOperationStatus.WAITING)
             .orderedAt(now).eventOccurredAt(now).deliveryAddress(request.deliveryAddress())
             .customerRequest(financialSnapshot.customerRequest())
             .items(financialSnapshot.items())
@@ -93,18 +95,83 @@ public class SimulatorProviderService {
         String eventId = provider.prefix() + "-EVENT-" + UUID.randomUUID();
         SimulatorOrder updated = orderRepository.update(provider, orderId, eventId, current -> {
             if (current == null) throw new SimulatorOrderNotFoundException(orderId);
-            if (!current.status().canTransitionTo(request.status())) {
-                throw new SimulatorInvalidOrderStatusTransitionException(orderId, current.status(), request.status());
-            }
-            return current.toBuilder().sequence(current.sequence() + 1).status(request.status())
+            SimulatorOrder next = transition(orderId, current, request);
+            return next.toBuilder().sequence(current.sequence() + 1)
                 .eventOccurredAt(clock.instant())
-                .cancelCode(request.status() == SimulatorOrderStatus.CANCELED ? request.cancelCode() : null)
-                .cancelReason(request.status() == SimulatorOrderStatus.CANCELED ? request.cancelReason() : null).build();
+                .cancelCode(next.status() == SimulatorOrderStatus.CANCELED ? request.cancelCode() : null)
+                .cancelReason(next.status() == SimulatorOrderStatus.CANCELED ? request.cancelReason() : null).build();
         });
-        if (updated.status() != SimulatorOrderStatus.READY_FOR_PICKUP) {
-            send(updated, eventId);
-        }
+        send(updated, eventId);
         return toResponse(updated);
+    }
+
+    private SimulatorOrder transition(
+        String orderId,
+        SimulatorOrder current,
+        ChangeSimulatorOrderStatusRequest request
+    ) {
+        if (request == null
+            || (request.status() == null) == (request.operationStatus() == null)) {
+            throw new SimulatorInvalidOrderStatusTransitionException(
+                orderId,
+                current.status() + "/" + current.operationStatus(),
+                request == null ? null : request.status() + "/" + request.operationStatus()
+            );
+        }
+
+        if (request.operationStatus() != null) {
+            if (request.operationStatus() != SimulatorOrderOperationStatus.COOKING
+                || current.status() != SimulatorOrderStatus.CREATED
+                || current.operationStatus() != SimulatorOrderOperationStatus.WAITING) {
+                throw new SimulatorInvalidOrderStatusTransitionException(
+                    orderId, current.operationStatus(), request.operationStatus()
+                );
+            }
+            return current.toBuilder()
+                .operationStatus(SimulatorOrderOperationStatus.COOKING)
+                .build();
+        }
+
+        SimulatorOrderStatus target = request.status();
+        boolean valid = switch (target) {
+            case READY_FOR_PICKUP ->
+                current.status() == SimulatorOrderStatus.CREATED
+                    && current.operationStatus() == SimulatorOrderOperationStatus.COOKING;
+            case PICKED_UP ->
+                current.status() == SimulatorOrderStatus.READY_FOR_PICKUP
+                    && current.operationStatus() == SimulatorOrderOperationStatus.READY_FOR_PICKUP;
+            case DELIVERED ->
+                current.status() == SimulatorOrderStatus.PICKED_UP
+                    && current.operationStatus() == SimulatorOrderOperationStatus.DELIVERING;
+            case CANCELED ->
+                (current.status() == SimulatorOrderStatus.CREATED
+                    && (current.operationStatus() == SimulatorOrderOperationStatus.WAITING
+                        || current.operationStatus() == SimulatorOrderOperationStatus.COOKING))
+                    || (current.status() == SimulatorOrderStatus.READY_FOR_PICKUP
+                        && current.operationStatus() == SimulatorOrderOperationStatus.READY_FOR_PICKUP);
+            case CREATED -> false;
+        };
+
+        if (!valid) {
+            throw new SimulatorInvalidOrderStatusTransitionException(
+                orderId,
+                current.status() + "/" + current.operationStatus(),
+                target
+            );
+        }
+
+        SimulatorOrderOperationStatus operationStatus = switch (target) {
+            case READY_FOR_PICKUP -> SimulatorOrderOperationStatus.READY_FOR_PICKUP;
+            case PICKED_UP -> SimulatorOrderOperationStatus.DELIVERING;
+            case DELIVERED -> SimulatorOrderOperationStatus.COMPLETED;
+            case CANCELED -> SimulatorOrderOperationStatus.CANCELED;
+            case CREATED -> throw new IllegalStateException("CREATED transition is not supported");
+        };
+
+        return current.toBuilder()
+            .status(target)
+            .operationStatus(operationStatus)
+            .build();
     }
 
     public void resendCreatedWebhook(PlatformType provider, String orderId) {
@@ -115,7 +182,7 @@ public class SimulatorProviderService {
 
     public void resendWebhook(PlatformType provider, String orderId, String eventId, String eventType) {
         SimulatorOrder original = requireEvent(provider, orderId, eventId);
-        if (!original.status().eventType().equals(eventType)) throw new SimulatorEventNotFoundException(eventId);
+        if (!original.eventType().equals(eventType)) throw new SimulatorEventNotFoundException(eventId);
         send(original, eventId);
     }
 
@@ -124,10 +191,11 @@ public class SimulatorProviderService {
             .orElseThrow(() -> new SimulatorEventNotFoundException(eventId));
     }
     private void send(SimulatorOrder order, String eventId) {
-        webhookClient.send(order.platformType(), new OrderWebhookEvent(eventId, order.status().eventType(), order.orderId()));
+        webhookClient.send(order.platformType(), new OrderWebhookEvent(eventId, order.eventType(), order.orderId()));
     }
     private SimulatorOrderDetailResponse toResponse(SimulatorOrder order) {
-        return new SimulatorOrderDetailResponse(order.orderId(), order.storeId(), order.sequence(), order.orderedAt(),
+        return new SimulatorOrderDetailResponse(order.orderId(), order.storeId(), order.sequence(), order.status(),
+            order.operationStatus(), order.orderedAt(),
             order.eventOccurredAt(), order.deliveryAddress(), order.customerRequest(),
             order.items().stream().map(item -> new SimulatorOrderDetailResponse.Item(item.menuId(), item.quantity(), item.unitPrice())).toList(),
             toFinancialResponse(order.financials()), order.cancelCode(), order.cancelReason());

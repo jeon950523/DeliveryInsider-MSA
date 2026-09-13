@@ -8,6 +8,8 @@ public record SimulatorOrderDetailResponse(
     String orderId,
     String storeId,
     Long sequence,
+    com.deliveryinsider.simulator.domain.provider.SimulatorOrderStatus status,
+    com.deliveryinsider.simulator.domain.provider.SimulatorOrderOperationStatus operationStatus,
     Instant orderedAt,
     Instant eventOccurredAt,
     String deliveryAddress,

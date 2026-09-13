@@ -1,14 +1,12 @@
 package com.deliveryinsider.simulator.domain.baemin.exception;
 
-import com.deliveryinsider.simulator.domain.provider.SimulatorOrderStatus;
-
 public class SimulatorInvalidOrderStatusTransitionException
         extends RuntimeException {
 
     public SimulatorInvalidOrderStatusTransitionException(
             String orderId,
-            SimulatorOrderStatus currentStatus,
-            SimulatorOrderStatus targetStatus
+            Object currentStatus,
+            Object targetStatus
     ) {
         super(
                 "Invalid simulator order status transition. "

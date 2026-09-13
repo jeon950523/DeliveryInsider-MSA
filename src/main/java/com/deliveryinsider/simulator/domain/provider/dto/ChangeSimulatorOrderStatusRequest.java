@@ -1,12 +1,13 @@
 package com.deliveryinsider.simulator.domain.provider.dto;
 
 import com.deliveryinsider.simulator.domain.provider.SimulatorOrderStatus;
-import jakarta.validation.constraints.NotNull;
+import com.deliveryinsider.simulator.domain.provider.SimulatorOrderOperationStatus;
 
 public record ChangeSimulatorOrderStatusRequest(
 
-        @NotNull
         SimulatorOrderStatus status,
+
+        SimulatorOrderOperationStatus operationStatus,
 
         String cancelCode,
 

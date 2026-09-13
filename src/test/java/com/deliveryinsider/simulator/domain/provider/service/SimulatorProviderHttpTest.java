@@ -54,11 +54,16 @@ class SimulatorProviderHttpTest {
         assertTrue(java.util.Arrays.stream(listed)
             .anyMatch(order -> order.externalOrderId().equals(orderId)
                 && order.status() == com.deliveryinsider.simulator.domain.provider.SimulatorOrderStatus.CREATED));
+        var cooking = client.post().uri("/simulator/providers/{provider}/orders/{order}/status", provider, orderId)
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body("{\"operationStatus\":\"COOKING\"}")
+            .retrieve().body(SimulatorOrderDetailResponse.class);
+        assertEquals(2, cooking.sequence());
+        assertEquals(com.deliveryinsider.simulator.domain.provider.SimulatorOrderOperationStatus.COOKING, cooking.operationStatus());
         for (var status : new String[]{"READY_FOR_PICKUP", "PICKED_UP", "DELIVERED"}) {
             var detail = client.post().uri("/simulator/providers/{provider}/orders/{order}/status", provider, orderId)
                 .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body("{\"status\":\"" + status + "\"}")
                 .retrieve().body(SimulatorOrderDetailResponse.class);
-            assertEquals(status.equals("READY_FOR_PICKUP") ? 2 : status.equals("PICKED_UP") ? 3 : 4, detail.sequence());
+            assertEquals(status.equals("READY_FOR_PICKUP") ? 3 : status.equals("PICKED_UP") ? 4 : 5, detail.sequence());
         }
         var snapshot = client.get().uri("/simulator/providers/{provider}/orders/{order}?sourceEventId={event}", provider, orderId, createdEvent)
             .retrieve().body(SimulatorOrderDetailResponse.class);

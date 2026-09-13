@@ -98,6 +98,7 @@ public class SimulatorControlService {
             order.orderId(),
             order.storeId(),
             order.status(),
+            order.operationStatus(),
             order.sequence(),
             order.orderedAt(),
             order.eventOccurredAt(),

@@ -42,19 +42,22 @@ class SimulatorProviderServiceTest {
     @ParameterizedTest @EnumSource(PlatformType.class)
     void lifecyclePreservesEventTimeSnapshotWhenEarlierEventIsRetried(PlatformType provider) {
         var created = service.create(provider, request());
+        var cooking = service.changeStatus(provider, created.orderId(), cooking());
         var ready = service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.READY_FOR_PICKUP));
-        assertEquals(2, ready.sequence());
-        verify(client, times(1)).send(eq(provider), any(OrderWebhookEvent.class));
+        assertEquals(2, cooking.sequence());
+        assertEquals(3, ready.sequence());
         var pickup = service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.PICKED_UP));
         var complete = service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.DELIVERED));
-        assertEquals(3, pickup.sequence()); assertEquals(4, complete.sequence());
+        assertEquals(4, pickup.sequence()); assertEquals(5, complete.sequence());
         var events = ArgumentCaptor.forClass(OrderWebhookEvent.class);
-        verify(client, times(3)).send(eq(provider), events.capture());
-        var snapshots = List.of(created, pickup, complete);
-        for (int index = 0; index < 3; index++) {
+        verify(client, times(5)).send(eq(provider), events.capture());
+        var snapshots = List.of(created, cooking, ready, pickup, complete);
+        for (int index = 0; index < 5; index++) {
             var event = events.getAllValues().get(index);
             assertEquals(snapshots.get(index), service.findById(provider, created.orderId(), event.sourceEventId()));
         }
+        assertEquals("ORDER_COOKING_STARTED", events.getAllValues().get(1).eventType());
+        assertEquals("ORDER_READY_FOR_PICKUP", events.getAllValues().get(2).eventType());
         var first = events.getAllValues().getFirst();
         service.resendWebhook(provider, created.orderId(), first.sourceEventId(), first.eventType());
         verify(client, times(2)).send(provider, first);
@@ -67,13 +70,26 @@ class SimulatorProviderServiceTest {
     @ParameterizedTest @EnumSource(PlatformType.class)
     void cancelAndWrongNamespaceCannotBecomeOtherOrders(PlatformType provider) {
         var created = service.create(provider, request());
-        var canceled = service.changeStatus(provider, created.orderId(), new ChangeSimulatorOrderStatusRequest(SimulatorOrderStatus.CANCELED, "SIM_CANCEL", "테스트 취소"));
+        var canceled = service.changeStatus(provider, created.orderId(), new ChangeSimulatorOrderStatusRequest(SimulatorOrderStatus.CANCELED, null, "SIM_CANCEL", "테스트 취소"));
         assertEquals("SIM_CANCEL", canceled.cancelCode());
         assertEquals(2, canceled.sequence());
         assertThrows(SimulatorInvalidOrderStatusTransitionException.class,
             () -> service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.DELIVERED)));
         var other = PlatformType.values()[(provider.ordinal() + 1) % 4];
         assertThrows(SimulatorOrderNotFoundException.class, () -> service.findById(other, created.orderId(), null));
+    }
+    @ParameterizedTest @EnumSource(PlatformType.class)
+    void managementCancellationRemainsAvailableAfterPreparationCompletes(PlatformType provider) {
+        var created = service.create(provider, request());
+        service.changeStatus(provider, created.orderId(), cooking());
+        service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.READY_FOR_PICKUP));
+
+        var canceled = service.changeStatus(provider, created.orderId(),
+            new ChangeSimulatorOrderStatusRequest(SimulatorOrderStatus.CANCELED, null, "MANAGEMENT_CANCEL", "관리 취소"));
+
+        assertEquals(SimulatorOrderStatus.CANCELED, canceled.status());
+        assertEquals(SimulatorOrderOperationStatus.CANCELED, canceled.operationStatus());
+        assertEquals(4, canceled.sequence());
     }
     @org.junit.jupiter.api.Test
     void recentOrdersAreScopedToTheRequestedExternalStore() {
@@ -91,6 +107,7 @@ class SimulatorProviderServiceTest {
     @ParameterizedTest @EnumSource(PlatformType.class)
     void duplicateConcurrentStatusCannotIncreaseSequenceTwice(PlatformType provider) throws Exception {
         var created = service.create(provider, request());
+        service.changeStatus(provider, created.orderId(), cooking());
         service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.READY_FOR_PICKUP));
         try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
             java.util.concurrent.Callable<Boolean> attempt = () -> {
@@ -99,10 +116,25 @@ class SimulatorProviderServiceTest {
             };
             var results = executor.invokeAll(List.of(attempt, attempt));
             assertNotEquals(results.get(0).get(), results.get(1).get());
-            assertEquals(3, service.findById(provider, created.orderId(), null).sequence());
+            assertEquals(4, service.findById(provider, created.orderId(), null).sequence());
         }
     }
-    private ChangeSimulatorOrderStatusRequest status(SimulatorOrderStatus status) { return new ChangeSimulatorOrderStatusRequest(status, null, null); }
+    @org.junit.jupiter.api.Test
+    void invalidStraightJumpsAndDuplicateCookingAreRejected() {
+        var provider = PlatformType.BAEMIN;
+        var created = service.create(provider, request());
+
+        assertThrows(SimulatorInvalidOrderStatusTransitionException.class,
+            () -> service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.PICKED_UP)));
+
+        service.changeStatus(provider, created.orderId(), cooking());
+        assertThrows(SimulatorInvalidOrderStatusTransitionException.class,
+            () -> service.changeStatus(provider, created.orderId(), cooking()));
+        assertThrows(SimulatorInvalidOrderStatusTransitionException.class,
+            () -> service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.DELIVERED)));
+    }
+    private ChangeSimulatorOrderStatusRequest status(SimulatorOrderStatus status) { return new ChangeSimulatorOrderStatusRequest(status, null, null, null); }
+    private ChangeSimulatorOrderStatusRequest cooking() { return new ChangeSimulatorOrderStatusRequest(null, SimulatorOrderOperationStatus.COOKING, null, null); }
     private CreateSimulatorOrderRequest request() {
         return request("same-external-store");
     }
