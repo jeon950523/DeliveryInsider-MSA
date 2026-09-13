@@ -117,6 +117,7 @@ class PlatformOrderEventPublisherTest {
                 ),
                 null,
                 null,
+                null,
                 List.of(
                     new PlatformOrderEventData.Item(
                         910001L,

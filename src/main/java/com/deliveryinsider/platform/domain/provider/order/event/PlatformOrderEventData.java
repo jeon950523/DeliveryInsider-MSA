@@ -20,6 +20,8 @@ public record PlatformOrderEventData(
     Instant orderedAt,
     Instant providerOccurredAt,
 
+    String operationStatus,
+
     String deliveryAddress,
     String customerRequestText,
 

@@ -33,18 +33,6 @@ public class SimulatorDeliveryControlClient {
         );
     }
 
-    public void markReadyForPickup(
-        PlatformType platformType,
-        String platformOrderId
-    ) {
-        client(platformType)
-            .post()
-            .uri("/simulator/providers/{platformType}/orders/{orderId}/status", platformType, platformOrderId)
-            .body(Map.of("status", "READY_FOR_PICKUP"))
-            .retrieve()
-            .toBodilessEntity();
-    }
-
     public void cancel(
         PlatformType platformType,
         String platformOrderId,

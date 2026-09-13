@@ -15,6 +15,10 @@ public record BaeminOrderDetailResponse(
 
     Long sequence,
 
+    String status,
+
+    String operationStatus,
+
     Instant orderedAt,
 
     Instant eventOccurredAt,

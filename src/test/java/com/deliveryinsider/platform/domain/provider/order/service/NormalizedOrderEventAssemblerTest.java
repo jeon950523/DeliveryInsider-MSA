@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -132,6 +133,28 @@ class NormalizedOrderEventAssemblerTest {
         assertEquals(
             first.eventId(),
             second.eventId()
+        );
+    }
+
+    @Test
+    void lifecycleEventTypeMapsToSeparateOperationStatus() {
+        when(storeResolver.resolve(any(), anyString())).thenReturn(15L);
+        when(menuResolver.resolve(any(), anyString(), anyLong(), anyString())).thenReturn(37L);
+
+        Map<CanonicalOrderEventType, String> expected = Map.of(
+            CanonicalOrderEventType.ORDER_CREATED, "WAITING",
+            CanonicalOrderEventType.ORDER_COOKING_STARTED, "COOKING",
+            CanonicalOrderEventType.ORDER_READY_FOR_PICKUP, "READY_FOR_PICKUP",
+            CanonicalOrderEventType.ORDER_PICKED_UP, "DELIVERING",
+            CanonicalOrderEventType.ORDER_DELIVERED, "COMPLETED",
+            CanonicalOrderEventType.ORDER_CANCELED, "CANCELED"
+        );
+
+        expected.forEach((eventType, operationStatus) ->
+            assertEquals(
+                operationStatus,
+                assembler.assemble(orderWithItems(eventType)).data().operationStatus()
+            )
         );
     }
 
@@ -276,11 +299,15 @@ class NormalizedOrderEventAssemblerTest {
     }
 
     private CanonicalPlatformOrder orderWithItems() {
+        return orderWithItems(CanonicalOrderEventType.ORDER_CREATED);
+    }
+
+    private CanonicalPlatformOrder orderWithItems(CanonicalOrderEventType eventType) {
         return CanonicalPlatformOrder.builder()
             .platformType(PlatformType.BAEMIN)
             .sourceEventId("BAE-EVENT-001")
             .eventType(
-                CanonicalOrderEventType.ORDER_CREATED
+                eventType
             )
             .externalOrderId("BAE-ORDER-001")
             .externalStoreId("BAE-STORE-001")

@@ -47,6 +47,7 @@ public class NormalizedOrderEventAssembler {
                 order.sourceSequence(),
                 order.orderedAt(),
                 order.providerOccurredAt(),
+                resolveOperationStatus(order.eventType()),
                 order.deliveryAddress(),
                 order.customerRequestText(),
                 items,
@@ -89,6 +90,19 @@ public class NormalizedOrderEventAssembler {
             storeId,
             data
         );
+    }
+
+    private String resolveOperationStatus(
+        com.deliveryinsider.platform.domain.provider.order.model.CanonicalOrderEventType eventType
+    ) {
+        return switch (eventType) {
+            case ORDER_CREATED -> "WAITING";
+            case ORDER_COOKING_STARTED -> "COOKING";
+            case ORDER_READY_FOR_PICKUP -> "READY_FOR_PICKUP";
+            case ORDER_PICKED_UP -> "DELIVERING";
+            case ORDER_DELIVERED -> "COMPLETED";
+            case ORDER_CANCELED -> "CANCELED";
+        };
     }
 
     private List<PlatformOrderEventData.Item> resolveItems(
