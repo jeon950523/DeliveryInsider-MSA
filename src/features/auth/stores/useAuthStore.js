@@ -6,7 +6,7 @@ import {
   login as loginApi,
   logout as logoutApi,
   register as registerApi,
-  updateMyEmail as updateMyEmailApi,
+  changePassword as changePasswordApi,
   requestPhoneVerification as requestPhoneVerificationApi,
   confirmPhoneVerification as confirmPhoneVerificationApi,
   fetchPhoneVerificationStatus as fetchPhoneVerificationStatusApi,
@@ -145,15 +145,9 @@ const reissue = async () => {
     return verification;
   };
 
-  const updateMyEmail = async (email) => {
-    try {
-      const response = await updateMyEmailApi(email);
-      userProfile.value = response.data.data;
-      return userProfile.value;
-    } catch (error) {
-      console.error(error);
-      throw error;
-    }
+  const changePassword = async (payload) => {
+    const response = await changePasswordApi(payload);
+    return response.data.data;
   };
 
   return {
@@ -170,7 +164,7 @@ const reissue = async () => {
     logout,
     registration,
     fetchMyProfile,
-    updateMyEmail,
+    changePassword,
     fetchPhoneVerificationStatus,
     requestPhoneVerification,
     confirmPhoneVerification,

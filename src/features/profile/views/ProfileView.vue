@@ -1,22 +1,22 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useAuthStore } from '../../auth/stores/useAuthStore.js';
 import { fetchCurrentStore } from '../../store/api/storeApi.js';
 
 const authStore = useAuthStore();
+const router = useRouter();
 
 const isLoading = ref(false);
-const isSaving = ref(false);
-const originalEmail = ref('');
 const storeOperationStatus = ref('');
+const isPasswordFormOpen = ref(false);
+const isChangingPassword = ref(false);
+const passwordError = ref('');
 
 const userInfo = reactive({
   email: '',
   storeName: '',
-});
-
-const isEmailChanged = computed(() => {
-  return userInfo.email.trim() !== originalEmail.value;
+  role: 'USER',
 });
 
 const findMyProfile = async () => {
@@ -25,6 +25,7 @@ const findMyProfile = async () => {
     const profile = await authStore.fetchMyProfile();
 
     userInfo.email = profile?.email || '';
+    userInfo.role = profile?.role || 'USER';
     // Store ownership is owned by Store Service, not the Auth profile cache.
     try {
       const storeResponse = await fetchCurrentStore();
@@ -39,7 +40,6 @@ const findMyProfile = async () => {
         throw storeError;
       }
     }
-    originalEmail.value = userInfo.email;
   } catch (error) {
     alert('내 정보 조회에 실패했습니다.');
   } finally {
@@ -47,32 +47,75 @@ const findMyProfile = async () => {
   }
 };
 
-const saveEmail = async () => {
-  const email = userInfo.email.trim();
+const passwordForm = reactive({
+  currentPassword: '',
+  newPassword: '',
+  newPasswordConfirm: '',
+});
 
-  if (!email) {
-    alert('이메일을 입력해 주세요.');
+const resetPasswordForm = () => {
+  passwordForm.currentPassword = '';
+  passwordForm.newPassword = '';
+  passwordForm.newPasswordConfirm = '';
+  passwordError.value = '';
+};
+
+const closePasswordForm = () => {
+  isPasswordFormOpen.value = false;
+  resetPasswordForm();
+};
+
+const openPasswordForm = () => {
+  resetPasswordForm();
+  isPasswordFormOpen.value = true;
+};
+
+const getPasswordChangeErrorMessage = (error) => {
+  if (!error?.response) {
+    return '네트워크 연결을 확인한 후 다시 시도해 주세요.';
+  }
+
+  const fieldErrors = error.response?.data?.data;
+
+  if (fieldErrors && typeof fieldErrors === 'object') {
+    return fieldErrors.newPassword ||
+      fieldErrors.currentPassword ||
+      '입력한 비밀번호를 다시 확인해 주세요.';
+  }
+
+  return error.response?.data?.message ||
+    '비밀번호 변경에 실패했습니다.';
+};
+
+const submitPasswordChange = async () => {
+  passwordError.value = '';
+
+  if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+    passwordError.value = '현재 비밀번호와 새 비밀번호를 모두 입력해 주세요.';
+    return;
+  }
+
+  if (passwordForm.newPassword !== passwordForm.newPasswordConfirm) {
+    passwordError.value = '새 비밀번호 확인이 일치하지 않습니다.';
     return;
   }
 
   try {
-    isSaving.value = true;
-    const profile = await authStore.updateMyEmail(email);
+    isChangingPassword.value = true;
 
-    userInfo.email = profile?.email || email;
-    // An email update must not overwrite the Store Service source of truth.
-    originalEmail.value = userInfo.email;
+    await authStore.changePassword({
+      currentPassword: passwordForm.currentPassword,
+      newPassword: passwordForm.newPassword,
+    });
 
-    alert('이메일이 수정되었습니다.');
+    resetPasswordForm();
+    authStore.clearAllAuthState();
+    alert('비밀번호가 변경되었습니다. 다시 로그인해 주세요.');
+    await router.replace('/login');
   } catch (error) {
-    const message =
-      error.response?.data?.data ||
-      error.response?.data?.message ||
-      '이메일 수정에 실패했습니다.';
-
-    alert(message);
+    passwordError.value = getPasswordChangeErrorMessage(error);
   } finally {
-    isSaving.value = false;
+    isChangingPassword.value = false;
   }
 };
 
@@ -85,27 +128,22 @@ onMounted(async () => {
   <section class="page-section">
     <div class="section-title-row">
       <h1 class="main-title">내 정보</h1>
-      <p class="sub-desc">1차 범위에서는 이메일과 연결 매장 정보를 백엔드에서 조회합니다.</p>
+      <p class="sub-desc">계정 정보와 연결 매장을 확인하고 계정 보안을 관리합니다.</p>
     </div>
 
     <article class="card">
       <div class="card-header">
         <div class="title-area">
           <h3>계정 정보</h3>
-          <p class="required-note">이메일은 수정 가능하며, 연결 매장은 매장 관리에서 변경합니다.</p>
+          <p class="required-note">이메일은 계정 식별 정보이며, 연결 매장은 매장 관리에서 변경합니다.</p>
         </div>
-        <div class="badge success">운영 계정</div>
+        <div class="badge success">{{ userInfo.role === 'ADMIN' ? '관리자 계정' : '운영 계정' }}</div>
       </div>
 
-      <form class="grid-form" @submit.prevent="saveEmail">
+      <div class="grid-form">
         <div class="input-group">
           <label>이메일</label>
-          <input
-            v-model="userInfo.email"
-            type="email"
-            :disabled="isLoading || isSaving"
-            placeholder="이메일을 입력하세요"
-          />
+          <input type="email" :value="userInfo.email" readonly />
         </div>
         
         <div class="input-group">
@@ -114,44 +152,86 @@ onMounted(async () => {
           <small v-if="storeOperationStatus">운영 상태: {{ storeOperationStatus }}</small>
         </div>
 
-        <div class="info-banner full-width">
-          이름, 권한, 비밀번호 변경, 회원탈퇴는 2차 기능으로 분리했습니다.
+        <div class="input-group">
+          <label>계정 권한</label>
+          <input type="text" :value="userInfo.role" readonly />
         </div>
 
         <div class="profile-actions full-width">
           <button
             type="button"
             class="secondary-button"
-            :disabled="isLoading || isSaving"
+            :disabled="isLoading"
             @click="findMyProfile"
           >
             새로고침
           </button>
-          <button
-            type="submit"
-            class="primary-button"
-            :disabled="!isEmailChanged || isLoading || isSaving"
-          >
-            {{ isSaving ? '저장 중...' : '이메일 저장' }}
-          </button>
         </div>
-      </form>
+      </div>
     </article>
 
     <article class="card second-card">
       <div class="card-header compact">
         <div class="title-area">
-          <h3>2차 예정 기능</h3>
-          <p class="required-note">DB 컬럼과 정책이 확정된 뒤 연결할 기능입니다.</p>
+          <h3>계정 보안</h3>
+          <p class="required-note">비밀번호를 변경하면 현재 로그인 세션이 종료됩니다.</p>
         </div>
       </div>
 
-      <div class="future-list">
-        <span>이름 관리</span>
-        <span>권한 표시</span>
-        <span>비밀번호 변경</span>
-        <span>회원탈퇴</span>
+      <div v-if="!isPasswordFormOpen" class="security-action-row">
+        <p>계정 보안을 위해 주기적으로 비밀번호를 변경해 주세요.</p>
+        <button type="button" class="primary-button" @click="openPasswordForm">
+          비밀번호 변경
+        </button>
       </div>
+
+      <form v-else class="password-form" @submit.prevent="submitPasswordChange">
+        <div class="input-group">
+          <label for="current-password">현재 비밀번호</label>
+          <input
+            id="current-password"
+            v-model="passwordForm.currentPassword"
+            type="password"
+            autocomplete="current-password"
+            :disabled="isChangingPassword"
+          />
+        </div>
+        <div class="input-group">
+          <label for="new-password">새 비밀번호</label>
+          <input
+            id="new-password"
+            v-model="passwordForm.newPassword"
+            type="password"
+            autocomplete="new-password"
+            :disabled="isChangingPassword"
+          />
+          <small>8~20자, 영문·숫자·특수문자를 모두 포함해 주세요.</small>
+        </div>
+        <div class="input-group">
+          <label for="new-password-confirm">새 비밀번호 확인</label>
+          <input
+            id="new-password-confirm"
+            v-model="passwordForm.newPasswordConfirm"
+            type="password"
+            autocomplete="new-password"
+            :disabled="isChangingPassword"
+          />
+        </div>
+        <p v-if="passwordError" class="form-error" role="alert">{{ passwordError }}</p>
+        <div class="profile-actions">
+          <button
+            type="button"
+            class="secondary-button"
+            :disabled="isChangingPassword"
+            @click="closePasswordForm"
+          >
+            취소
+          </button>
+          <button type="submit" class="primary-button" :disabled="isChangingPassword">
+            {{ isChangingPassword ? '변경 중...' : '비밀번호 변경' }}
+          </button>
+        </div>
+      </form>
     </article>
   </section>
 </template>
@@ -286,17 +366,6 @@ onMounted(async () => {
 /* =======================================
    정보 배너
 ======================================= */
-.info-banner {
-  background-color: #f0fdfa; 
-  border: 1px solid #ccfbf1;
-  color: #0f766e;
-  padding: 16px 20px;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 700;
-  margin-top: 10px;
-}
-
 .profile-actions {
   display: flex;
   justify-content: flex-end;
@@ -332,20 +401,41 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
-.future-list {
+.security-action-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.future-list span {
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+.security-action-row p {
+  margin: 0;
   color: #475569;
   font-size: 15px;
-  font-weight: 800;
+}
+
+.password-form {
+  display: grid;
+  gap: 18px;
+  max-width: 560px;
+}
+
+.password-form input {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 16px;
+}
+
+.input-group small {
+  color: #64748b;
+}
+
+.form-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 /* =======================================
@@ -369,6 +459,11 @@ onMounted(async () => {
   }
 
   .profile-actions {
+    flex-direction: column;
+  }
+
+  .security-action-row {
+    align-items: stretch;
     flex-direction: column;
   }
 }
