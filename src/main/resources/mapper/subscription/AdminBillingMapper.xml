@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.billing.domain.admin.AdminBillingMapper">
+    <resultMap id="adminSubscriptionRowMap" type="com.deliveryinsider.billing.domain.admin.AdminSubscriptionRow">
+        <id column="subscription_id" property="subscriptionId"/>
+        <result column="store_id" property="storeId"/>
+        <result column="plan" property="plan"/>
+        <result column="subscription_status" property="subscriptionStatus"/>
+        <result column="started_at" property="startedAt"/>
+        <result column="next_billing_at" property="nextBillingAt"/>
+        <result column="latest_payment_status" property="latestPaymentStatus"/>
+    </resultMap>
+
+    <select id="countSubscriptions" resultType="long">
+        SELECT COUNT(*) FROM subscriptions
+    </select>
+
+    <select id="countByStatus" resultType="long">
+        SELECT COUNT(*) FROM subscriptions WHERE status = #{status}
+    </select>
+
+    <select id="findPage" resultMap="adminSubscriptionRowMap">
+        SELECT
+            s.id AS subscription_id,
+            s.store_id,
+            p.code AS plan,
+            s.status AS subscription_status,
+            s.started_at,
+            s.next_billing_at,
+            latest.status AS latest_payment_status
+        FROM subscriptions s
+        INNER JOIN plans p ON p.id = s.plan_id
+        LEFT JOIN payments latest ON latest.id = (
+            SELECT candidate.id
+            FROM payments candidate
+            WHERE candidate.subscription_id = s.id
+            ORDER BY candidate.created_at DESC, candidate.id DESC
+            LIMIT 1
+        )
+        ORDER BY s.created_at DESC, s.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+</mapper>
