@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { jwtDecode } from 'jwt-decode';
 import {
   fetchMyProfile as fetchMyProfileApi,
   login as loginApi,
@@ -23,6 +24,18 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = ref(Boolean(accessToken.value));
   const userProfile = ref(null);
   const hasLoginHint = ref(localStorage.getItem('hasLoginHint') === 'true');
+  const role = computed(() => {
+    if (userProfile.value?.role) {
+      return userProfile.value.role;
+    }
+
+    try {
+      return accessToken.value ? jwtDecode(accessToken.value)?.role || 'USER' : null;
+    } catch (error) {
+      return null;
+    }
+  });
+  const isAdmin = computed(() => role.value === 'ADMIN');
 
   subscribeAccessToken((token) => {
     accessToken.value = token;
@@ -145,6 +158,8 @@ const reissue = async () => {
 
   return {
     isLoggedIn,
+    role,
+    isAdmin,
     accessToken,
     hasLoginHint,
     userProfile,

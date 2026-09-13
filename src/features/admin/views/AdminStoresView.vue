@@ -1,0 +1,5 @@
+<script setup>
+import { onMounted } from 'vue'; import { useAdminStore } from '../stores/useAdminStore.js'; import AdminStatePanel from '../components/AdminStatePanel.vue'; import AdminTable from '../components/AdminTable.vue';
+const admin=useAdminStore(); const state=admin.resources.stores; const columns=[{key:'storeId',label:'매장 ID'},{key:'ownerUserId',label:'소유 회원'},{key:'storeName',label:'매장명'},{key:'businessRegistrationNumberMasked',label:'사업자번호'},{key:'businessStatus',label:'사업 상태'},{key:'operationStatus',label:'운영 상태'},{key:'createdAt',label:'등록일'}]; const formatDate=v=>v?new Date(v).toLocaleString('ko-KR'):'-'; onMounted(()=>admin.loadStores().catch(()=>{}));
+</script>
+<template><AdminStatePanel :loading="state.loading" :error="state.error" :empty="state.data?.items?.length===0" empty-text="등록된 매장이 없습니다." @retry="admin.loadStores().catch(()=>{})"><AdminTable :columns="columns" :rows="state.data?.items||[]"><template #createdAt="{row}">{{formatDate(row.createdAt)}}</template></AdminTable></AdminStatePanel></template>

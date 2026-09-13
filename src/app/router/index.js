@@ -33,6 +33,12 @@ import ProfileView from '../../features/profile/views/ProfileView.vue';
 import OrdersView from '../../features/order/views/OrdersView.vue';
 import NotFoundView from '../error/NotFoundView.vue';
 import ServerErrorView from '../error/ServerErrorView.vue';
+import AdminLayout from '../../features/admin/components/AdminLayout.vue';
+import AdminDashboardView from '../../features/admin/views/AdminDashboardView.vue';
+import AdminUsersView from '../../features/admin/views/AdminUsersView.vue';
+import AdminStoresView from '../../features/admin/views/AdminStoresView.vue';
+import AdminPlatformsView from '../../features/admin/views/AdminPlatformsView.vue';
+import AdminSubscriptionsView from '../../features/admin/views/AdminSubscriptionsView.vue';
 
 /*
  * 라우트마다 사용할 meta 정보를 생성한다.
@@ -54,6 +60,24 @@ const setMeta = (
 };
 
 const routes = [
+  {
+    path: '/admin',
+    component: AdminLayout,
+    meta: {
+      isAuthenticated: true,
+      requiresAdmin: true,
+      allowWithoutPhoneVerification: true,
+      allowWithoutStore: true,
+      hideLayout: true,
+    },
+    children: [
+      { path: '', name: 'admin-dashboard', component: AdminDashboardView, meta: { title: '관리자 운영 현황' } },
+      { path: 'users', name: 'admin-users', component: AdminUsersView, meta: { title: '전체 회원' } },
+      { path: 'stores', name: 'admin-stores', component: AdminStoresView, meta: { title: '전체 매장' } },
+      { path: 'platforms', name: 'admin-platforms', component: AdminPlatformsView, meta: { title: '플랫폼 연결 및 처리 오류' } },
+      { path: 'subscriptions', name: 'admin-subscriptions', component: AdminSubscriptionsView, meta: { title: '전체 구독' } },
+    ],
+  },
   /*
    * 로그인 전 메인 랜딩 페이지
    */
@@ -305,8 +329,20 @@ router.beforeEach(async (to) => {
     authStore.isLoggedIn
   ) {
     return {
-      name: 'dashboard',
+      name: authStore.isAdmin ? 'admin-dashboard' : 'dashboard',
     };
+  }
+
+  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+    return { name: 'dashboard' };
+  }
+
+  if (
+    to.meta.isAuthenticated &&
+    authStore.isAdmin &&
+    !to.meta.requiresAdmin
+  ) {
+    return { name: 'admin-dashboard' };
   }
 
 

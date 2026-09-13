@@ -29,6 +29,11 @@ const startKakaoLogin = () => {
 };
 
 const moveAfterLogin = async () => {
+  if (authStore.isAdmin) {
+    await router.replace({ name: 'admin-dashboard' });
+    return;
+  }
+
   try {
     /*
      * 다른 계정의 Store 조회 결과가 Pinia에 남아 있을 수 있으므로
