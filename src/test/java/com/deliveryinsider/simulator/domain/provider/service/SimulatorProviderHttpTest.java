@@ -37,9 +37,9 @@ class SimulatorProviderHttpTest {
         }).when(webhook).send(any(), any());
         var client = RestClient.builder().baseUrl("http://127.0.0.1:" + port).build();
         String body = """
-            {"storeId":"SIM-STORE","deliveryAddress":"테스트 주소","customerRequest":"테스트",
+            {"storeId":"%s-STORE-003","deliveryAddress":"테스트 주소","customerRequest":"테스트",
             "items":[{"menuId":"SIM-MENU","quantity":1,"unitPrice":18000}]}
-            """;
+            """.formatted(provider.prefix());
         var sent = client.post().uri("/api/control/providers/{provider}/orders", provider)
             .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(body).retrieve().toEntity(SimulatorOrderSendResponse.class);
         assertEquals(201, sent.getStatusCode().value());
@@ -81,8 +81,8 @@ class SimulatorProviderHttpTest {
         var client=RestClient.builder().baseUrl("http://127.0.0.1:"+port).build();
         String suffix=java.util.UUID.randomUUID().toString();
         String id="DI-E2E-ORDER-"+suffix, event="DI-E2E-EVENT-"+suffix;
-        String body="{\"storeId\":\"SIM-STORE\",\"items\":[{\"menuId\":\"SIM-MENU\",\"quantity\":1,\"unitPrice\":18000}]}";
         for(var provider:PlatformType.values()) {
+            String body="{\"storeId\":\""+provider.prefix()+"-STORE-003\",\"items\":[{\"menuId\":\"SIM-MENU\",\"quantity\":1,\"unitPrice\":18000}]}";
             String route="/simulator/providers/"+provider+"/orders?orderId="+id+"&sourceEventId="+event;
             var created=client.post().uri(route).contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(body)
                 .retrieve().body(SimulatorOrderDetailResponse.class);
@@ -95,7 +95,8 @@ class SimulatorProviderHttpTest {
             var original=client.get().uri("/simulator/providers/"+provider+"/orders/"+id+"?sourceEventId="+event).retrieve().body(SimulatorOrderDetailResponse.class);
             assertEquals(1,original.sequence());
         }
+        String baeminBody="{\"storeId\":\"BAE-STORE-003\",\"items\":[{\"menuId\":\"SIM-MENU\",\"quantity\":1,\"unitPrice\":18000}]}";
         assertThrows(HttpClientErrorException.BadRequest.class,()->client.post().uri("/simulator/providers/BAEMIN/orders?orderId=arbitrary")
-            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(body).retrieve().toBodilessEntity());
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(baeminBody).retrieve().toBodilessEntity());
     }
 }

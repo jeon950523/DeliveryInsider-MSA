@@ -81,9 +81,9 @@
         )
         VALUES (
             #{platformType},
-            #{request.externalStoreId},
-            #{request.storeName},
-            #{request.enabled}
+            #{externalStoreId},
+            #{storeName},
+            #{enabled}
         )
     </insert>
 

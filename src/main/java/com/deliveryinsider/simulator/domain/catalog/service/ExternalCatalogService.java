@@ -7,16 +7,21 @@ import com.deliveryinsider.simulator.domain.catalog.dto.ExternalStoreProvisionRe
 import com.deliveryinsider.simulator.domain.catalog.mapper.ExternalCatalogMapper;
 import com.deliveryinsider.simulator.domain.provider.PlatformType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class ExternalCatalogService {
+
+    private static final int STORE_ID_GENERATION_ATTEMPTS = 5;
 
     private final ExternalCatalogMapper catalogMapper;
 
@@ -36,27 +41,43 @@ public class ExternalCatalogService {
         );
     }
 
-    /**
-     * A repeated control request for the same Provider/external-store identity is a no-op.
-     * In particular, control-plane requests never rewrite seeded stores.
-     */
+    /** Creates a new simulator store without accepting a caller-controlled store identity. */
     @Transactional
     public ExternalStoreResponse provisionStore(
         PlatformType platformType,
         ExternalStoreProvisionRequest request
     ) {
-        ExternalStoreProvisionRequest normalized = new ExternalStoreProvisionRequest(
-            request.externalStoreId().trim(),
-            request.storeName().trim(),
-            request.enabled()
-        );
+        String storeName = request.storeName().trim();
 
-        return catalogMapper.findStore(platformType, normalized.externalStoreId())
-            .orElseGet(() -> {
-                catalogMapper.insertStore(platformType, normalized);
-                return catalogMapper.findStore(platformType, normalized.externalStoreId())
-                    .orElseThrow(() -> new IllegalStateException("Provisioned external store is unavailable"));
-            });
+        for (int attempt = 0; attempt < STORE_ID_GENERATION_ATTEMPTS; attempt++) {
+            String externalStoreId = generateExternalStoreId(platformType);
+            try {
+                int inserted = catalogMapper.insertStore(platformType, externalStoreId, storeName, true);
+                if (inserted != 1) {
+                    throw new IllegalStateException("External store was not created");
+                }
+                return new ExternalStoreResponse(platformType, externalStoreId, storeName, true);
+            } catch (DuplicateKeyException collision) {
+                if (attempt == STORE_ID_GENERATION_ATTEMPTS - 1) {
+                    throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Unable to allocate a unique external store identity",
+                        collision
+                    );
+                }
+            }
+        }
+
+        throw new IllegalStateException("External store identity allocation did not complete");
+    }
+
+    private String generateExternalStoreId(PlatformType platformType) {
+        String suffix = UUID.randomUUID()
+            .toString()
+            .replace("-", "")
+            .substring(0, 12)
+            .toUpperCase(Locale.ROOT);
+        return platformType.prefix() + "-STORE-" + suffix;
     }
 
     /**

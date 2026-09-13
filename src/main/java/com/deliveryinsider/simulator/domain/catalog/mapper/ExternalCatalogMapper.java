@@ -3,7 +3,6 @@ package com.deliveryinsider.simulator.domain.catalog.mapper;
 import com.deliveryinsider.simulator.domain.catalog.dto.ExternalMenuResponse;
 import com.deliveryinsider.simulator.domain.catalog.dto.ExternalMenuProvisionRequest;
 import com.deliveryinsider.simulator.domain.catalog.dto.ExternalStoreResponse;
-import com.deliveryinsider.simulator.domain.catalog.dto.ExternalStoreProvisionRequest;
 import com.deliveryinsider.simulator.domain.provider.PlatformType;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -35,7 +34,9 @@ public interface ExternalCatalogMapper {
 
     int insertStore(
         @Param("platformType") PlatformType platformType,
-        @Param("request") ExternalStoreProvisionRequest request
+        @Param("externalStoreId") String externalStoreId,
+        @Param("storeName") String storeName,
+        @Param("enabled") boolean enabled
     );
 
     int insertMenu(
