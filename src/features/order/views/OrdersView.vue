@@ -412,11 +412,17 @@ const getStateActionHint = (status) => ({
   CANCELED: '취소 완료',
 }[status] || '상태 변경 불가');
 
+const isExternalProviderOrder = (order) => Boolean(
+  order?.platformType && order?.platformOrderNo,
+);
+
 const canCancelOrder = (order) =>
-  ['WAITING', 'COOKING', 'READY_FOR_PICKUP'].includes(order?.orderStatus);
+  !isExternalProviderOrder(order)
+  && ['WAITING', 'COOKING', 'READY_FOR_PICKUP'].includes(order?.orderStatus);
 
 const canRefundOrder = (order) =>
-  order?.orderStatus === 'COMPLETED' && !order?.refundType;
+  !isExternalProviderOrder(order)
+  && order?.orderStatus === 'COMPLETED' && !order?.refundType;
 
 const getReasonLabel = (reasonCode) =>
   reasonLabels[reasonCode] || reasonCode || '-';
@@ -621,6 +627,7 @@ const toOrderDetailViewData = (detail, baseOrder = {}) => {
       '',
 
     cancelReason:
+      cancellation.cancelReasonText ||
       cancellation.cancelReason ||
       baseOrder.cancelReason ||
       '',
@@ -1053,6 +1060,7 @@ const submitRefund = async () => {
 
         <div class="new-order-actions">
           <button
+            v-if="canCancelOrder(nextWaitingOrder)"
             type="button"
             class="sub-button"
             @click="selectOrderAndScroll(nextWaitingOrder)"
@@ -1449,7 +1457,7 @@ const submitRefund = async () => {
         </div>
 
         <div v-if="selectedOrder.cancelReason" class="detail-section cancel-history">
-          <h3>취소 이력</h3>
+          <h3>{{ isExternalProviderOrder(selectedOrder) ? '외부 플랫폼 취소 결과' : '취소 이력' }}</h3>
           <p>
             {{ selectedOrder.canceledAt }} ·
             {{ getCancelActorLabel(selectedOrder.cancelType) }} ·
@@ -1467,6 +1475,9 @@ const submitRefund = async () => {
         </div>
 
         <div class="detail-actions order-command-actions" ref="detailActionsRef">
+          <p v-if="isExternalProviderOrder(selectedOrder)" class="external-order-readonly-note">
+            취소·환불은 연결된 외부 플랫폼에서 처리되며, DeliveryInsider에는 처리 결과가 자동 반영됩니다.
+          </p>
           <button
             v-if="canCancelOrder(selectedOrder)"
             type="button"
@@ -1488,7 +1499,7 @@ const submitRefund = async () => {
           </button>
 
           <button
-            v-if="!canCancelOrder(selectedOrder) && !canRefundOrder(selectedOrder)"
+            v-else-if="!isExternalProviderOrder(selectedOrder) && !canCancelOrder(selectedOrder) && !canRefundOrder(selectedOrder)"
             type="button"
             class="sub-button state-action-button"
             disabled
@@ -2857,6 +2868,18 @@ const submitRefund = async () => {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 22px;
+}
+
+.external-order-readonly-note {
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 @media (max-width: 720px) {
