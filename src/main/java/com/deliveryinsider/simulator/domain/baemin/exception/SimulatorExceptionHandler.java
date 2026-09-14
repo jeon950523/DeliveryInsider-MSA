@@ -35,4 +35,16 @@ public class SimulatorExceptionHandler {
 
         return problemDetail;
     }
+
+    @ExceptionHandler(SimulatorInvalidCancellationReasonException.class)
+    public ProblemDetail handleInvalidCancellationReason(
+            SimulatorInvalidCancellationReasonException exception
+    ) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+            HttpStatus.BAD_REQUEST,
+            "취소 사유를 입력해 주세요."
+        );
+        problemDetail.setTitle("Invalid cancellation reason");
+        return problemDetail;
+    }
 }

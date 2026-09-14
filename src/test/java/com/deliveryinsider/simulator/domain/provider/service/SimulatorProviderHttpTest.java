@@ -74,7 +74,7 @@ class SimulatorProviderHttpTest {
         var canceled = client.post().uri("/simulator/providers/{provider}/orders", provider)
             .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body(body).retrieve().body(SimulatorOrderDetailResponse.class);
         var cancelResult = client.post().uri("/simulator/providers/{provider}/orders/{order}/status", provider, canceled.orderId())
-            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body("{\"status\":\"CANCELED\",\"cancelCode\":\"SIM-CANCEL\"}")
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).body("{\"status\":\"CANCELED\",\"cancelCode\":\"SIM-CANCEL\",\"cancelReason\":\"HTTP 취소 회귀 테스트\"}")
             .retrieve().body(SimulatorOrderDetailResponse.class);
         assertEquals("SIM-CANCEL", cancelResult.cancelCode());
         assertThrows(HttpClientErrorException.Conflict.class, () -> client.post()

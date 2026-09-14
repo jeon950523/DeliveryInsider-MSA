@@ -78,6 +78,18 @@ class SimulatorProviderServiceTest {
         var other = PlatformType.values()[(provider.ordinal() + 1) % 4];
         assertThrows(SimulatorOrderNotFoundException.class, () -> service.findById(other, created.orderId(), null));
     }
+    @org.junit.jupiter.api.Test
+    void cancellationReasonIsRequiredBeforeSequenceOrWebhookChanges() {
+        var provider = PlatformType.BAEMIN;
+        var created = service.create(provider, request());
+
+        assertThrows(SimulatorInvalidCancellationReasonException.class,
+            () -> service.changeStatus(provider, created.orderId(),
+                new ChangeSimulatorOrderStatusRequest(SimulatorOrderStatus.CANCELED, null, "CUSTOMER_CHANGED_MIND", "  ")));
+
+        assertEquals(1, service.findById(provider, created.orderId(), null).sequence());
+        verify(client, times(1)).send(eq(provider), any(OrderWebhookEvent.class));
+    }
     @ParameterizedTest @EnumSource(PlatformType.class)
     void managementCancellationRemainsAvailableAfterPreparationCompletes(PlatformType provider) {
         var created = service.create(provider, request());

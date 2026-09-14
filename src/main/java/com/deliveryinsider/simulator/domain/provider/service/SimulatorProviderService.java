@@ -10,6 +10,7 @@ import com.deliveryinsider.simulator.domain.provider.webhook.SimulatorWebhookCli
 import com.deliveryinsider.simulator.domain.provider.webhook.OrderWebhookEvent;
 import com.deliveryinsider.simulator.domain.financial.service.ExternalStoreFinancialService;
 import com.deliveryinsider.simulator.domain.baemin.exception.SimulatorInvalidOrderStatusTransitionException;
+import com.deliveryinsider.simulator.domain.baemin.exception.SimulatorInvalidCancellationReasonException;
 import com.deliveryinsider.simulator.domain.baemin.exception.SimulatorOrderNotFoundException;
 import com.deliveryinsider.simulator.domain.control.exception.SimulatorEventNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -92,6 +93,7 @@ public class SimulatorProviderService {
     }
 
     public SimulatorOrderDetailResponse changeStatus(PlatformType provider, String orderId, ChangeSimulatorOrderStatusRequest request) {
+        requireCancellationReason(request);
         String eventId = provider.prefix() + "-EVENT-" + UUID.randomUUID();
         SimulatorOrder updated = orderRepository.update(provider, orderId, eventId, current -> {
             if (current == null) throw new SimulatorOrderNotFoundException(orderId);
@@ -99,10 +101,18 @@ public class SimulatorProviderService {
             return next.toBuilder().sequence(current.sequence() + 1)
                 .eventOccurredAt(clock.instant())
                 .cancelCode(next.status() == SimulatorOrderStatus.CANCELED ? request.cancelCode() : null)
-                .cancelReason(next.status() == SimulatorOrderStatus.CANCELED ? request.cancelReason() : null).build();
+                .cancelReason(next.status() == SimulatorOrderStatus.CANCELED ? request.cancelReason().trim() : null).build();
         });
         send(updated, eventId);
         return toResponse(updated);
+    }
+
+    private void requireCancellationReason(ChangeSimulatorOrderStatusRequest request) {
+        if (request != null
+            && request.status() == SimulatorOrderStatus.CANCELED
+            && (request.cancelReason() == null || request.cancelReason().isBlank())) {
+            throw new SimulatorInvalidCancellationReasonException();
+        }
     }
 
     private SimulatorOrder transition(
