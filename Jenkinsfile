@@ -50,8 +50,10 @@ pipeline {
                                 sh '''
                                     set +x
                                     set -eu
-                                    npm ci
-                                    VITE_API_BASE_URL="$CLIENT_API_BASE_URL" VITE_TOSS_CLIENT_KEY="$VITE_TOSS_CLIENT_KEY" npm run build
+                                    docker build --target build \
+                                      --build-arg VITE_API_BASE_URL="$CLIENT_API_BASE_URL" \
+                                      --build-arg VITE_TOSS_CLIENT_KEY="$VITE_TOSS_CLIENT_KEY" \
+                                      -t "$IMAGE_ROOT/${SERVICE_NAME}-build-check:$BUILD_NUMBER" .
                                 '''
                             }
                         }
