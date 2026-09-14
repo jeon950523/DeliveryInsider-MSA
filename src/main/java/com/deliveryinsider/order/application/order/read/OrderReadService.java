@@ -467,7 +467,8 @@ public class OrderReadService {
             ),
 
             cancellation == null ? null : new OrderDetailResponse.CancellationInfo(
-                cancellation.getActor().name(), cancellation.getReasonCode().name(), cancellation.getCanceledAt()
+                cancellation.getActor().name(), cancellation.getReasonCode().name(),
+                cancellation.getReasonText(), cancellation.getCanceledAt()
             ),
 
             refund == null ? null : new OrderDetailResponse.RefundInfo(

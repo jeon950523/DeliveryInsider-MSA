@@ -121,6 +121,8 @@ public record OrderDetailResponse(
 
         String cancelReason,
 
+        String cancelReasonText,
+
         LocalDateTime canceledAt
 
     ) {
