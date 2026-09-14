@@ -1,0 +1,7 @@
+allprojects {
+    tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+        // This test publishes a real Store catalog event. The shared instructor
+        // Kafka is a deployment dependency, not a disposable CI broker.
+        exclude '**/CatalogKafkaPublishMySqlTest.class'
+    }
+}
