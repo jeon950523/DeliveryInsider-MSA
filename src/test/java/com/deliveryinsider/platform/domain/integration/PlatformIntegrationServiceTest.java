@@ -277,6 +277,7 @@ class PlatformIntegrationServiceTest {
                 && request.expectedCookingTime().equals(15)
         ));
         verify(mapper).insertMenu(result);
+        verify(inbox).requeueBlockedForMenuResolution();
     }
 
     @Test

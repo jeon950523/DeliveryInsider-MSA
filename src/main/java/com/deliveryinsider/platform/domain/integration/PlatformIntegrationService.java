@@ -382,13 +382,19 @@ public class PlatformIntegrationService {
         // Store menu creation is idempotent by operationKey. If this external menu was mapped
         // to an old/deleted internal menu, reconnect the existing mapping instead of inserting
         // a duplicate external identity.
-        return connectOrRebindMenu(
+        PlatformMenuMapping mapping = connectOrRebindMenu(
             storeId,
             platform,
             setting,
             created.id(),
             externalMenu.externalMenuId()
         );
+
+        // 새 내부 메뉴를 만든 경우에도 기존 메뉴 연결과 같은 재처리 계약을 지킨다.
+        // 같은 외부 메뉴를 가진 BLOCKED inbox는 메뉴 매핑이 완성된 뒤에만 안전하게
+        // 다시 처리할 수 있다.
+        inboxService.requeueBlockedForMenuResolution();
+        return mapping;
     }
 
     private PlatformMenuMapping saveMenu(long storeId, PlatformType platform, StorePlatformSetting setting,
