@@ -57,6 +57,9 @@ security:
   internal:
     api-key: ${GEMINI_API_KEY:}
 
+store-client:
+  base-url: ${STORE_CLIENT_BASE_URL:http://localhost:8092}
+
 logging:
   pattern:
     level: "%5p [traceId:%X{traceId:-}]"
