@@ -11,6 +11,7 @@ import {
 import {
   fetchIntegrations,
   fetchOwnedMenus,
+  fetchUnresolvedOrderMenus,
 } from '../../platform/connection/api/platformIntegrationApi.js';
 
 const router = useRouter();
@@ -25,6 +26,7 @@ const hasActivePlatformConnection = ref(false);
 const hasRegisteredMenus = ref(false);
 const platformConnectionError = ref('');
 const platformConnectionNoticeDismissed = ref(false);
+const unresolvedOrderMenus = ref([]);
 
 const platformNames = {
   BAEMIN: '배민',
@@ -258,6 +260,9 @@ const platformConnectionNotice = computed(() => {
   };
 });
 
+const unresolvedMenuSummary = computed(() => unresolvedOrderMenus.value
+  .reduce((total, item) => total + Number(item.blockedOrderCount || 0), 0));
+
 const apiStatusText = computed(() => {
   if (dashboardStore.isLoading) {
     return 'API 조회 중...';
@@ -289,14 +294,16 @@ const loadPlatformConnection = async () => {
     const managedErrorConfig = {
       skipServerErrorRedirect: true,
     };
-    const [integrationResponse, menuResponse] = await Promise.all([
+    const [integrationResponse, menuResponse, unresolvedResponse] = await Promise.all([
       fetchIntegrations(managedErrorConfig),
       fetchOwnedMenus(managedErrorConfig),
+      fetchUnresolvedOrderMenus(managedErrorConfig),
     ]);
     const integrations = integrationResponse?.data?.data;
     const menus = menuResponse?.data?.data;
+    const unresolved = unresolvedResponse?.data?.data;
 
-    if (!Array.isArray(integrations) || !Array.isArray(menus)) {
+    if (!Array.isArray(integrations) || !Array.isArray(menus) || !Array.isArray(unresolved)) {
       throw new TypeError('플랫폼 연결 또는 메뉴 목록 응답 형식이 올바르지 않습니다.');
     }
 
@@ -304,10 +311,12 @@ const loadPlatformConnection = async () => {
       && integrations.some((item) => item.enabled === true
         && Boolean(item.externalStoreId));
     hasRegisteredMenus.value = menus.length > 0;
+    unresolvedOrderMenus.value = unresolved;
     platformConnectionChecked.value = true;
   } catch (error) {
     console.warn('플랫폼 연결 상태 조회 실패:', error);
     platformConnectionError.value = '연결 여부를 미설정 상태로 판단하지 않았습니다. 서버 상태를 확인한 뒤 다시 조회해 주세요.';
+    unresolvedOrderMenus.value = [];
   }
 };
 
@@ -337,7 +346,14 @@ const goToSalesReport = () => {
 };
 
 const handleExport = () => router.push('/reports');
-const goToPlatformConnection = () => router.push({ path: '/store', query: { tab: 'platform' } });
+const goToPlatformConnection = (item = null) => router.push({
+  path: '/store',
+  query: {
+    tab: 'platform',
+    ...(item?.platformType ? { platform: item.platformType } : {}),
+    ...(item?.externalMenuId ? { externalMenuId: item.externalMenuId } : {}),
+  },
+});
 const handlePlatformNoticeAction = () => {
   if (platformConnectionNotice.value.isError) {
     loadPlatformConnection();
@@ -404,6 +420,19 @@ onBeforeUnmount(() => {
         <div class="platform-connection-notice__actions">
           <button type="button" class="sub-button" @click="platformConnectionNoticeDismissed = true">나중에</button>
           <button type="button" class="primary-button" @click="handlePlatformNoticeAction">{{ platformConnectionNotice.action }}</button>
+        </div>
+      </section>
+
+      <section v-if="unresolvedOrderMenus.length" class="menu-mapping-alert col-12" data-testid="dashboard-unresolved-order-menus">
+        <div>
+          <strong>메뉴 연결 대기 주문 {{ unresolvedMenuSummary }}건</strong>
+          <p>외부 메뉴가 내부 메뉴와 아직 연결되지 않아 주문 수신이 보류되었습니다. 연결을 완료하면 해당 주문은 안전하게 재처리됩니다.</p>
+          <ul>
+            <li v-for="item in unresolvedOrderMenus" :key="`${item.platformType}-${item.externalStoreId}-${item.externalMenuId}`">
+              {{ getPlatformName(item.platformType) }} · {{ item.menuName || item.externalMenuId }} · 보류 {{ item.blockedOrderCount }}건
+              <button type="button" class="sub-button" @click="goToPlatformConnection(item)">메뉴 연결하기</button>
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -596,6 +625,19 @@ onBeforeUnmount(() => {
   background-color: #ffffff;
 }
 .sub-button:hover { background-color: #f8fafc; color: #164e68; border-color: #87ceeb; }
+
+.menu-mapping-alert {
+  padding: 20px;
+  border: 1px solid #f59e0b;
+  border-radius: 14px;
+  background: #fffbeb;
+  color: #78350f;
+}
+.menu-mapping-alert strong { font-size: 18px; }
+.menu-mapping-alert p { margin: 8px 0; line-height: 1.55; }
+.menu-mapping-alert ul { margin: 0; padding-left: 20px; }
+.menu-mapping-alert li { margin-top: 8px; }
+.menu-mapping-alert .sub-button { min-height: 34px; margin-left: 8px; padding: 0 10px; font-size: 14px; }
 
 /* ============================================================
    그리드 시스템
