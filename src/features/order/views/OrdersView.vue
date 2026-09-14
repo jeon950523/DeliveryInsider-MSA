@@ -236,7 +236,16 @@ const getPlatformName = (type) => ({ BAEMIN: '배민', COUPANG_EATS: '쿠팡이�
 const getPlatformClass = (type) => ({ BAEMIN: 'baemin', COUPANG_EATS: 'coupang', YOGIYO: 'yogiyo', DDANGYO: 'ddangyo' }[type] || 'default');
 const getOrderStatusName = (status) => ({ WAITING: '접수대기', COOKING: '조리중', READY_FOR_PICKUP: '픽업대기', DELIVERING: '배달중', COMPLETED: '배달 완료', CANCELED: '취소' }[status] || status);
 const formatMoney = formatReportMoney;
-const formatCost = (amount) => amount == null ? '-' : formatMoney(-amount);
+const formatCost = (amount) => {
+  if (amount == null) return '-';
+  return Number(amount) === 0 ? formatMoney(0) : formatMoney(-amount);
+};
+const orderProfitLabel = (financialDataStatus) => ({
+  AVAILABLE: '추정 수익',
+  PROVISIONAL: '추정 수익 · 플랫폼 예상 비용 반영',
+  PARTIAL: '추정 수익 · 플랫폼 비용 일부 미확정',
+  UNAVAILABLE: '추정 수익 · 플랫폼 비용 미확정',
+}[financialDataStatus] || '추정 수익 · 플랫폼 비용 미확정');
 const formatTime = (dateTime) => formatKstTime(dateTime, '');
 const formatDateTime = (dateTime) => formatKstDateTime(dateTime, '');
 const formatDuration = (minutes) => formatDurationMinutes(minutes, {
@@ -1458,7 +1467,7 @@ const submitRefund = async () => {
             class="cost-row total"
             :class="{ negative: Number(selectedOrder.netProfit || 0) < 0 }"
           >
-            <span data-testid="order-profit-label">{{ selectedOrder.financialDataStatus === 'AVAILABLE' ? '추정 수익' : '추정 수익 · 플랫폼 비용 미반영' }}</span>
+            <span data-testid="order-profit-label">{{ orderProfitLabel(selectedOrder.financialDataStatus) }}</span>
             <strong>{{ formatMoney(selectedOrder.netProfit) }}</strong>
           </div>
         </div>

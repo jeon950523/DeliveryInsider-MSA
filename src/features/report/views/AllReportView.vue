@@ -1075,7 +1075,7 @@ onMounted(async () => {
             <thead>
               <tr>
                 <th>메뉴</th><th>판매수량</th><th>매출</th><th>원가</th><th>포장비</th>
-                <th>플랫폼 수수료</th><th>결제 수수료</th><th>점주 배달비</th><th>점주 쿠폰</th>
+                <th>플랫폼 수수료</th><th>결제 수수료</th><th>점주 배달비</th><th>점주 쿠폰</th><th>플랫폼 지원금</th>
                 <th>광고비 배분</th><th>추정 순수익</th><th>추정 수익률</th><th>금융 상태</th>
               </tr>
             </thead>
@@ -1090,12 +1090,13 @@ onMounted(async () => {
                 <td>{{ formatMoney(menu.paymentFee) }}</td>
                 <td>{{ formatMoney(menu.merchantDeliveryFee) }}</td>
                 <td>{{ formatMoney(menu.merchantCouponDiscount) }}</td>
+                <td>{{ formatMoney(menu.providerFundedDiscountAmount) }}</td>
                 <td>{{ formatMoney(menu.allocatedAdSpend) }}</td>
                 <td><strong class="profit-strong" :class="{ 'loss-text': Number(menu.estimatedNetProfit) < 0 }">{{ formatMoney(menu.estimatedNetProfit) }}</strong></td>
                 <td>{{ formatMarginRate(menu.estimatedMarginRate) }}</td>
                 <td><span class="financial-status-badge" :class="{ unavailable: menu.financialDataStatus === 'UNAVAILABLE' || menu.financialDataStatus === 'PARTIAL' }">{{ menu.financialDataStatus }}</span></td>
               </tr>
-              <tr v-if="estimatedMenuProfits.length === 0"><td colspan="13" class="empty-message">조건에 맞는 완료 주문 기반 메뉴 수익 데이터가 없습니다.</td></tr>
+              <tr v-if="estimatedMenuProfits.length === 0"><td colspan="14" class="empty-message">조건에 맞는 완료 주문 기반 메뉴 수익 데이터가 없습니다.</td></tr>
             </tbody>
           </table>
         </div>
