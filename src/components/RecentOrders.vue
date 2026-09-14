@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { ORDER_STATUS_LABELS } from '../constants/providers.js';
 import { resolveAllowedActions } from '../features/order/orderPayload.js';
 
@@ -57,12 +57,61 @@ const actionClass = {
 };
 
 const hasOrders = computed(() => props.orders.length > 0);
+const cancelTarget = ref(null);
+const cancelReasonCode = ref('CUSTOMER_CHANGED_MIND');
+const cancelReason = ref('');
+const cancelError = ref('');
+const cancelReasonOptions = [
+  { value: 'CUSTOMER_CHANGED_MIND', label: '고객 요청' },
+  { value: 'DUPLICATE_ORDER', label: '중복 주문' },
+  { value: 'ADDRESS_ISSUE', label: '주소 문제' },
+  { value: 'OUT_OF_STOCK', label: '재료/상품 문제' },
+  { value: 'STORE_CLOSED', label: '매장 운영 불가' },
+  { value: 'COOKING_DELAY', label: '조리 지연' },
+  { value: 'DELIVERY_DELAY', label: '배달 지연' },
+  { value: 'PAYMENT_ISSUE', label: '결제 문제' },
+  { value: 'MERCHANT_REQUEST', label: '매장 요청' },
+  { value: 'OTHER', label: '기타' },
+];
 
 const displayStatus = (order) => (
   order.status === 'CREATED' && order.operationStatus === 'COOKING'
     ? 'COOKING'
     : order.status
 );
+
+const requestStatusChange = (order, action) => {
+  if (action !== 'CANCELED') {
+    emit('change-status', order, action);
+    return;
+  }
+
+  cancelTarget.value = order;
+  cancelReasonCode.value = 'CUSTOMER_CHANGED_MIND';
+  cancelReason.value = '';
+  cancelError.value = '';
+};
+
+const closeCancelDialog = () => {
+  if (props.disabledOrderId === cancelTarget.value?.externalOrderId) return;
+  cancelTarget.value = null;
+  cancelReason.value = '';
+  cancelError.value = '';
+};
+
+const submitCancellation = () => {
+  const reason = cancelReason.value.trim();
+  if (!reason) {
+    cancelError.value = '취소 사유를 입력해 주세요.';
+    return;
+  }
+
+  emit('change-status', cancelTarget.value, 'CANCELED', {
+    cancelCode: cancelReasonCode.value,
+    cancelReason: reason,
+  });
+  closeCancelDialog();
+};
 </script>
 
 <template>
@@ -120,7 +169,7 @@ const displayStatus = (order) => (
             type="button"
             :class="actionClass[action]"
             :disabled="disabledOrderId === order.externalOrderId"
-            @click="emit('change-status', order, action)"
+            @click="requestStatusChange(order, action)"
           >
             {{ actionLabel[action] }}
           </button>
@@ -133,5 +182,34 @@ const displayStatus = (order) => (
         ? '선택한 외부 매장에 아직 생성한 주문이 없습니다.'
         : '외부 매장을 선택하면 최근 주문을 조회합니다.' }}
     </div>
+
+    <div v-if="cancelTarget" class="cancel-dialog-backdrop" role="presentation" @click.self="closeCancelDialog">
+      <section class="cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-dialog-title">
+        <h3 id="cancel-dialog-title">주문 취소</h3>
+        <p><strong>{{ cancelTarget.externalOrderId }}</strong> 주문의 취소 사유를 입력해 주세요.</p>
+        <label for="external-cancel-reason-code">취소 분류</label>
+        <select id="external-cancel-reason-code" v-model="cancelReasonCode">
+          <option v-for="option in cancelReasonOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+        <label for="external-cancel-reason">취소 사유 <span aria-hidden="true">*</span></label>
+        <textarea id="external-cancel-reason" v-model="cancelReason" rows="4" maxlength="500" placeholder="예: 고객 요청으로 주문을 취소합니다." @input="cancelError = ''"></textarea>
+        <p v-if="cancelError" class="cancel-dialog__error" role="alert">{{ cancelError }}</p>
+        <div class="cancel-dialog__actions">
+          <button type="button" class="secondary-button" @click="closeCancelDialog">닫기</button>
+          <button type="button" class="action-button action-button--danger" :disabled="disabledOrderId === cancelTarget.externalOrderId" @click="submitCancellation">
+            {{ disabledOrderId === cancelTarget.externalOrderId ? '처리 중...' : '주문 취소' }}
+          </button>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
+
+<style scoped>
+.cancel-dialog-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(15, 23, 42, .45); }
+.cancel-dialog { width: min(100%, 440px); padding: 22px; border-radius: 14px; background: #fff; color: #0f172a; box-shadow: 0 20px 60px rgba(15, 23, 42, .28); }
+.cancel-dialog h3 { margin: 0 0 10px; } .cancel-dialog p { line-height: 1.55; }
+.cancel-dialog label { display: block; margin: 16px 0 7px; font-weight: 700; } .cancel-dialog label span { color: #dc2626; }
+.cancel-dialog textarea, .cancel-dialog select { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }.cancel-dialog textarea { resize: vertical; }
+.cancel-dialog__error { color: #b91c1c; font-size: 13px; }.cancel-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+</style>
