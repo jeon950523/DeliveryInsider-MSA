@@ -3,6 +3,7 @@ package com.deliveryinsider.notification.global.config;
 import com.deliveryinsider.notification.global.websocket.StoreSubscriptionAuthorizationInterceptor;
 import com.deliveryinsider.notification.global.websocket.WebSocketTicketHandshakeInterceptor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -21,6 +22,9 @@ public class WebSocketConfig
 
     private final StoreSubscriptionAuthorizationInterceptor
         subscriptionAuthorizationInterceptor;
+
+    @Value("${WEBSOCKET_ALLOWED_ORIGIN_PATTERNS:http://localhost:*}")
+    private String[] allowedOriginPatterns;
 
     @Override
     public void configureMessageBroker(
@@ -44,7 +48,7 @@ public class WebSocketConfig
                 ticketHandshakeInterceptor
             )
             .setAllowedOriginPatterns(
-                "http://localhost:*"
+                allowedOriginPatterns
             );
     }
 
