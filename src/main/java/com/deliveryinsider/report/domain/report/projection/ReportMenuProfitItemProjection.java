@@ -14,6 +14,7 @@ public class ReportMenuProfitItemProjection {
     private String externalStoreId;
     private String financialDataStatus;
     private Long orderGrossAmount;
+    private Long providerFundedDiscount;
     private Long menuId;
     private String menuName;
     private long quantity;

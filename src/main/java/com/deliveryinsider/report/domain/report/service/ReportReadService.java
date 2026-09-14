@@ -107,12 +107,14 @@ public class ReportReadService {
             summary.getGrossOrderAmount(),
             summary.getCustomerPaidAmount(),
             summary.getProviderChargeAmount(),
+            summary.getProviderFundedDiscountAmount(),
             summary.getEstimatedMenuCost(),
             summary.getEstimatedPackagingCost(),
             summary.getGrossOrderAmount()
                 - (summary.getProviderChargeAmount() == null
                     ? 0
                     : summary.getProviderChargeAmount())
+                + summary.getProviderFundedDiscountAmount()
                 - summary.getEstimatedMenuCost()
                 - summary.getEstimatedPackagingCost(),
             financialDataStatuses

@@ -15,9 +15,46 @@ public record ReportMenuEstimatedProfitResponse(
     long paymentFee,
     long merchantDeliveryFee,
     long merchantCouponDiscount,
+    long providerFundedDiscountAmount,
     long allocatedAdSpend,
     long estimatedNetProfit,
     BigDecimal estimatedMarginRate,
     String financialDataStatus
 ) {
+    public ReportMenuEstimatedProfitResponse(
+        Long menuId,
+        String menuName,
+        long orderCount,
+        long quantity,
+        long grossSales,
+        long costOfGoods,
+        long packagingCost,
+        long platformCommission,
+        long paymentFee,
+        long merchantDeliveryFee,
+        long merchantCouponDiscount,
+        long allocatedAdSpend,
+        long estimatedNetProfit,
+        BigDecimal estimatedMarginRate,
+        String financialDataStatus
+    ) {
+        this(
+            menuId,
+            menuName,
+            orderCount,
+            quantity,
+            grossSales,
+            costOfGoods,
+            packagingCost,
+            platformCommission,
+            paymentFee,
+            merchantDeliveryFee,
+            merchantCouponDiscount,
+            0,
+            allocatedAdSpend,
+            estimatedNetProfit,
+            estimatedMarginRate,
+            financialDataStatus
+        );
+    }
 }

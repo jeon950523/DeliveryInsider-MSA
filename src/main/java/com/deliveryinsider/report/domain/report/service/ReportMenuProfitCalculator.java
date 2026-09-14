@@ -80,6 +80,30 @@ public class ReportMenuProfitCalculator {
         for (ReportMenuProfitChargeProjection charge : orderCharges) {
             allocateCharge(charge, sortedItems, allocated, allocationBasis);
         }
+
+        allocateProviderSupport(
+            sortedItems.getFirst().getProviderFundedDiscount(),
+            sortedItems,
+            allocated,
+            allocationBasis
+        );
+    }
+
+    private void allocateProviderSupport(
+        Long providerFundedDiscount,
+        List<ReportMenuProfitItemProjection> items,
+        List<MutableMenuProfit> totals,
+        long allocationBasis
+    ) {
+        long support = providerFundedDiscount == null ? 0 : providerFundedDiscount;
+        long assigned = 0;
+        for (int index = 0; index < items.size(); index++) {
+            long allocation = index == items.size() - 1
+                ? support - assigned
+                : proportional(support, items.get(index).getGrossSales(), allocationBasis);
+            assigned += allocation;
+            totals.get(index).addProviderSupport(allocation);
+        }
     }
 
     private void allocateCharge(
@@ -164,6 +188,7 @@ public class ReportMenuProfitCalculator {
         private long paymentFee;
         private long merchantDeliveryFee;
         private long merchantCouponDiscount;
+        private long providerFundedDiscountAmount;
         private long allocatedAdSpend;
         private String financialDataStatus = "PROVISIONAL";
 
@@ -194,6 +219,10 @@ public class ReportMenuProfitCalculator {
             }
         }
 
+        private void addProviderSupport(long amount) {
+            providerFundedDiscountAmount += amount;
+        }
+
         private void mergeStatus(String candidate) {
             String normalized = candidate == null || candidate.isBlank() ? "UNAVAILABLE" : candidate;
             if (statusRank(normalized) > statusRank(financialDataStatus)) {
@@ -204,14 +233,15 @@ public class ReportMenuProfitCalculator {
         private ReportMenuEstimatedProfitResponse toResponse() {
             long estimatedNet = grossSales - costOfGoods - packagingCost
                 - platformCommission - paymentFee - merchantDeliveryFee
-                - merchantCouponDiscount - allocatedAdSpend;
+                - merchantCouponDiscount + providerFundedDiscountAmount
+                - allocatedAdSpend;
             BigDecimal marginRate = grossSales == 0 ? null : BigDecimal.valueOf(estimatedNet)
                 .multiply(BigDecimal.valueOf(100))
                 .divide(BigDecimal.valueOf(grossSales), 2, RoundingMode.HALF_UP);
             return new ReportMenuEstimatedProfitResponse(
                 key.menuId, key.menuName, orderIds.size(), quantity, grossSales,
                 costOfGoods, packagingCost, platformCommission, paymentFee,
-                merchantDeliveryFee, merchantCouponDiscount, allocatedAdSpend,
+                merchantDeliveryFee, merchantCouponDiscount, providerFundedDiscountAmount, allocatedAdSpend,
                 estimatedNet, marginRate, financialDataStatus
             );
         }

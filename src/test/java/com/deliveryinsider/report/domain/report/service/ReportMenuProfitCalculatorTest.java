@@ -40,8 +40,9 @@ class ReportMenuProfitCalculatorTest {
         assertEquals(15L, profits.stream().mapToLong(p -> p.paymentFee()).sum());
         assertEquals(10L, profits.stream().mapToLong(p -> p.merchantDeliveryFee()).sum());
         assertEquals(9L, profits.stream().mapToLong(p -> p.merchantCouponDiscount()).sum());
+        assertEquals(12L, profits.stream().mapToLong(p -> p.providerFundedDiscountAmount()).sum());
         assertEquals(11L, profits.stream().mapToLong(p -> p.allocatedAdSpend()).sum());
-        assertEquals(70L, profits.stream().mapToLong(p -> p.estimatedNetProfit()).sum());
+        assertEquals(82L, profits.stream().mapToLong(p -> p.estimatedNetProfit()).sum());
     }
 
     private ReportMenuProfitItemProjection item(
@@ -57,6 +58,7 @@ class ReportMenuProfitCalculatorTest {
         item.setExternalStoreId("BAE-STORE-004");
         item.setFinancialDataStatus("PROVISIONAL");
         item.setOrderGrossAmount(200L);
+        item.setProviderFundedDiscount(12L);
         item.setMenuId(menuId);
         item.setMenuName(menuName);
         item.setQuantity(1L);

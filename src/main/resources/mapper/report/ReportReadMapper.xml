@@ -34,6 +34,10 @@
                 property="providerChargeAmount"/>
 
         <result
+                column="provider_funded_discount_amount"
+                property="providerFundedDiscountAmount"/>
+
+        <result
                 column="estimated_menu_cost"
                 property="estimatedMenuCost"/>
 
@@ -78,7 +82,8 @@
         ro.order_id,
         ro.status,
         ro.gross_order_amount,
-        ro.customer_paid_amount
+        ro.customer_paid_amount,
+        ro.provider_funded_discount
 
         FROM report_orders ro
 
@@ -177,7 +182,18 @@
         ) AS gross_order_amount,
 
         <!-- Sum only acquired values; no acquired financial data is null, not a confirmed zero. -->
-        SUM(CASE WHEN fo.status = 'DELIVERED' THEN fo.customer_paid_amount END) AS customer_paid_amount
+        SUM(CASE WHEN fo.status = 'DELIVERED' THEN fo.customer_paid_amount END) AS customer_paid_amount,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN fo.status = 'DELIVERED'
+        THEN COALESCE(fo.provider_funded_discount, 0)
+        ELSE 0
+        END
+        ),
+        0
+        ) AS provider_funded_discount_amount
 
         FROM filtered_orders fo
 
@@ -217,6 +233,8 @@
         os.customer_paid_amount,
 
         cc.provider_charge_amount,
+
+        os.provider_funded_discount_amount,
 
         COALESCE(
         cit.estimated_menu_cost,
@@ -537,6 +555,7 @@
             )
         ) AS gross_order_amount,
         ro.customer_paid_amount,
+        COALESCE(ro.provider_funded_discount, 0) AS provider_funded_discount,
         ro.provider_financial_data_status
         FROM report_orders ro
         WHERE ro.store_id = #{storeId}
@@ -602,6 +621,17 @@
         ),
         0
         ) AS customerPaidAmount,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN status = 'DELIVERED'
+        THEN provider_funded_discount
+        ELSE 0
+        END
+        ),
+        0
+        ) AS providerFundedDiscountAmount,
 
         GROUP_CONCAT(
         DISTINCT
@@ -672,6 +702,8 @@
         c.providerChargeAmount,
         0
         ) AS providerChargeAmount,
+
+        d.providerFundedDiscountAmount,
 
         COALESCE(
         i.estimatedMenuCost,
@@ -777,6 +809,7 @@
             ro.external_store_id AS externalStoreId,
             ro.provider_financial_data_status AS financialDataStatus,
             ro.gross_order_amount AS orderGrossAmount,
+            ro.provider_funded_discount AS providerFundedDiscount,
             ri.menu_id AS menuId,
             ri.menu_name AS menuName,
             ri.quantity AS quantity,

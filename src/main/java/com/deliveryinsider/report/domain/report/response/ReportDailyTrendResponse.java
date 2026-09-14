@@ -14,6 +14,7 @@ public record ReportDailyTrendResponse(
     long grossSales,
     long customerPaidAmount,
     long providerChargeAmount,
+    long providerFundedDiscountAmount,
     long estimatedMenuCost,
     long estimatedPackagingCost,
     long estimatedNetProfit,
@@ -31,15 +32,46 @@ public record ReportDailyTrendResponse(
             projection.getGrossSales(),
             projection.getCustomerPaidAmount(),
             projection.getProviderChargeAmount(),
+            projection.getProviderFundedDiscountAmount(),
             projection.getEstimatedMenuCost(),
             projection.getEstimatedPackagingCost(),
             projection.getGrossSales()
                 - projection.getProviderChargeAmount()
+                + projection.getProviderFundedDiscountAmount()
                 - projection.getEstimatedMenuCost()
                 - projection.getEstimatedPackagingCost(),
             parseStatuses(
                 projection.getFinancialDataStatusesCsv()
             )
+        );
+    }
+
+    public ReportDailyTrendResponse(
+        LocalDate reportDate,
+        long totalOrderCount,
+        long completedOrderCount,
+        long canceledOrderCount,
+        long grossSales,
+        long customerPaidAmount,
+        long providerChargeAmount,
+        long estimatedMenuCost,
+        long estimatedPackagingCost,
+        long estimatedNetProfit,
+        List<String> financialDataStatuses
+    ) {
+        this(
+            reportDate,
+            totalOrderCount,
+            completedOrderCount,
+            canceledOrderCount,
+            grossSales,
+            customerPaidAmount,
+            providerChargeAmount,
+            0,
+            estimatedMenuCost,
+            estimatedPackagingCost,
+            estimatedNetProfit,
+            financialDataStatuses
         );
     }
 

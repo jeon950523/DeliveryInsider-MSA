@@ -20,6 +20,7 @@ public class ReportDailyTrendProjection {
     private long grossSales;
     private long customerPaidAmount;
     private long providerChargeAmount;
+    private long providerFundedDiscountAmount;
 
     private long estimatedMenuCost;
     private long estimatedPackagingCost;

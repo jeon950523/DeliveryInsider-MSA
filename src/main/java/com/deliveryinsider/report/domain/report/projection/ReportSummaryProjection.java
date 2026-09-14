@@ -18,6 +18,8 @@ public class ReportSummaryProjection {
 
     private Long providerChargeAmount;
 
+    private long providerFundedDiscountAmount;
+
     private long estimatedMenuCost;
     private long estimatedPackagingCost;
 }
