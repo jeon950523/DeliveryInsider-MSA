@@ -55,8 +55,10 @@ pipeline {
                         dir('source') {
                             sh '''
                                 set -eu
-                                npm ci
-                                VITE_EXTERNAL_API_BASE_URL="$EXTERNAL_API_BASE_URL" VITE_APP_BASE_PATH=/simulator/ npm run build
+                                docker build --target build \
+                                  --build-arg VITE_EXTERNAL_API_BASE_URL="$EXTERNAL_API_BASE_URL" \
+                                  --build-arg VITE_APP_BASE_PATH=/simulator/ \
+                                  -t "$IMAGE_ROOT/${SERVICE_NAME}-build-check:$BUILD_NUMBER" .
                             '''
                         }
                     } else {
