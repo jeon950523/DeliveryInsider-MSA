@@ -1011,8 +1011,8 @@ const submitRefund = async () => {
     <header class="page-header">
       <div>
         <span class="category-text">TODAY ORDER</span>
-        <h1>통합 주문 관리</h1>
-        <p>당일 주문 상태와 예외를 한눈에 관제합니다. 이전 주문 내역은 운영 리포트에서 조회하세요.</p>
+        <h1>통합 주문 현황</h1>
+        <p>특정 주문의 현재 상태, 외부 이벤트 흐름, 취소 결과를 조회합니다. 기간 분석은 운영 리포트에서 확인하세요.</p>
       </div>
       <div class="header-actions">
         <button
@@ -1060,7 +1060,6 @@ const submitRefund = async () => {
 
         <div class="new-order-actions">
           <button
-            v-if="canCancelOrder(nextWaitingOrder)"
             type="button"
             class="sub-button"
             @click="selectOrderAndScroll(nextWaitingOrder)"
@@ -1069,6 +1068,7 @@ const submitRefund = async () => {
           </button>
 
           <button
+            v-if="canCancelOrder(nextWaitingOrder)"
             type="button"
             class="danger-button"
             :disabled="orderStore.changingOrderId === nextWaitingOrder.id"
@@ -1346,7 +1346,8 @@ const submitRefund = async () => {
         </div>
 
         <div class="detail-section processing-time-section">
-          <h3>처리시간</h3>
+          <h3>외부 플랫폼 이벤트 타임라인</h3>
+          <p class="timeline-description">DeliveryInsider가 직접 변경한 단계가 아니라 외부 플랫폼에서 수신한 이벤트 시각입니다.</p>
 
           <div class="processing-summary">
             <div>
@@ -1386,12 +1387,18 @@ const submitRefund = async () => {
             </div>
           </div>
 
-          <div class="processing-timeline">
+          <div class="processing-timeline" v-if="selectedOrder.orderStatus !== 'CANCELED'">
             <span>접수 {{ selectedOrder.orderedAt || '-' }}</span>
             <span>조리시작 {{ selectedOrder.cookingStartedAt || '-' }}</span>
             <span>조리완료 {{ selectedOrder.readyForPickupAt || '-' }}</span>
             <span>픽업 {{ selectedOrder.pickedUpAt || '-' }}</span>
             <span>배달 완료 {{ selectedOrder.completedAt || '-' }}</span>
+          </div>
+          <div v-else class="processing-timeline terminal-cancel-timeline">
+            <span>접수 {{ selectedOrder.orderedAt || '-' }}</span>
+            <span>조리시작 {{ selectedOrder.cookingStartedAt || '-' }}</span>
+            <span>외부 플랫폼 취소 {{ selectedOrder.canceledAt || '-' }}</span>
+            <span>사유 {{ selectedOrder.cancelReasonText || selectedOrder.cancelReason || '-' }}</span>
           </div>
         </div>
 
@@ -2700,6 +2707,18 @@ const submitRefund = async () => {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+}
+
+.timeline-description {
+  margin: -4px 0 14px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.terminal-cancel-timeline {
+  border-color: #fecaca;
+  background: #fff7f7;
 }
 
 .processing-timeline span {

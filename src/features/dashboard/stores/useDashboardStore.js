@@ -47,10 +47,10 @@ export const useDashboardStore = defineStore('dashboard', () => {
       operationSummary.value = null;
       todayOrders.value = [];
       lastUpdatedAt.value = null;
-      loadError.value = '실시간 운영 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      loadError.value = '현재 운영 상황을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
 
       if (shouldAlert) {
-        alert('실시간 운영 대시보드 조회에 실패했습니다.');
+        alert('현재 운영 상황 조회에 실패했습니다.');
       }
 
       throw error;

@@ -156,17 +156,17 @@ const routes = [
     path: '/dashboard',
     name: 'dashboard',
     component: DashboardView,
-    meta: { isAuthenticated: true, title: '실시간 운영 대시보드' },
+    meta: { isAuthenticated: true, title: '현재 운영 상황' },
   },
 
   /*
-   * 통합 주문 관리
+   * 통합 주문 현황
    */
   {
     path: '/orders',
     name: 'orders',
     component: OrdersView,
-    meta: { isAuthenticated: true, title: '통합 주문 관리' },
+    meta: { isAuthenticated: true, title: '통합 주문 현황' },
   },
 
   /*

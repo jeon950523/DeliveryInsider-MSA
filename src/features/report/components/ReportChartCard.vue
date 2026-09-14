@@ -30,6 +30,7 @@ const props = defineProps({
   description: { type: String, required: true },
   chartType: { type: String, default: 'line' },
   labels: { type: Array, default: () => [] },
+  tooltipLabels: { type: Array, default: () => [] },
   datasets: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
   error: { type: String, default: '' },
@@ -108,6 +109,10 @@ const chartOptions = computed(() => {
         displayColors: true,
         padding: 12,
         callbacks: {
+          title: (items) => {
+            const index = items[0]?.dataIndex;
+            return props.tooltipLabels[index] || items[0]?.label || '';
+          },
           label: (context) => {
             const unit = context.dataset.unit || 'count';
             return `${context.dataset.label}: ${formatValue(context.raw, unit)}`;

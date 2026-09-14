@@ -273,65 +273,90 @@ const chartDateLabels = computed(() => dailyTrend.value.map((point) => {
   return month && day ? `${month}.${day}` : value;
 }));
 
+const chartTooltipLabels = computed(() => dailyTrend.value.map((point) => (
+  String(point.reportDate || '').replaceAll('-', '.')
+)));
+
+const isSingleDayTrend = computed(() => dailyTrend.value.length === 1);
+
+const formatAppliedDate = (value) => String(value || '').replaceAll('-', '.');
+
+const appliedPeriodContext = computed(() => {
+  const currentFilters = appliedFilters.value;
+  const start = currentFilters.startDate;
+  const end = currentFilters.endDate;
+  const platformName = currentFilters.platform
+    ? platformNames[currentFilters.platform]
+    : '전체 플랫폼';
+
+  if (!start || !end) {
+    return `조회 기간 전체 · ${platformName}`;
+  }
+
+  const startAt = Date.parse(`${start}T00:00:00Z`);
+  const endAt = Date.parse(`${end}T00:00:00Z`);
+  const dayCount = Number.isNaN(startAt) || Number.isNaN(endAt)
+    ? ''
+    : ` · ${Math.floor((endAt - startAt) / 86_400_000) + 1}일`;
+
+  return `조회 기간 ${formatAppliedDate(start)} ~ ${formatAppliedDate(end)}${dayCount} · ${platformName}`;
+});
+
 const revenueChartDatasets = computed(() => [
   {
+    type: 'bar',
     label: '매출',
     data: dailyTrend.value.map((point) => Number(point.grossSales || 0)),
     unit: 'currency',
-    borderColor: '#2784b8',
-    backgroundColor: 'rgba(39, 132, 184, 0.12)',
-    pointBackgroundColor: '#2784b8',
-    pointStyle: 'circle',
-    pointRadius: 4,
-    borderWidth: 2,
-    tension: 0.28,
-    fill: true,
+    borderColor: '#1f6f99',
+    backgroundColor: 'rgba(39, 132, 184, 0.72)',
+    borderWidth: 1,
+    borderRadius: 7,
+    maxBarThickness: 54,
   },
   {
+    type: isSingleDayTrend.value ? 'bar' : 'line',
     label: '추정 순수익',
     data: dailyTrend.value.map((point) => Number(point.estimatedNetProfit || 0)),
     unit: 'currency',
     borderColor: '#16a34a',
-    backgroundColor: 'rgba(22, 163, 74, 0.08)',
-    pointBackgroundColor: '#ffffff',
+    backgroundColor: isSingleDayTrend.value
+      ? 'rgba(22, 163, 74, 0.72)'
+      : 'rgba(22, 163, 74, 0.08)',
+    pointBackgroundColor: '#16a34a',
     pointBorderColor: '#16a34a',
     pointStyle: 'rectRot',
     pointRadius: 5,
     borderWidth: 2,
-    borderDash: [6, 4],
     tension: 0.28,
     fill: false,
+    borderRadius: isSingleDayTrend.value ? 7 : undefined,
+    maxBarThickness: isSingleDayTrend.value ? 54 : undefined,
   },
 ]);
 
 const orderChartDatasets = computed(() => [
   {
+    type: 'bar',
     label: '주문 수',
     data: dailyTrend.value.map((point) => Number(point.totalOrderCount || 0)),
     unit: 'count',
-    borderColor: '#7c3aed',
-    backgroundColor: 'rgba(124, 58, 237, 0.1)',
-    pointBackgroundColor: '#7c3aed',
-    pointStyle: 'circle',
-    pointRadius: 4,
-    borderWidth: 2,
-    tension: 0.28,
-    fill: true,
+    borderColor: '#6d28d9',
+    backgroundColor: 'rgba(124, 58, 237, 0.72)',
+    borderWidth: 1,
+    borderRadius: 7,
+    maxBarThickness: 54,
   },
   {
+    type: 'bar',
     label: '취소 수',
     data: dailyTrend.value.map((point) => Number(point.canceledOrderCount || 0)),
     unit: 'count',
-    borderColor: '#dc2626',
-    backgroundColor: 'rgba(220, 38, 38, 0.08)',
-    pointBackgroundColor: '#ffffff',
-    pointBorderColor: '#dc2626',
-    pointStyle: 'triangle',
-    pointRadius: 5,
-    borderWidth: 2,
-    borderDash: [6, 4],
-    tension: 0.28,
-    fill: false,
+    borderColor: '#b91c1c',
+    backgroundColor: 'rgba(220, 38, 38, 0.72)',
+    borderWidth: 1,
+    borderRadius: 7,
+    maxBarThickness: 54,
   },
 ]);
 
@@ -557,6 +582,10 @@ const clearFilters = async () => {
 };
 
 const exportExcel = async (type = '전체') => {
+  if (reportStore.isExporting) {
+    return;
+  }
+
   if (!canUseExport.value) {
     showExportPremiumGate.value = true;
     return;
@@ -579,6 +608,16 @@ const exportExcel = async (type = '전체') => {
   }
 
   if (type === '환불') {
+    exportFilters.historyType = 'REFUND_REQUESTED';
+  }
+
+  // 화면에서 적용된 이력 필터도 export에 동일하게 전달한다.
+  if (type === '전체' && exportFilters.risk === 'CANCEL') {
+    exportFilters.status = 'CANCELED';
+    exportFilters.historyType = 'CANCELED';
+  }
+
+  if (type === '전체' && exportFilters.risk === 'REFUND') {
     exportFilters.historyType = 'REFUND_REQUESTED';
   }
 
@@ -734,6 +773,15 @@ onMounted(async () => {
       <button type="button" class="primary-button" @click="moveToBilling">Standard 플랜 보기</button>
     </section>
 
+    <section
+      v-if="reportStore.exportError"
+      class="report-export-error"
+      role="alert"
+      data-testid="report-export-error"
+    >
+      {{ reportStore.exportError }}
+    </section>
+
     <section class="card report-overview-filter" aria-labelledby="report-period-filter-title">
       <div class="report-overview-filter-header">
         <div class="title-area">
@@ -830,12 +878,20 @@ onMounted(async () => {
       플랫폼 금융 정보가 일부 미확보되어 매출과 추정 순수익은 현재 확보된 주문 스냅샷 기준입니다. 미확보 비용을 0원 확정치로 간주하지 않습니다.
     </p>
 
+    <p class="report-period-context" data-testid="report-period-context">
+      {{ appliedPeriodContext }}
+    </p>
+
     <section class="report-chart-grid" aria-label="운영 추이 차트">
       <ReportChartCard
         chart-id="revenue-profit-trend"
-        title="매출 / 추정 순수익 추이"
-        description="완료 주문의 일별 매출과 Report가 계산한 추정 순수익을 비교합니다."
+        :title="isSingleDayTrend ? '매출 / 추정 순수익 비교' : '매출 / 추정 순수익 추이'"
+        :description="isSingleDayTrend
+          ? '선택한 하루의 매출과 추정 순수익을 막대로 비교합니다.'
+          : '매출은 막대, 추정 순수익은 선으로 일별 흐름을 비교합니다.'"
+        chart-type="bar"
         :labels="chartDateLabels"
+        :tooltip-labels="chartTooltipLabels"
         :datasets="revenueChartDatasets"
         :loading="reportStore.isLoading"
         :error="reportStore.loadError"
@@ -847,9 +903,11 @@ onMounted(async () => {
       />
       <ReportChartCard
         chart-id="order-cancel-trend"
-        title="주문 / 취소 추이"
-        description="같은 조회 기간의 전체 주문 수와 취소 주문 수를 일별로 비교합니다."
+        :title="isSingleDayTrend ? '주문 / 취소 비교' : '주문 / 취소 추이'"
+        description="전체 주문 수와 취소 주문 수를 같은 기준의 묶음 막대로 비교합니다."
+        chart-type="bar"
         :labels="chartDateLabels"
+        :tooltip-labels="chartTooltipLabels"
         :datasets="orderChartDatasets"
         :loading="reportStore.isLoading"
         :error="reportStore.loadError"
@@ -914,7 +972,7 @@ onMounted(async () => {
             <h2>매출 리포트</h2>
             <p class="required-note">Report Projection의 완료 주문 금액과 정산정보 상태를 확인합니다. 플랫폼 정산정보가 없는 주문은 Item 주문금액을 매출로 보완합니다.</p>
           </div>
-          <button class="primary-button" @click="exportExcel('매출')">매출 내보내기</button>
+          <button class="primary-button" :disabled="reportStore.isExporting" @click="exportExcel('매출')">매출 내보내기</button>
         </div>
 
         <div class="table-scroll">
@@ -1168,10 +1226,10 @@ onMounted(async () => {
       </div>
 
       <div class="header-actions">
-        <button class="sub-button" @click="exportExcel('취소')">
+        <button class="sub-button" :disabled="reportStore.isExporting" @click="exportExcel('취소')">
           취소 Excel
         </button>
-        <button class="primary-button" @click="exportExcel('환불')">
+        <button class="primary-button" :disabled="reportStore.isExporting" @click="exportExcel('환불')">
           환불 Excel
         </button>
       </div>
@@ -1256,7 +1314,7 @@ onMounted(async () => {
           <h2>플랫폼별 운영 요약</h2>
           <p class="required-note">현재 조회 기간의 주문 건수, 완료 매출과 실제 평균 처리시간을 비교합니다.</p>
         </div>
-        <button class="primary-button" @click="exportExcel('플랫폼 정산')">현재 조건 Excel 내보내기</button>
+        <button class="primary-button" :disabled="reportStore.isExporting" @click="exportExcel('플랫폼 정산')">현재 조건 Excel 내보내기</button>
       </div>
       <div class="table-scroll">
         <table class="data-table">
@@ -1433,7 +1491,7 @@ onMounted(async () => {
               <h2>현재 필터 결과 전체 내보내기</h2>
               <p class="required-note">조회 완료된 기간, 플랫폼, 상태, 검색어 조건을 그대로 적용합니다.</p>
             </div>
-          <button class="primary-button" @click="exportExcel('전체')">필터 결과 전체 Excel 생성</button>
+          <button class="primary-button" :disabled="reportStore.isExporting" @click="exportExcel('전체')">필터 결과 전체 Excel 생성</button>
           </div>
           <div class="info-banner" style="margin-bottom:0;">{{ filterSummaryText }} · 총 {{ filteredOrders.length }}건</div>
         </article>
@@ -1441,19 +1499,19 @@ onMounted(async () => {
         <article class="card col-4 export-card">
           <h3>매출 내보내기</h3>
           <p>현재 필터 결과 중 완료 주문 {{ salesOrders.length }}건의 상세 매출 항목을 저장합니다.</p>
-          <button class="primary-button card-button" @click="exportExcel('매출')">필터 매출 Excel 생성</button>
+          <button class="primary-button card-button" :disabled="reportStore.isExporting" @click="exportExcel('매출')">필터 매출 Excel 생성</button>
         </article>
         
         <article class="card col-4 export-card">
           <h3>취소 이력 내보내기</h3>
           <p>현재 필터 결과 중 취소 이력 {{ cancellationHistory.length }}건의 상세 사유를 저장합니다.</p>
-          <button class="primary-button card-button" @click="exportExcel('취소')">필터 취소 Excel 생성</button>
+          <button class="primary-button card-button" :disabled="reportStore.isExporting" @click="exportExcel('취소')">필터 취소 Excel 생성</button>
         </article>
 
         <article class="card col-4 export-card">
           <h3>환불 이력 내보내기</h3>
           <p>현재 필터 결과 중 환불 요청 이력 {{ refundHistory.length }}건의 상세 사유를 저장합니다.</p>
-          <button class="primary-button card-button" @click="exportExcel('환불')">
+          <button class="primary-button card-button" :disabled="reportStore.isExporting" @click="exportExcel('환불')">
             필터 환불 Excel 생성
           </button>
         </article>
@@ -1461,7 +1519,7 @@ onMounted(async () => {
         <article class="card col-4 export-card">
           <h3>플랫폼 정산 요약</h3>
           <p>현재 필터 결과 기준 플랫폼별 요약 통계를 저장합니다.</p>
-          <button class="primary-button card-button" @click="exportExcel('플랫폼 정산')">필터 정산 Excel 생성</button>
+          <button class="primary-button card-button" :disabled="reportStore.isExporting" @click="exportExcel('플랫폼 정산')">필터 정산 Excel 생성</button>
         </article>
 
         <article class="card col-12">
@@ -2907,6 +2965,28 @@ onMounted(async () => {
   color: #64748b;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.report-period-context {
+  margin: 22px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+  color: #164e68;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.report-export-error {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fff7f7;
+  color: #b91c1c;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .menu-profit-table {

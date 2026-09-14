@@ -34,7 +34,7 @@ const steps = [
   {
     route: '/orders',
     selector: '[data-tour="order-management"]',
-    title: '통합 주문 관리',
+    title: '통합 주문 현황',
     body: '외부 플랫폼에서 처리되는 주문 상태를 한 화면에서 확인하고 예외 상황을 관리합니다.',
   },
   {

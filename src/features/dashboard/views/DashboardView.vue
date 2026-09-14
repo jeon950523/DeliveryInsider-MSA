@@ -386,19 +386,19 @@ onBeforeUnmount(() => {
           <span class="status-dot"></span>
           {{ apiStatusText }}
         </div>
-        <h1>실시간 운영 대시보드</h1>
-        <p>먼저 들어온 주문과 실제 처리시간을 기준으로 현재 운영 상황을 확인하세요.</p>
+        <h1>현재 운영 상황</h1>
+        <p>지금 먼저 확인할 주문·예외·연결 상태를 한눈에 확인하세요.</p>
       </div>
 
       <div class="header-actions">
         <button type="button" class="sub-button" @click="router.push('/reports')">운영 리포트</button>
         <button type="button" class="sub-button" @click="refreshDashboard">새로고침</button>
-        <button type="button" class="primary-button" @click="handleExport">리포트/엑셀 확인</button>
+        <button type="button" class="primary-button" @click="handleExport">운영 리포트 보기</button>
       </div>
     </header>
 
     <main v-if="dashboardStore.loadError" class="dashboard-error-state" data-testid="dashboard-error-state">
-      <strong>실시간 운영 정보를 불러오지 못했습니다.</strong>
+      <strong>현재 운영 상황을 불러오지 못했습니다.</strong>
       <p>{{ dashboardStore.loadError }}</p>
       <button type="button" class="primary-button" @click="loadDashboard">다시 시도</button>
     </main>
@@ -462,7 +462,7 @@ onBeforeUnmount(() => {
 
       <div class="detail-card col-6">
         <div class="detail-header">
-          <h3>진행 주문</h3>
+          <h3>우선 확인 진행 주문</h3>
           <span class="text-muted">접수순 {{ priorityOrders.length }}건</span>
         </div>
 

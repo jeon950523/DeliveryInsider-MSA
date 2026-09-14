@@ -53,6 +53,43 @@ const PROVIDER_STATUS_TO_UI_STATUS = {
   CANCELED: 'CANCELED',
 };
 
+const XLSX_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+const readContentDispositionFilename = (value) => {
+  const header = String(value || '');
+  const encoded = header.match(/filename\*=UTF-8''([^;]+)/i);
+
+  if (encoded?.[1]) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      return 'DeliveryInsider_Report.xlsx';
+    }
+  }
+
+  const plain = header.match(/filename="?([^";]+)"?/i);
+  return plain?.[1] || 'DeliveryInsider_Report.xlsx';
+};
+
+const getExportErrorMessage = async (error) => {
+  if (error?.response?.status === 403) {
+    return '현재 요금제에서는 Excel 내보내기를 사용할 수 없습니다.';
+  }
+
+  const body = error?.response?.data;
+  if (body instanceof Blob) {
+    try {
+      const payload = JSON.parse(await body.text());
+      return payload?.message || payload?.detail || 'Excel 파일을 생성하지 못했습니다.';
+    } catch {
+      // 오류 본문 형식을 신뢰할 수 없으면 사용자에게 내부 내용을 노출하지 않는다.
+    }
+  }
+
+  return 'Excel 파일을 생성하지 못했습니다.';
+};
+
 export const useReportStore = defineStore('report', () => {
   const reportOrders = ref([]);
   const allReportOrders = ref([]);
@@ -65,6 +102,7 @@ export const useReportStore = defineStore('report', () => {
 
   const isLoading = ref(false);
   const isExporting = ref(false);
+  const exportError = ref('');
   const hasLoaded = ref(false);
   const loadError = ref('');
   const lastSearchParams = ref({});
@@ -310,28 +348,47 @@ export const useReportStore = defineStore('report', () => {
   };
 
   const downloadReportXlsx = async (filters = {}) => {
+    if (isExporting.value) {
+      return false;
+    }
+
     try {
       isExporting.value = true;
+      exportError.value = '';
       const response = await downloadReportXlsxApi({
         ...buildAnalysisParams(filters),
         ...(filters.status && { status: filters.status }),
         ...(filters.keyword && { keyword: filters.keyword.trim() }),
         ...(filters.historyType && { historyType: filters.historyType }),
+      }, {
+        skipServerErrorRedirect: true,
       });
       const blob = response.data;
+
+      const contentType = String(response.headers?.['content-type'] || '')
+        .toLowerCase();
+
+      if (!(blob instanceof Blob) || !contentType.includes(XLSX_CONTENT_TYPE)) {
+        throw new Error('XLSX 응답이 아닙니다.');
+      }
 
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = 'DeliveryInsider_Report.xlsx';
+      link.download = readContentDispositionFilename(
+        response.headers?.['content-disposition'],
+      );
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(downloadUrl);
+
+      // 브라우저가 anchor click을 다운로드 작업으로 넘긴 뒤에만 해제한다.
+      window.setTimeout(() => window.URL.revokeObjectURL(downloadUrl), 1_000);
+      return true;
     } catch (error) {
       console.error(error);
-      alert(error?.response?.status === 403 ? 'Excel 내보내기는 Standard 기능입니다.' : 'Excel 다운로드에 실패했습니다.');
-      throw error;
+      exportError.value = await getExportErrorMessage(error);
+      return false;
     } finally {
       isExporting.value = false;
     }
@@ -348,6 +405,7 @@ export const useReportStore = defineStore('report', () => {
     platformMetrics.value = [];
     isLoading.value = false;
     isExporting.value = false;
+    exportError.value = '';
     hasLoaded.value = false;
     loadError.value = '';
     lastSearchParams.value = {};
@@ -363,6 +421,7 @@ export const useReportStore = defineStore('report', () => {
     platformMetrics,
     isLoading,
     isExporting,
+    exportError,
     hasLoaded,
     loadError,
     lastSearchParams,

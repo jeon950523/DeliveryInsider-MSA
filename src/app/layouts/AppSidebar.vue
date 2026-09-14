@@ -20,8 +20,8 @@ const authStore = useAuthStore()
 const storeStore = useStoreStore()
 
 const navItems = ref([
-  { name: '실시간 운영 대시보드', path: '/dashboard', tour: 'dashboard-navigation' },
-  { name: '통합 주문 관리', path: '/orders', tour: 'order-navigation' },
+  { name: '현재 운영 상황', path: '/dashboard', tour: 'dashboard-navigation' },
+  { name: '통합 주문 현황', path: '/orders', tour: 'order-navigation' },
   { name: '메뉴 수익 관리', path: '/menus', tour: 'menu-navigation' },
   { name: '매장 관리', path: '/store', tour: 'store-navigation' },
   { name: '운영 리포트', path: '/reports', tour: 'report-navigation' },
@@ -347,7 +347,7 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-/* 배경색 분기: 실시간 운영 대시보드의 운영 브리핑 색상과 동일하게 사용 */
+/* 배경색 분기: 현재 운영 상황의 운영 브리핑 색상과 동일하게 사용 */
 .side-operation-card { background: #f0fdf4; border-color: #bbf7d0; }
 .side-operation-card.level-정상 { background: #f0fdf4; border-color: #bbf7d0; }
 .side-operation-card.level-주의 { background: #fff7ed; border-color: #fed7aa; }
