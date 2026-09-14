@@ -389,17 +389,21 @@ public class OrderReadService {
             );
 
         long couponCost =
-            merchantFundedDiscount
-                + promotionShareAmount;
+            OrderFinancialSnapshotCalculator.couponCost(
+                merchantFundedDiscount,
+                promotionShareAmount
+            );
 
         long netProfit =
-            totalAmount
-                - commissionAmount
-                - deliveryFee
-                - couponCost
-                - totalMenuCost
-                - totalPackagingFee
-                + providerFundedDiscount;
+            OrderFinancialSnapshotCalculator.netProfit(
+                totalAmount,
+                totalMenuCost,
+                totalPackagingFee,
+                commissionAmount,
+                deliveryFee,
+                couponCost,
+                providerFundedDiscount
+            );
 
         List<OrderDetailResponse.Item>
             itemResponses =
@@ -949,17 +953,12 @@ public class OrderReadService {
     private long estimatedNetProfit(
         OrderTodayReadRow order
     ) {
-        return totalAmount(
-            order
-        )
-            - valueOrZero(
-            order.getTotalMenuCost()
-        )
-            - valueOrZero(
-            order.getTotalPackagingCost()
-        )
-            - valueOrZero(
-            order.getProviderChargeAmount()
+        return OrderFinancialSnapshotCalculator.dashboardNetProfit(
+            totalAmount(order),
+            valueOrZero(order.getTotalMenuCost()),
+            valueOrZero(order.getTotalPackagingCost()),
+            valueOrZero(order.getProviderChargeAmount()),
+            valueOrZero(order.getProviderFundedDiscount())
         );
     }
 

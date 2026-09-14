@@ -60,6 +60,11 @@
         />
 
         <result
+                property="providerFundedDiscount"
+                column="provider_funded_discount"
+        />
+
+        <result
                 property="providerFinancialDataStatus"
                 column="provider_financial_data_status"
         />
@@ -150,6 +155,11 @@
                     charge_summary.provider_charge_amount,
                     0
             ) AS provider_charge_amount,
+
+            COALESCE(
+                    o.provider_funded_discount_snapshot,
+                    0
+            ) AS provider_funded_discount,
 
             o.provider_financial_data_status_snapshot
                 AS provider_financial_data_status,
