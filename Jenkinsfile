@@ -9,6 +9,7 @@ pipeline {
     environment {
         K8S_GIT_CREDENTIALS_ID = 'msa4-team4-github-k8s-write'
         MYSQL_CI_CREDENTIALS_ID = 'msa4-team4-mysql-ci'
+        TOSS_CLIENT_KEY_CREDENTIALS_ID = 'msa4-team4-toss-client-key'
         IMAGE_ROOT = '192.168.0.5:6901/msa4/team4'
         MANIFEST_REPOSITORY = 'https://github.com/greencomacademy/baef-p2-k8s.git'
         SOURCE_REPOSITORY = 'https://github.com/greencomacademy/baef-p2-client.git'
@@ -44,12 +45,15 @@ pipeline {
                             '''
                         }
                     } else if (env.SERVICE_KIND == 'client') {
-                        dir('source') {
-                            sh '''
-                                set -eu
-                                npm ci
-                                VITE_API_BASE_URL="$CLIENT_API_BASE_URL" npm run build
-                            '''
+                        withCredentials([string(credentialsId: env.TOSS_CLIENT_KEY_CREDENTIALS_ID, variable: 'VITE_TOSS_CLIENT_KEY')]) {
+                            dir('source') {
+                                sh '''
+                                    set +x
+                                    set -eu
+                                    npm ci
+                                    VITE_API_BASE_URL="$CLIENT_API_BASE_URL" VITE_TOSS_CLIENT_KEY="$VITE_TOSS_CLIENT_KEY" npm run build
+                                '''
+                            }
                         }
                     } else if (env.SERVICE_KIND == 'external-front') {
                         dir('source') {
@@ -71,7 +75,12 @@ pipeline {
                     script {
                         def image = "${env.IMAGE_ROOT}/${env.SERVICE_NAME}:${env.BUILD_NUMBER}"
                         if (env.SERVICE_KIND == 'client') {
-                            sh "docker build --build-arg VITE_API_BASE_URL=${env.CLIENT_API_BASE_URL} -t ${image} ."
+                            withCredentials([string(credentialsId: env.TOSS_CLIENT_KEY_CREDENTIALS_ID, variable: 'VITE_TOSS_CLIENT_KEY')]) {
+                                sh '''
+                                    set +x
+                                    docker build --build-arg VITE_API_BASE_URL="$CLIENT_API_BASE_URL" --build-arg VITE_TOSS_CLIENT_KEY="$VITE_TOSS_CLIENT_KEY" -t "$IMAGE_ROOT/$SERVICE_NAME:$BUILD_NUMBER" .
+                                '''
+                            }
                         } else if (env.SERVICE_KIND == 'external-front') {
                             sh "docker build --build-arg VITE_EXTERNAL_API_BASE_URL=${env.EXTERNAL_API_BASE_URL} --build-arg VITE_APP_BASE_PATH=/simulator/ -t ${image} ."
                         } else {
@@ -105,7 +114,7 @@ pipeline {
 
                             for ATTEMPT in 1 2 3; do
                                 git -c http.extraHeader="Authorization: Basic ${AUTH_HEADER}" fetch origin main
-                                git reset --hard origin/main
+                                git checkout --detach origin/main
 
                                 IMAGE_LINE_COUNT="$(grep -Ec '^[[:space:]]*image:[[:space:]]+' "$MANIFEST_FILE")"
                                 if [ "$IMAGE_LINE_COUNT" -ne 1 ]; then
@@ -150,4 +159,4 @@ pipeline {
         }
     }
     post { always { cleanWs() } }
-}\n
+}
