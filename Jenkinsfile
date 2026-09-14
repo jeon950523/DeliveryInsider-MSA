@@ -105,7 +105,7 @@ pipeline {
 
                             for ATTEMPT in 1 2 3; do
                                 git -c http.extraHeader="Authorization: Basic ${AUTH_HEADER}" fetch origin main
-                                git reset --hard origin/main
+                                git checkout --detach origin/main
 
                                 IMAGE_LINE_COUNT="$(grep -Ec '^[[:space:]]*image:[[:space:]]+' "$MANIFEST_FILE")"
                                 if [ "$IMAGE_LINE_COUNT" -ne 1 ]; then
@@ -150,4 +150,4 @@ pipeline {
         }
     }
     post { always { cleanWs() } }
-}\n
+}
