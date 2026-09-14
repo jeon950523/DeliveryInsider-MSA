@@ -481,7 +481,7 @@ const addAdSpend = async () => {
   }
 };
 
-const changeOrderStatus = async (order, status) => {
+const changeOrderStatus = async (order, status, cancellation = null) => {
   const provider = selectedProvider.value;
   changingOrderId.value = order.externalOrderId;
   errorMessage.value = '';
@@ -493,8 +493,8 @@ const changeOrderStatus = async (order, status) => {
       : status === 'CANCELED'
       ? {
         status,
-        cancelCode: 'CUSTOMER_CANCEL',
-        cancelReason: '고객 요청 취소',
+        cancelCode: cancellation?.cancelCode,
+        cancelReason: cancellation?.cancelReason,
       }
       : {
         status,
