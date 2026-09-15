@@ -102,7 +102,10 @@ public class OrderOutboxEventFactory {
                 sourceEvent.data().providerRefundId(),
                 sourceEvent.data().providerRefundAmount(),
                 sourceEvent.data().providerRefundReasonCode(),
-                sourceEvent.data().providerRefundReason()
+                sourceEvent.data().providerRefundReason(),
+                sourceEvent.data().liabilityParty(),
+                sourceEvent.data().merchantLiabilityAmount(),
+                sourceEvent.data().platformLiabilityAmount()
             );
 
         String eventType = switch (order.getStatus()) {

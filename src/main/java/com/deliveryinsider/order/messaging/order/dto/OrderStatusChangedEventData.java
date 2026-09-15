@@ -27,7 +27,10 @@ public record OrderStatusChangedEventData(
     String providerRefundId,
     Long providerRefundAmount,
     String providerRefundReasonCode,
-    String providerRefundReason
+    String providerRefundReason,
+    String liabilityParty,
+    Long merchantLiabilityAmount,
+    Long platformLiabilityAmount
 
 ) {
 }
