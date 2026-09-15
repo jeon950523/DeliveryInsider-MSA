@@ -27,7 +27,10 @@ public record OrderStatusChangedEventData(
     String providerRefundId,
     Long providerRefundAmount,
     String providerRefundReasonCode,
-    String providerRefundReason
+    String providerRefundReason,
+    String liabilityParty,
+    Long merchantLiabilityAmount,
+    Long platformLiabilityAmount
 
 ) {
 
@@ -37,6 +40,6 @@ public record OrderStatusChangedEventData(
         Instant providerOccurredAt, String providerCancelCode, String providerCancelReason
     ) {
         this(orderId, platformType, platformOrderId, externalStoreId, previousStatus, status, operationStatus,
-            sourceSequence, providerOccurredAt, providerCancelCode, providerCancelReason, null, null, null, null);
+            sourceSequence, providerOccurredAt, providerCancelCode, providerCancelReason, null, null, null, null, null, null, null);
     }
 }

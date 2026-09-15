@@ -13,6 +13,9 @@
             amount,
             reason_code,
             reason_text,
+            liability_party,
+            merchant_liability_amount,
+            platform_liability_amount,
             requested_at,
             event_version
         )
@@ -23,6 +26,9 @@
             #{amount},
             #{reasonCode},
             #{reasonText},
+            #{liabilityParty},
+            #{merchantLiabilityAmount},
+            #{platformLiabilityAmount},
             #{requestedAt},
             #{eventVersion}
         )

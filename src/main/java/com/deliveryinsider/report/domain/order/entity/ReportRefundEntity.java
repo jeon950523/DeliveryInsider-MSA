@@ -15,6 +15,9 @@ public class ReportRefundEntity {
     private long amount;
     private String reasonCode;
     private String reasonText;
+    private String liabilityParty;
+    private long merchantLiabilityAmount;
+    private long platformLiabilityAmount;
     private LocalDateTime requestedAt;
     private long eventVersion;
 }
