@@ -64,6 +64,8 @@
                 column="provider_funded_discount"
         />
 
+        <result property="merchantLiabilityAmount" column="merchant_liability_amount"/>
+
         <result
                 property="providerFinancialDataStatus"
                 column="provider_financial_data_status"
@@ -161,6 +163,8 @@
                     0
             ) AS provider_funded_discount,
 
+            COALESCE(refund_summary.merchant_liability_amount, 0) AS merchant_liability_amount,
+
             o.provider_financial_data_status_snapshot
                 AS provider_financial_data_status,
 
@@ -239,6 +243,13 @@
 
         ) charge_summary
                            ON charge_summary.order_id = o.id
+
+                 LEFT JOIN (
+            SELECT order_id, SUM(merchant_liability_amount) AS merchant_liability_amount
+            FROM order_refunds
+            GROUP BY order_id
+        ) refund_summary
+                           ON refund_summary.order_id = o.id
 
         WHERE o.store_id = #{storeId}
 

@@ -770,8 +770,8 @@ public class OrderReadService {
         OrderOperationStatus status =
             order.getOperationStatus();
 
-        return status != null
-            && status != OrderOperationStatus.CANCELED;
+        return status == OrderOperationStatus.COMPLETED
+            || status == OrderOperationStatus.REFUNDED;
     }
 
     private LocalDateTime currentStageStartedAt(
@@ -965,7 +965,7 @@ public class OrderReadService {
             valueOrZero(order.getTotalPackagingCost()),
             valueOrZero(order.getProviderChargeAmount()),
             valueOrZero(order.getProviderFundedDiscount())
-        );
+        ) - valueOrZero(order.getMerchantLiabilityAmount());
     }
 
     private String aggregateFinancialDataStatus(

@@ -36,6 +36,8 @@ public class OrderTodayReadRow {
 
     private Long providerFundedDiscount;
 
+    private Long merchantLiabilityAmount;
+
     private ProviderFinancialDataStatus providerFinancialDataStatus;
 
     private LocalDateTime orderedAt;
