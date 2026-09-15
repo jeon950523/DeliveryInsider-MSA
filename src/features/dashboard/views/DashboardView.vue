@@ -149,7 +149,7 @@ const priorityOrders = computed(() => {
 
       return {
         id: order.id,
-        orderNo: order.orderNo,
+        orderNo: order.merchantOrderNo || order.orderNo,
         platformNo: order.platformOrderNumber,
         platform: getPlatformName(order.platformType),
         menuSummary: order.menuSummary || '-',

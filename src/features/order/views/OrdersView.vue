@@ -153,6 +153,7 @@ const filteredOrders = computed(() => {
     const keywordMatched =
       !keyword ||
       String(order.orderNo || '').toLowerCase().includes(keyword) ||
+      String(order.merchantOrderNo || '').toLowerCase().includes(keyword) ||
       String(order.platformOrderNo || '').toLowerCase().includes(keyword) ||
       String(order.menuSummary || '').toLowerCase().includes(keyword) ||
       String(order.deliveryAddress || '').toLowerCase().includes(keyword) ||
@@ -532,6 +533,7 @@ const toOrderViewData = (order) => {
   return {
     id: order.id,
     orderNo: order.orderNo,
+    merchantOrderNo: order.merchantOrderNo || order.orderNo,
     platformOrderNo: order.platformOrderNumber,
     platformType: order.platformType,
     menuSummary: order.menuSummary,
@@ -584,6 +586,7 @@ const toOrderDetailViewData = (detail, baseOrder = {}) => {
 
     id: detail.id,
     orderNo: detail.orderNo,
+    merchantOrderNo: detail.merchantOrderNo || detail.orderNo,
     platformOrderNo: detail.platformOrderNumber,
     platformType: detail.platformType,
     orderStatus: detail.orderStatus,
@@ -1190,7 +1193,7 @@ const submitRefund = async () => {
           <table class="order-table">
             <thead>
               <tr>
-                <th>플랫폼 주문번호</th>
+                <th>매장 주문번호</th>
                 <th>플랫폼</th>
                 <th>상태</th>
                 <th>메뉴</th>
@@ -1210,10 +1213,10 @@ const submitRefund = async () => {
                 <td class="order-no-cell">
                   <button
                     type="button"
-                    class="order-number-button platform-order-number"
+                    class="order-number-button merchant-order-number"
                     @click.stop="selectOrderAndScroll(order)"
                   >
-                    <span :title="order.platformOrderNo">{{ formatPlatformOrderNumber(order.platformOrderNo) }}</span>
+                    <span :title="order.merchantOrderNo">{{ order.merchantOrderNo }}</span>
                   </button>
                   <small>{{ order.orderedAt }}</small>
                 </td>
@@ -1320,8 +1323,8 @@ const submitRefund = async () => {
         <div class="detail-head">
           <div>
             <span class="detail-label">주문 상세</span>
-            <h2>{{ selectedOrder.platformOrderNo }}</h2>
-            <p class="detail-sub-id">{{ getPlatformName(selectedOrder.platformType) }} 주문</p>
+            <h2>{{ selectedOrder.merchantOrderNo }}</h2>
+            <p class="detail-sub-id">{{ getPlatformName(selectedOrder.platformType) }} · 원본 {{ selectedOrder.platformOrderNo }}</p>
           </div>
           <span
             class="status-badge"
@@ -1333,6 +1336,8 @@ const submitRefund = async () => {
 
         <div class="detail-section">
           <h3>주문 정보</h3>
+          <div class="detail-row"><span>매장 주문번호</span><strong>{{ selectedOrder.merchantOrderNo }}</strong></div>
+          <div class="detail-row"><span>플랫폼 원본번호</span><strong>{{ selectedOrder.platformOrderNo }}</strong></div>
           <div class="detail-row"><span>플랫폼</span><strong>{{ getPlatformName(selectedOrder.platformType) }}</strong></div>
           <div class="detail-menu-block">
           <div class="detail-menu-title">
@@ -2636,7 +2641,7 @@ const submitRefund = async () => {
 
 
 
-.platform-order-number span {
+.merchant-order-number span {
   display: inline-block;
   max-width: 190px;
   overflow: hidden;
@@ -2768,8 +2773,8 @@ const submitRefund = async () => {
   }
 }
 
-.order-no-cell .platform-order-number,
-.order-no-cell .platform-order-number span {
+.order-no-cell .merchant-order-number,
+.order-no-cell .merchant-order-number span {
   display: block;
   width: 100%;
   max-width: 100%;
