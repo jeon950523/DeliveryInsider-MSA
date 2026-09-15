@@ -24,7 +24,7 @@ import com.deliveryinsider.order.messaging.platform.dto.PlatformOrderEventMessag
 import com.deliveryinsider.order.messaging.platform.exception.RetryableOrderEventProcessingException;
 import com.deliveryinsider.order.global.error.BusinessException;
 import com.deliveryinsider.order.global.error.OrderErrorCode;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,7 +36,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class PlatformOrderStatusTransactionService {
 
     private final OrderMapper orderMapper;
@@ -49,6 +48,26 @@ public class PlatformOrderStatusTransactionService {
     private final OrderStatusTransitionPolicy transitionPolicy;
     private final OrderOperationStatusTransitionPolicy operationTransitionPolicy;
     private final Clock clock;
+
+    @Autowired
+    public PlatformOrderStatusTransactionService(
+        OrderMapper orderMapper, OrderItemMapper orderItemMapper, OrderCancellationMapper cancellationMapper,
+        OrderRefundMapper refundMapper, ProcessedPlatformEventMapper processedEventMapper,
+        OutboxEventMapper outboxEventMapper, OrderOutboxEventFactory outboxFactory,
+        OrderStatusTransitionPolicy transitionPolicy, OrderOperationStatusTransitionPolicy operationTransitionPolicy,
+        Clock clock
+    ) {
+        this.orderMapper = orderMapper;
+        this.orderItemMapper = orderItemMapper;
+        this.cancellationMapper = cancellationMapper;
+        this.refundMapper = refundMapper;
+        this.processedEventMapper = processedEventMapper;
+        this.outboxEventMapper = outboxEventMapper;
+        this.outboxFactory = outboxFactory;
+        this.transitionPolicy = transitionPolicy;
+        this.operationTransitionPolicy = operationTransitionPolicy;
+        this.clock = clock;
+    }
 
     /** Kept for existing direct unit tests; production injection always provides the refund mapper. */
     public PlatformOrderStatusTransactionService(
