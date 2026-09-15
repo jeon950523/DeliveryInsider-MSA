@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import {
+  ArcElement,
   BarElement,
   CategoryScale,
   Chart as ChartJS,
@@ -11,9 +12,10 @@ import {
   PointElement,
   Tooltip,
 } from 'chart.js';
-import { Bar, Line } from 'vue-chartjs';
+import { Bar, Line, Pie } from 'vue-chartjs';
 
 ChartJS.register(
+  ArcElement,
   CategoryScale,
   LinearScale,
   PointElement,
@@ -45,9 +47,13 @@ const props = defineProps({
 
 defineEmits(['retry']);
 
-const chartComponent = computed(() => (
-  props.chartType === 'bar' ? Bar : Line
-));
+const chartComponent = computed(() => {
+  if (props.chartType === 'pie') {
+    return Pie;
+  }
+
+  return props.chartType === 'bar' ? Bar : Line;
+});
 
 const chartData = computed(() => ({
   labels: props.labels,
@@ -84,15 +90,15 @@ const formatAxisValue = (value, unit) => {
 
 const chartOptions = computed(() => {
   const axisUnit = props.datasets[0]?.unit || 'count';
+  const isPie = props.chartType === 'pie';
 
   return {
     responsive: true,
     maintainAspectRatio: false,
     animation: false,
-    interaction: {
-      intersect: false,
-      mode: 'index',
-    },
+    interaction: isPie
+      ? { intersect: true }
+      : { intersect: false, mode: 'index' },
     plugins: {
       legend: {
         position: 'bottom',
@@ -115,12 +121,14 @@ const chartOptions = computed(() => {
           },
           label: (context) => {
             const unit = context.dataset.unit || 'count';
-            return `${context.dataset.label}: ${formatValue(context.raw, unit)}`;
+            const tooltipValue = context.dataset.tooltipValues?.[context.dataIndex]
+              ?? context.raw;
+            return `${context.label}: ${formatValue(tooltipValue, unit)}`;
           },
         },
       },
     },
-    scales: {
+    ...(isPie ? {} : { scales: {
       x: {
         grid: { display: false },
         ticks: {
@@ -140,7 +148,7 @@ const chartOptions = computed(() => {
           font: { family: 'Pretendard', size: 11 },
         },
       },
-    },
+    } }),
   };
 });
 </script>

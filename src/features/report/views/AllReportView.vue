@@ -274,18 +274,6 @@ const hasIncompleteFinancialData = computed(() => {
     .some((status) => status !== 'AVAILABLE');
 });
 
-const chartDateLabels = computed(() => dailyTrend.value.map((point) => {
-  const value = String(point.reportDate || '');
-  const [, month, day] = value.split('-');
-  return month && day ? `${month}.${day}` : value;
-}));
-
-const chartTooltipLabels = computed(() => dailyTrend.value.map((point) => (
-  String(point.reportDate || '').replaceAll('-', '.')
-)));
-
-const isSingleDayTrend = computed(() => dailyTrend.value.length === 1);
-
 const formatAppliedDate = (value) => String(value || '').replaceAll('-', '.');
 
 const appliedPeriodContext = computed(() => {
@@ -309,74 +297,69 @@ const appliedPeriodContext = computed(() => {
   return `조회 기간 ${formatAppliedDate(start)} ~ ${formatAppliedDate(end)}${dayCount} · ${platformName}`;
 });
 
-const revenueChartDatasets = computed(() => [
-  {
-    type: 'bar',
-    label: '매출',
-    data: dailyTrend.value.map((point) => Number(point.grossSales || 0)),
+const revenueProfitLabels = computed(() => {
+  const profit = Number(reportSummary.value?.estimatedNetProfit || 0);
+  return ['매출', profit < 0 ? '추정 손실' : '추정 순수익'];
+});
+
+const revenueProfitDatasets = computed(() => {
+  const grossSales = Number(reportSummary.value?.grossOrderAmount || 0);
+  const estimatedNetProfit = Number(reportSummary.value?.estimatedNetProfit || 0);
+
+  return [{
+    label: '매출 및 추정 수익·손실',
+    data: [grossSales, Math.abs(estimatedNetProfit)],
+    tooltipValues: [grossSales, estimatedNetProfit],
     unit: 'currency',
-    borderColor: '#1f6f99',
-    backgroundColor: 'rgba(39, 132, 184, 0.72)',
+    backgroundColor: estimatedNetProfit < 0
+      ? ['rgba(39, 132, 184, 0.78)', 'rgba(220, 38, 38, 0.78)']
+      : ['rgba(39, 132, 184, 0.78)', 'rgba(22, 163, 74, 0.78)'],
+    borderColor: estimatedNetProfit < 0
+      ? ['#1f6f99', '#b91c1c']
+      : ['#1f6f99', '#15803d'],
     borderWidth: 1,
-    borderRadius: 7,
-    maxBarThickness: 54,
-  },
-  {
-    type: isSingleDayTrend.value ? 'bar' : 'line',
-    label: '추정 순수익',
-    data: dailyTrend.value.map((point) => Number(point.estimatedNetProfit || 0)),
-    unit: 'currency',
-    borderColor: '#16a34a',
-    backgroundColor: isSingleDayTrend.value
-      ? 'rgba(22, 163, 74, 0.72)'
-      : 'rgba(22, 163, 74, 0.08)',
-    pointBackgroundColor: '#16a34a',
-    pointBorderColor: '#16a34a',
-    pointStyle: 'rectRot',
-    pointRadius: 5,
-    borderWidth: 2,
-    tension: 0.28,
-    fill: false,
-    borderRadius: isSingleDayTrend.value ? 7 : undefined,
-    maxBarThickness: isSingleDayTrend.value ? 54 : undefined,
-  },
+  }];
+});
+
+const orderStatusLabels = computed(() => [
+  '정상 완료',
+  '취소',
+  '환불',
+  '진행 중',
 ]);
 
-const orderChartDatasets = computed(() => [
-  {
-    type: 'bar',
-    label: '주문 수',
-    data: dailyTrend.value.map((point) => Number(point.totalOrderCount || 0)),
-    unit: 'count',
-    borderColor: '#6d28d9',
-    backgroundColor: 'rgba(124, 58, 237, 0.72)',
-    borderWidth: 1,
-    borderRadius: 7,
-    maxBarThickness: 54,
-  },
-  {
-    type: 'bar',
-    label: '취소 수',
-    data: dailyTrend.value.map((point) => Number(point.canceledOrderCount || 0)),
-    unit: 'count',
-    borderColor: '#b91c1c',
-    backgroundColor: 'rgba(220, 38, 38, 0.72)',
-    borderWidth: 1,
-    borderRadius: 7,
-    maxBarThickness: 54,
-  },
-  {
-    type: 'bar',
-    label: '환불 수',
-    data: dailyTrend.value.map((point) => Number(point.refundedOrderCount || 0)),
-    unit: 'count',
-    borderColor: '#c2410c',
-    backgroundColor: 'rgba(234, 88, 12, 0.72)',
-    borderWidth: 1,
-    borderRadius: 7,
-    maxBarThickness: 54,
-  },
-]);
+const orderStatusValues = computed(() => {
+  const total = Number(reportSummary.value?.totalOrderCount || 0);
+  const completed = Number(reportSummary.value?.completedOrderCount || 0);
+  const canceled = Number(reportSummary.value?.canceledOrderCount || 0);
+  const refunded = dailyTrend.value.reduce(
+    (sum, point) => sum + Number(point.refundedOrderCount || 0),
+    0,
+  );
+  const normalCompleted = Math.max(0, completed - refunded);
+  const inProgress = Math.max(0, total - normalCompleted - canceled - refunded);
+
+  return { normalCompleted, canceled, refunded, inProgress };
+});
+
+const orderStatusDatasets = computed(() => [{
+  label: '주문 상태',
+  data: [
+    orderStatusValues.value.normalCompleted,
+    orderStatusValues.value.canceled,
+    orderStatusValues.value.refunded,
+    orderStatusValues.value.inProgress,
+  ],
+  unit: 'count',
+  borderColor: ['#15803d', '#b91c1c', '#c2410c', '#475569'],
+  backgroundColor: [
+    'rgba(22, 163, 74, 0.78)',
+    'rgba(220, 38, 38, 0.78)',
+    'rgba(234, 88, 12, 0.78)',
+    'rgba(100, 116, 139, 0.78)',
+  ],
+  borderWidth: 1,
+}]);
 
 const platformChartLabels = computed(() => platformMetrics.value.map((metric) => (
   platformNames[metric.platformType] || metric.platformType
@@ -399,18 +382,19 @@ const platformChartDatasets = computed(() => {
   }];
 });
 
-const revenueChartRows = computed(() => dailyTrend.value.map((point) => [
-  point.reportDate,
-  formatMoney(point.grossSales),
-  formatMoney(point.estimatedNetProfit),
-]));
+const revenueProfitRows = computed(() => [[
+  appliedPeriodContext.value,
+  formatMoney(reportSummary.value?.grossOrderAmount),
+  formatMoney(reportSummary.value?.estimatedNetProfit),
+]]);
 
-const orderChartRows = computed(() => dailyTrend.value.map((point) => [
-  point.reportDate,
-  `${Number(point.totalOrderCount || 0).toLocaleString('ko-KR')}건`,
-  `${Number(point.canceledOrderCount || 0).toLocaleString('ko-KR')}건`,
-  `${Number(point.refundedOrderCount || 0).toLocaleString('ko-KR')}건`,
-]));
+const orderStatusRows = computed(() => [[
+  appliedPeriodContext.value,
+  `${orderStatusValues.value.normalCompleted.toLocaleString('ko-KR')}건`,
+  `${orderStatusValues.value.canceled.toLocaleString('ko-KR')}건`,
+  `${orderStatusValues.value.refunded.toLocaleString('ko-KR')}건`,
+  `${orderStatusValues.value.inProgress.toLocaleString('ko-KR')}건`,
+]]);
 
 const platformChartRows = computed(() => platformMetrics.value.map((metric) => [
   platformNames[metric.platformType] || metric.platformType,
@@ -910,35 +894,31 @@ onMounted(async () => {
     <section class="report-chart-grid" aria-label="운영 추이 차트">
       <ReportChartCard
         chart-id="revenue-profit-trend"
-        :title="isSingleDayTrend ? '매출 / 추정 순수익 비교' : '매출 / 추정 순수익 추이'"
-        :description="isSingleDayTrend
-          ? '선택한 하루의 매출과 추정 순수익을 막대로 비교합니다.'
-          : '매출은 막대, 추정 순수익은 선으로 일별 흐름을 비교합니다.'"
-        chart-type="bar"
-        :labels="chartDateLabels"
-        :tooltip-labels="chartTooltipLabels"
-        :datasets="revenueChartDatasets"
+        title="매출 / 추정 수익·손실 비중"
+        description="조회 기간의 매출과 추정 수익 또는 손실 금액을 원형으로 비교합니다."
+        chart-type="pie"
+        :labels="revenueProfitLabels"
+        :datasets="revenueProfitDatasets"
         :loading="reportStore.isLoading"
         :error="reportStore.loadError"
         :empty="dailyTrend.length === 0"
-        :table-headers="['날짜', '매출', '추정 순수익']"
-        :table-rows="revenueChartRows"
+        :table-headers="['조회 조건', '매출', '추정 순수익']"
+        :table-rows="revenueProfitRows"
         data-testid="revenue-profit-chart"
         @retry="searchReports"
       />
       <ReportChartCard
         chart-id="order-cancel-trend"
-        :title="isSingleDayTrend ? '주문 / 취소 / 환불 비교' : '주문 / 취소 / 환불 추이'"
-        description="전체 주문 수와 취소·환불 완료 주문 수를 같은 기준의 묶음 막대로 비교합니다."
-        chart-type="bar"
-        :labels="chartDateLabels"
-        :tooltip-labels="chartTooltipLabels"
-        :datasets="orderChartDatasets"
+        title="주문 / 취소 / 환불 상태 비중"
+        description="전체 주문을 정상 완료·취소·환불·진행 중으로 겹치지 않게 나눈 원형 차트입니다."
+        chart-type="pie"
+        :labels="orderStatusLabels"
+        :datasets="orderStatusDatasets"
         :loading="reportStore.isLoading"
         :error="reportStore.loadError"
         :empty="dailyTrend.length === 0"
-        :table-headers="['날짜', '주문 수', '취소 수', '환불 수']"
-        :table-rows="orderChartRows"
+        :table-headers="['조회 조건', '정상 완료', '취소', '환불', '진행 중']"
+        :table-rows="orderStatusRows"
         data-testid="order-cancel-chart"
         @retry="searchReports"
       />
