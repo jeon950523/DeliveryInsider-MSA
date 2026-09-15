@@ -33,7 +33,15 @@ public record BaeminOrderDetailResponse(
 
     String cancelCode,
 
-    String cancelReason
+    String cancelReason,
+
+    String refundId,
+
+    Long refundAmount,
+
+    String refundReasonCode,
+
+    String refundReason
 
 ) {
 

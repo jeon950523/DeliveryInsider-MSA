@@ -70,7 +70,11 @@ public class NormalizedOrderEventAssembler {
                     )
                     .toList(),
                 order.providerCancelCode(),
-                order.providerCancelReason()
+                order.providerCancelReason(),
+                order.providerRefundId(),
+                order.providerRefundAmount(),
+                order.providerRefundReasonCode(),
+                order.providerRefundReason()
             );
 
         String aggregateId = "%s:%s".formatted(
@@ -102,6 +106,8 @@ public class NormalizedOrderEventAssembler {
             case ORDER_PICKED_UP -> "DELIVERING";
             case ORDER_DELIVERED -> "COMPLETED";
             case ORDER_CANCELED -> "CANCELED";
+            case ORDER_REFUND_REQUESTED -> "REFUND_REQUESTED";
+            case ORDER_REFUNDED -> "REFUNDED";
         };
     }
 

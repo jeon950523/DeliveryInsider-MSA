@@ -35,7 +35,15 @@ public record CanonicalPlatformOrder(
 
     String providerCancelCode,
 
-    String providerCancelReason
+    String providerCancelReason,
+
+    String providerRefundId,
+
+    Long providerRefundAmount,
+
+    String providerRefundReasonCode,
+
+    String providerRefundReason
 
 ) {
 
@@ -43,5 +51,17 @@ public record CanonicalPlatformOrder(
         items = items == null
             ? List.of()
             : List.copyOf(items);
+    }
+
+    /** Compatibility constructor for older provider adapters that do not supply refund data. */
+    public CanonicalPlatformOrder(
+        PlatformType platformType, String sourceEventId, CanonicalOrderEventType eventType, String externalOrderId,
+        String externalStoreId, Long sourceSequence, Instant orderedAt, Instant providerOccurredAt,
+        String deliveryAddress, String customerRequestText, List<CanonicalPlatformOrderItem> items,
+        ProviderOrderFinancials financials, String providerCancelCode, String providerCancelReason
+    ) {
+        this(platformType, sourceEventId, eventType, externalOrderId, externalStoreId, sourceSequence, orderedAt,
+            providerOccurredAt, deliveryAddress, customerRequestText, items, financials, providerCancelCode,
+            providerCancelReason, null, null, null, null);
     }
 }

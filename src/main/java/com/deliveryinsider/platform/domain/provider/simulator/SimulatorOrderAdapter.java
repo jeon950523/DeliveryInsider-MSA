@@ -62,6 +62,10 @@ public class SimulatorOrderAdapter {
             .providerCancelReason(
                 detail.cancelReason()
             )
+            .providerRefundId(detail.refundId())
+            .providerRefundAmount(detail.refundAmount())
+            .providerRefundReasonCode(detail.refundReasonCode())
+            .providerRefundReason(detail.refundReason())
             .build();
     }
 
