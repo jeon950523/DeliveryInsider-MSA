@@ -74,7 +74,10 @@ public class NormalizedOrderEventAssembler {
                 order.providerRefundId(),
                 order.providerRefundAmount(),
                 order.providerRefundReasonCode(),
-                order.providerRefundReason()
+                order.providerRefundReason(),
+                order.liabilityParty(),
+                order.merchantLiabilityAmount(),
+                order.platformLiabilityAmount()
             );
 
         String aggregateId = "%s:%s".formatted(

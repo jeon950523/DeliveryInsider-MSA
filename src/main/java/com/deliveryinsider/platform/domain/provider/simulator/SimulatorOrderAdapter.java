@@ -66,6 +66,9 @@ public class SimulatorOrderAdapter {
             .providerRefundAmount(detail.refundAmount())
             .providerRefundReasonCode(detail.refundReasonCode())
             .providerRefundReason(detail.refundReason())
+            .liabilityParty(detail.liabilityParty())
+            .merchantLiabilityAmount(detail.merchantLiabilityAmount())
+            .platformLiabilityAmount(detail.platformLiabilityAmount())
             .build();
     }
 

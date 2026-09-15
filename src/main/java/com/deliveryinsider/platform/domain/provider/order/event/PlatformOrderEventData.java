@@ -42,7 +42,10 @@ public record PlatformOrderEventData(
     String providerRefundId,
     Long providerRefundAmount,
     String providerRefundReasonCode,
-    String providerRefundReason
+    String providerRefundReason,
+    String liabilityParty,
+    Long merchantLiabilityAmount,
+    Long platformLiabilityAmount
 
 ) {
 
@@ -64,7 +67,7 @@ public record PlatformOrderEventData(
         this(platformType, platformOrderId, externalStoreId, sourceSequence, orderedAt, providerOccurredAt,
             operationStatus, deliveryAddress, customerRequestText, items, providerFinancialDataStatus,
             grossOrderAmount, customerPaidAmount, merchantFundedDiscount, providerFundedDiscount,
-            providerOrderCharges, providerCancelCode, providerCancelReason, null, null, null, null);
+            providerOrderCharges, providerCancelCode, providerCancelReason, null, null, null, null, null, null, null);
     }
 
     public record Item(

@@ -43,7 +43,10 @@ public record CanonicalPlatformOrder(
 
     String providerRefundReasonCode,
 
-    String providerRefundReason
+    String providerRefundReason,
+    String liabilityParty,
+    Long merchantLiabilityAmount,
+    Long platformLiabilityAmount
 
 ) {
 
@@ -62,6 +65,6 @@ public record CanonicalPlatformOrder(
     ) {
         this(platformType, sourceEventId, eventType, externalOrderId, externalStoreId, sourceSequence, orderedAt,
             providerOccurredAt, deliveryAddress, customerRequestText, items, financials, providerCancelCode,
-            providerCancelReason, null, null, null, null);
+            providerCancelReason, null, null, null, null, null, null, null);
     }
 }

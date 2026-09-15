@@ -41,7 +41,11 @@ public record BaeminOrderDetailResponse(
 
     String refundReasonCode,
 
-    String refundReason
+    String refundReason,
+
+    String liabilityParty,
+    Long merchantLiabilityAmount,
+    Long platformLiabilityAmount
 
 ) {
 
