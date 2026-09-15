@@ -117,7 +117,11 @@ public class ReportReadService {
                 + summary.getProviderFundedDiscountAmount()
                 - summary.getEstimatedMenuCost()
                 - summary.getEstimatedPackagingCost(),
-            financialDataStatuses
+            financialDataStatuses,
+            summary.getCustomerRefundAmount(),
+            summary.getMerchantLiabilityAmount(),
+            summary.getPlatformLiabilityAmount(),
+            summary.getGrossOrderAmount() - summary.getMerchantLiabilityAmount()
         );
     }
 

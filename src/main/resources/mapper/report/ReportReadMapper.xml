@@ -44,6 +44,9 @@
         <result
                 column="estimated_packaging_cost"
                 property="estimatedPackagingCost"/>
+        <result column="customer_refund_amount" property="customerRefundAmount"/>
+        <result column="merchant_liability_amount" property="merchantLiabilityAmount"/>
+        <result column="platform_liability_amount" property="platformLiabilityAmount"/>
 
     </resultMap>
 
@@ -135,7 +138,7 @@
         INNER JOIN report_order_items ri
         ON ri.order_id = fo.order_id
 
-        WHERE fo.status = 'DELIVERED'
+        WHERE fo.status IN ('DELIVERED', 'REFUNDED')
 
         GROUP BY
         fo.order_id
@@ -147,7 +150,7 @@
         COALESCE(
         SUM(
         CASE
-        WHEN fo.status = 'DELIVERED'
+        WHEN fo.status IN ('DELIVERED', 'REFUNDED')
         THEN 1
         ELSE 0
         END
@@ -209,7 +212,7 @@
         INNER JOIN report_order_charges rc
         ON rc.order_id = fo.order_id
 
-        WHERE fo.status = 'DELIVERED'
+        WHERE fo.status IN ('DELIVERED', 'REFUNDED')
         ),
         completed_item_totals AS (
         SELECT
@@ -224,6 +227,15 @@
         ) AS estimated_packaging_cost
 
         FROM completed_items_by_order
+        ),
+        refund_summary AS (
+        SELECT
+        COALESCE(SUM(rr.amount), 0) AS customer_refund_amount,
+        COALESCE(SUM(rr.merchant_liability_amount), 0) AS merchant_liability_amount,
+        COALESCE(SUM(rr.platform_liability_amount), 0) AS platform_liability_amount
+        FROM filtered_orders fo
+        INNER JOIN report_refunds rr ON rr.order_id = fo.order_id
+        WHERE fo.status = 'REFUNDED'
         )
         SELECT
         os.total_order_count,
@@ -244,12 +256,16 @@
         COALESCE(
         cit.estimated_packaging_cost,
         0
-        ) AS estimated_packaging_cost
+        ) AS estimated_packaging_cost,
+        rs.customer_refund_amount,
+        rs.merchant_liability_amount,
+        rs.platform_liability_amount
 
         FROM order_summary os
 
         CROSS JOIN completed_charges cc
         CROSS JOIN completed_item_totals cit
+        CROSS JOIN refund_summary rs
 
     </select>
 

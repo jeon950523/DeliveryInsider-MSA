@@ -18,7 +18,11 @@ public record ReportSummaryResponse(
     long estimatedPackagingCost,
     long estimatedNetProfit,
 
-    List<String> financialDataStatuses
+    List<String> financialDataStatuses,
+    long customerRefundAmount,
+    long merchantLiabilityAmount,
+    long platformLiabilityAmount,
+    long netSales
 ) {
     public ReportSummaryResponse(
         long totalOrderCount,
@@ -43,7 +47,11 @@ public record ReportSummaryResponse(
             estimatedMenuCost,
             estimatedPackagingCost,
             estimatedNetProfit,
-            financialDataStatuses
+            financialDataStatuses,
+            0,
+            0,
+            0,
+            grossOrderAmount
         );
     }
 }

@@ -22,4 +22,7 @@ public class ReportSummaryProjection {
 
     private long estimatedMenuCost;
     private long estimatedPackagingCost;
+    private long customerRefundAmount;
+    private long merchantLiabilityAmount;
+    private long platformLiabilityAmount;
 }
