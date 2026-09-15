@@ -476,7 +476,9 @@ public class OrderReadService {
             ),
 
             refund == null ? null : new OrderDetailResponse.RefundInfo(
-                refund.getStatus().name(), refund.getReasonCode(), refund.getRequestedAt()
+                refund.getStatus().name(), refund.getReasonCode(), refund.getAmount(),
+                refund.getLiabilityParty() == null ? "UNKNOWN" : refund.getLiabilityParty().name(),
+                refund.getMerchantLiabilityAmount(), refund.getPlatformLiabilityAmount(), refund.getRequestedAt()
             ),
 
             itemResponses

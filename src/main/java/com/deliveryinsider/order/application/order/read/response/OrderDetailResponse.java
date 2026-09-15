@@ -134,6 +134,14 @@ public record OrderDetailResponse(
 
         String refundReason,
 
+        Long refundAmount,
+
+        String liabilityParty,
+
+        Long merchantLiabilityAmount,
+
+        Long platformLiabilityAmount,
+
         LocalDateTime refundedAt
 
     ) {
