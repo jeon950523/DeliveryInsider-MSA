@@ -12,4 +12,6 @@ export const ORDER_STATUS_LABELS = {
   PICKED_UP: '기사 픽업',
   DELIVERED: '배달 완료',
   CANCELED: '고객 취소',
+  REFUND_REQUESTED: '환불 요청',
+  REFUNDED: '환불 완료',
 };

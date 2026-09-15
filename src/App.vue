@@ -7,6 +7,7 @@ import RecentOrders from './components/RecentOrders.vue';
 import { PROVIDERS } from './constants/providers.js';
 import {
   changeExternalOrderStatus,
+  refundExternalOrder,
   createExternalOrder,
   createExternalMenu,
   createExternalStore,
@@ -518,6 +519,23 @@ const changeOrderStatus = async (order, status, cancellation = null) => {
   }
 };
 
+const refundOrder = async (order, refund) => {
+  const provider = selectedProvider.value;
+  changingOrderId.value = order.externalOrderId;
+  errorMessage.value = '';
+  successMessage.value = '';
+  try {
+    await refundExternalOrder(provider, order.externalOrderId, refund);
+    successMessage.value = `${order.externalOrderId} 환불 완료 이벤트를 전송했습니다.`;
+    await loadRecentOrders();
+    clearMessageLater();
+  } catch (error) {
+    setError(error, '주문 환불에 실패했습니다. 배달 완료 주문만 환불할 수 있습니다.');
+  } finally {
+    changingOrderId.value = '';
+  }
+};
+
 watch(selectedProvider, async () => {
   await loadCatalog();
 });
@@ -706,6 +724,7 @@ onMounted(async () => {
         :disabled-order-id="changingOrderId"
         :has-selected-store="hasSelectedExternalStore"
         @change-status="changeOrderStatus"
+        @refund="refundOrder"
         @refresh="loadRecentOrders"
       />
     </main>

@@ -104,3 +104,11 @@ export const changeExternalOrderStatus = async (
   );
   return response.data;
 };
+
+export const refundExternalOrder = async (platformType, externalOrderId, payload) => {
+  const response = await simulatorApi.post(
+    `/api/control/providers/${platformType}/orders/${externalOrderId}/refunds`,
+    payload,
+  );
+  return response.data;
+};

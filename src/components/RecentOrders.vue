@@ -22,7 +22,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['change-status', 'refresh']);
+const emit = defineEmits(['change-status', 'refund', 'refresh']);
 
 const formatMoney = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`;
 
@@ -61,6 +61,10 @@ const cancelTarget = ref(null);
 const cancelReasonCode = ref('CUSTOMER_CHANGED_MIND');
 const cancelReason = ref('');
 const cancelError = ref('');
+const refundTarget = ref(null);
+const refundReasonCode = ref('CUSTOMER_CHANGED_MIND');
+const refundReason = ref('');
+const refundError = ref('');
 const cancelReasonOptions = [
   { value: 'CUSTOMER_CHANGED_MIND', label: '고객 요청' },
   { value: 'DUPLICATE_ORDER', label: '중복 주문' },
@@ -90,6 +94,31 @@ const requestStatusChange = (order, action) => {
   cancelReasonCode.value = 'CUSTOMER_CHANGED_MIND';
   cancelReason.value = '';
   cancelError.value = '';
+};
+
+const openRefundDialog = (order) => {
+  if (order?.status !== 'DELIVERED') return;
+  refundTarget.value = order;
+  refundReasonCode.value = 'CUSTOMER_CHANGED_MIND';
+  refundReason.value = '';
+  refundError.value = '';
+};
+
+const closeRefundDialog = () => {
+  if (props.disabledOrderId === refundTarget.value?.externalOrderId) return;
+  refundTarget.value = null;
+  refundReason.value = '';
+  refundError.value = '';
+};
+
+const submitRefund = () => {
+  const reason = refundReason.value.trim();
+  if (!reason) {
+    refundError.value = '환불 사유를 입력해 주세요.';
+    return;
+  }
+  emit('refund', refundTarget.value, { refundReasonCode: refundReasonCode.value, refundReason: reason });
+  closeRefundDialog();
 };
 
 const closeCancelDialog = () => {
@@ -161,6 +190,9 @@ const submitCancellation = () => {
         <p v-if="order.cancelReason" class="cancel-box">
           {{ order.cancelReason }}
         </p>
+        <p v-if="order.refundReason" class="refund-box">
+          환불 {{ formatMoney(order.refundAmount) }} · {{ order.refundReason }}
+        </p>
 
         <div class="order-actions">
           <button
@@ -173,8 +205,36 @@ const submitCancellation = () => {
           >
             {{ actionLabel[action] }}
           </button>
+          <button
+            v-if="order.status === 'DELIVERED'"
+            type="button"
+            class="action-button action-button--danger"
+            :disabled="disabledOrderId === order.externalOrderId"
+            @click="openRefundDialog(order)"
+          >환불</button>
         </div>
       </article>
+    </div>
+
+    <div v-if="refundTarget" class="cancel-dialog-backdrop" role="presentation" @click.self="closeRefundDialog">
+      <section class="cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="refund-dialog-title">
+        <h3 id="refund-dialog-title">주문 환불</h3>
+        <p><strong>{{ refundTarget.externalOrderId }}</strong>의 전액 환불을 외부 플랫폼에서 처리합니다.</p>
+        <p><strong>환불 금액: {{ formatMoney(refundTarget.refundAmount || refundTarget.totalAmount) }}</strong></p>
+        <label for="external-refund-reason-code">환불 분류</label>
+        <select id="external-refund-reason-code" v-model="refundReasonCode">
+          <option v-for="option in cancelReasonOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+        <label for="external-refund-reason">환불 사유 <span aria-hidden="true">*</span></label>
+        <textarea id="external-refund-reason" v-model="refundReason" rows="4" maxlength="500" placeholder="예: 배달 완료 후 고객 요청으로 전액 환불합니다." @input="refundError = ''"></textarea>
+        <p v-if="refundError" class="cancel-dialog__error" role="alert">{{ refundError }}</p>
+        <div class="cancel-dialog__actions">
+          <button type="button" class="secondary-button" @click="closeRefundDialog">닫기</button>
+          <button type="button" class="action-button action-button--danger" :disabled="disabledOrderId === refundTarget.externalOrderId" @click="submitRefund">
+            {{ disabledOrderId === refundTarget.externalOrderId ? '처리 중...' : '전액 환불' }}
+          </button>
+        </div>
+      </section>
     </div>
 
     <div v-else class="empty-state">
@@ -212,4 +272,5 @@ const submitCancellation = () => {
 .cancel-dialog label { display: block; margin: 16px 0 7px; font-weight: 700; } .cancel-dialog label span { color: #dc2626; }
 .cancel-dialog textarea, .cancel-dialog select { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }.cancel-dialog textarea { resize: vertical; }
 .cancel-dialog__error { color: #b91c1c; font-size: 13px; }.cancel-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.refund-box { padding: 10px; border-radius: 8px; background: #fff7ed; color: #9a3412; font-weight: 700; }
 </style>
