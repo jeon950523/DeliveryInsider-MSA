@@ -113,7 +113,8 @@ public class SimulatorControlService {
             totalAmount,
             items,
             order.cancelCode(), order.cancelReason(), order.refundId(), order.refundAmount(),
-            order.refundReasonCode(), order.refundReason()
+            order.refundReasonCode(), order.refundReason(), order.liabilityParty(),
+            order.merchantLiabilityAmount(), order.platformLiabilityAmount()
         );
     }
 

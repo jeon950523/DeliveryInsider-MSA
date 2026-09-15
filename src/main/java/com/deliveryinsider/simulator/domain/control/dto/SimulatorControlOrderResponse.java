@@ -25,7 +25,10 @@ public record SimulatorControlOrderResponse(
     String refundId,
     Long refundAmount,
     String refundReasonCode,
-    String refundReason
+    String refundReason,
+    String liabilityParty,
+    Long merchantLiabilityAmount,
+    Long platformLiabilityAmount
 ) {
 
     public record Item(
