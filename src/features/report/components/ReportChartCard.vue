@@ -88,6 +88,39 @@ const formatAxisValue = (value, unit) => {
   return number.toLocaleString('ko-KR');
 };
 
+const pieLegendItems = computed(() => {
+  if (props.chartType !== 'pie') {
+    return [];
+  }
+
+  const dataset = props.datasets[0] || {};
+  const chartValues = Array.isArray(dataset.data) ? dataset.data : [];
+  const displayValues = Array.isArray(dataset.tooltipValues)
+    ? dataset.tooltipValues
+    : chartValues;
+  const colors = Array.isArray(dataset.backgroundColor)
+    ? dataset.backgroundColor
+    : [];
+  const total = chartValues.reduce(
+    (sum, value) => sum + Math.max(0, Number(value) || 0),
+    0,
+  );
+
+  return props.labels.map((label, index) => {
+    const value = Number(displayValues[index] ?? chartValues[index] ?? 0);
+    const ratio = total
+      ? Math.max(0, Number(chartValues[index]) || 0) / total * 100
+      : 0;
+
+    return {
+      label,
+      value,
+      ratio,
+      color: colors[index] || dataset.backgroundColor || '#64748b',
+    };
+  });
+});
+
 const chartOptions = computed(() => {
   const axisUnit = props.datasets[0]?.unit || 'count';
   const isPie = props.chartType === 'pie';
@@ -101,6 +134,7 @@ const chartOptions = computed(() => {
       : { intersect: false, mode: 'index' },
     plugins: {
       legend: {
+        display: !isPie,
         position: 'bottom',
         labels: {
           boxWidth: 10,
@@ -182,17 +216,31 @@ const chartOptions = computed(() => {
     </div>
 
     <template v-else>
-      <div
-        class="chart-canvas"
-        role="img"
-        :aria-label="`${title}. ${description}`"
-        :aria-describedby="`${chartId}-description`"
-      >
-        <component
-          :is="chartComponent"
-          :data="chartData"
-          :options="chartOptions"
-        />
+      <div :class="['chart-content', { 'chart-content-pie': chartType === 'pie' }]">
+        <div
+          class="chart-canvas"
+          role="img"
+          :aria-label="`${title}. ${description}`"
+          :aria-describedby="`${chartId}-description`"
+        >
+          <component
+            :is="chartComponent"
+            :data="chartData"
+            :options="chartOptions"
+          />
+        </div>
+
+        <aside v-if="pieLegendItems.length" class="pie-value-legend" aria-label="차트 값 목록">
+          <p class="pie-value-legend-title">현재 값</p>
+          <div v-for="item in pieLegendItems" :key="item.label" class="pie-value-legend-item">
+            <span class="pie-value-swatch" :style="{ backgroundColor: item.color }" aria-hidden="true" />
+            <div>
+              <span>{{ item.label }}</span>
+              <strong>{{ formatValue(item.value, datasets[0]?.unit) }}</strong>
+            </div>
+            <em>{{ item.ratio.toLocaleString('ko-KR', { maximumFractionDigits: 1 }) }}%</em>
+          </div>
+        </aside>
       </div>
 
       <details v-if="tableRows.length" class="chart-data-details">
@@ -255,6 +303,70 @@ const chartOptions = computed(() => {
   width: 100%;
   height: 310px;
   overflow: hidden;
+}
+
+.chart-content-pie {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.58fr);
+  min-height: 310px;
+  align-items: center;
+}
+
+.chart-content-pie .chart-canvas {
+  height: 310px;
+}
+
+.pie-value-legend {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 0 14px 22px;
+  border-left: 1px solid #e2e8f0;
+}
+
+.pie-value-legend-title {
+  margin: 0 0 2px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pie-value-legend-item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  color: #475569;
+  font-size: 12px;
+}
+
+.pie-value-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.pie-value-legend-item div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pie-value-legend-item span:not(.pie-value-swatch) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pie-value-legend-item strong {
+  color: #1e293b;
+  font-size: 14px;
+}
+
+.pie-value-legend-item em {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
 }
 
 .chart-state {
@@ -363,5 +475,12 @@ const chartOptions = computed(() => {
   .report-chart-header { flex-direction: column; }
   .chart-canvas,
   .chart-state { height: 280px; min-height: 280px; }
+  .chart-content-pie { grid-template-columns: 1fr; }
+  .chart-content-pie .chart-canvas { height: 250px; }
+  .pie-value-legend {
+    padding: 16px 0 0;
+    border-top: 1px solid #e2e8f0;
+    border-left: 0;
+  }
 }
 </style>
