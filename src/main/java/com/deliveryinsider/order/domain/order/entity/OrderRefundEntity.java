@@ -2,6 +2,7 @@ package com.deliveryinsider.order.domain.order.entity;
 
 import com.deliveryinsider.order.domain.order.model.CancellationActor;
 import com.deliveryinsider.order.domain.order.model.OrderRefundStatus;
+import com.deliveryinsider.order.domain.order.model.RefundLiabilityParty;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -18,5 +19,8 @@ public class OrderRefundEntity {
     private CancellationActor actor;
     private String reasonCode;
     private String reasonText;
+    private RefundLiabilityParty liabilityParty;
+    private long merchantLiabilityAmount;
+    private long platformLiabilityAmount;
     private LocalDateTime requestedAt;
 }

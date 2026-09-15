@@ -3,15 +3,16 @@
 <mapper namespace="com.deliveryinsider.order.domain.order.mapper.OrderRefundMapper">
     <insert id="insert">
         INSERT INTO order_refunds (
-            order_id, provider_refund_id, source_event_id, status, amount, actor, reason_code, reason_text, requested_at
+            order_id, provider_refund_id, source_event_id, status, amount, actor, reason_code, reason_text, liability_party, merchant_liability_amount, platform_liability_amount, requested_at
         )
         VALUES (
-            #{orderId}, #{providerRefundId}, #{sourceEventId}, #{status}, #{amount}, #{actor}, #{reasonCode}, #{reasonText}, #{requestedAt}
+            #{orderId}, #{providerRefundId}, #{sourceEventId}, #{status}, #{amount}, #{actor}, #{reasonCode}, #{reasonText}, #{liabilityParty}, #{merchantLiabilityAmount}, #{platformLiabilityAmount}, #{requestedAt}
         )
     </insert>
     <select id="findByOrderId" resultType="com.deliveryinsider.order.domain.order.entity.OrderRefundEntity">
         SELECT order_id AS orderId, provider_refund_id AS providerRefundId, source_event_id AS sourceEventId,
-               status, amount, actor, reason_code AS reasonCode, reason_text AS reasonText,
+               status, amount, actor, reason_code AS reasonCode, reason_text AS reasonText, liability_party AS liabilityParty,
+               merchant_liability_amount AS merchantLiabilityAmount, platform_liability_amount AS platformLiabilityAmount,
                requested_at AS requestedAt
         FROM order_refunds WHERE order_id = #{orderId}
     </select>

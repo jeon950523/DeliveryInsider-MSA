@@ -19,6 +19,7 @@ import com.deliveryinsider.order.domain.order.model.OrderOperationStatusTransiti
 import com.deliveryinsider.order.domain.order.model.CancellationReasonCode;
 import com.deliveryinsider.order.domain.order.model.CancellationActor;
 import com.deliveryinsider.order.domain.order.model.OrderRefundStatus;
+import com.deliveryinsider.order.domain.order.model.RefundLiabilityParty;
 import com.deliveryinsider.order.domain.order.model.ProcessedPlatformEventResult;
 import com.deliveryinsider.order.messaging.platform.dto.PlatformOrderEventMessage;
 import com.deliveryinsider.order.messaging.platform.exception.RetryableOrderEventProcessingException;
@@ -221,6 +222,7 @@ public class PlatformOrderStatusTransactionService {
 
         if (targetStatus == OrderStatus.REFUNDED) {
             long refundAmount = requireFullRefundAmount(order, message);
+            RefundLiability liability = resolveRefundLiability(message, refundAmount);
             if (refundMapper.findByOrderId(order.getId()).isEmpty()) {
                 refundMapper.insert(
                     OrderRefundEntity.builder()
@@ -232,6 +234,9 @@ public class PlatformOrderStatusTransactionService {
                         .actor(CancellationActor.PROVIDER)
                         .reasonCode(message.data().providerRefundReasonCode())
                         .reasonText(message.data().providerRefundReason())
+                        .liabilityParty(liability.party())
+                        .merchantLiabilityAmount(liability.merchantAmount())
+                        .platformLiabilityAmount(liability.platformAmount())
                         .requestedAt(providerOccurredAt)
                         .build()
                 );
@@ -257,6 +262,25 @@ public class PlatformOrderStatusTransactionService {
 
         return OrderEventHandlingResult.APPLIED;
     }
+
+    private RefundLiability resolveRefundLiability(PlatformOrderEventMessage message, long refundAmount) {
+        String rawParty = message.data().liabilityParty();
+        RefundLiabilityParty party;
+        try {
+            party = rawParty == null || rawParty.isBlank() ? RefundLiabilityParty.UNKNOWN : RefundLiabilityParty.valueOf(rawParty);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(OrderErrorCode.INVALID_STATUS_TRANSITION);
+        }
+        long merchant = message.data().merchantLiabilityAmount() == null ? 0L : message.data().merchantLiabilityAmount();
+        long platform = message.data().platformLiabilityAmount() == null ? 0L : message.data().platformLiabilityAmount();
+        if (merchant < 0 || platform < 0 || merchant > refundAmount || platform > refundAmount
+            || (party == RefundLiabilityParty.SHARED && merchant + platform != refundAmount)) {
+            throw new BusinessException(OrderErrorCode.INVALID_STATUS_TRANSITION);
+        }
+        return new RefundLiability(party, merchant, platform);
+    }
+
+    private record RefundLiability(RefundLiabilityParty party, long merchantAmount, long platformAmount) {}
 
     private long requireFullRefundAmount(OrderEntity order, PlatformOrderEventMessage message) {
         Long amount = message.data().providerRefundAmount();
