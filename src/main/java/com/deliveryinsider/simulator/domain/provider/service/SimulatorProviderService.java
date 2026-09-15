@@ -124,6 +124,7 @@ public class SimulatorProviderService {
             long amount = current.financials() == null || current.financials().paidAmount() == null
                 ? current.items().stream().mapToLong(item -> item.unitPrice() * item.quantity()).sum()
                 : current.financials().paidAmount();
+            RefundLiability liability = resolveLiability(request.refundReasonCode(), amount);
             return current.toBuilder().sequence(current.sequence() + 1)
                 .status(SimulatorOrderStatus.REFUND_REQUESTED)
                 .operationStatus(SimulatorOrderOperationStatus.REFUND_REQUESTED)
@@ -131,6 +132,9 @@ public class SimulatorProviderService {
                 .refundId(refundId).refundAmount(amount)
                 .refundReasonCode(request.refundReasonCode().trim())
                 .refundReason(request.refundReason().trim())
+                .liabilityParty(liability.party())
+                .merchantLiabilityAmount(liability.merchantAmount())
+                .platformLiabilityAmount(liability.platformAmount())
                 .build();
         });
         send(requested, requestedEventId);
@@ -254,7 +258,27 @@ public class SimulatorProviderService {
             order.eventOccurredAt(), order.deliveryAddress(), order.customerRequest(),
             order.items().stream().map(item -> new SimulatorOrderDetailResponse.Item(item.menuId(), item.quantity(), item.unitPrice())).toList(),
             toFinancialResponse(order.financials()), order.cancelCode(), order.cancelReason(), order.refundId(),
-            order.refundAmount(), order.refundReasonCode(), order.refundReason());
+            order.refundAmount(), order.refundReasonCode(), order.refundReason(), order.liabilityParty(),
+            order.merchantLiabilityAmount(), order.platformLiabilityAmount());
+    }
+
+    /** Provider is the processor; liability expresses the economic adjustment only. */
+    private RefundLiability resolveLiability(String reasonCode, long refundAmount) {
+        String code = reasonCode == null ? "" : reasonCode.trim().toUpperCase(java.util.Locale.ROOT);
+        return switch (code) {
+            case "MENU_MISSING", "FOOD_QUALITY", "COOKING_ERROR" -> new RefundLiability("MERCHANT", refundAmount, 0L);
+            case "DELIVERY_DELAY", "DRIVER_ACCIDENT", "PLATFORM_SYSTEM_ERROR" -> new RefundLiability("PLATFORM", 0L, refundAmount);
+            case "CUSTOMER_CHANGED_MIND", "DUPLICATE_ORDER", "ADDRESS_ISSUE" -> new RefundLiability("CUSTOMER", 0L, 0L);
+            default -> new RefundLiability("UNKNOWN", 0L, 0L);
+        };
+    }
+
+    private record RefundLiability(String party, long merchantAmount, long platformAmount) {
+        private RefundLiability {
+            if (merchantAmount < 0 || platformAmount < 0) {
+                throw new IllegalArgumentException("Refund liability amount must not be negative");
+            }
+        }
     }
     private SimulatorOrderDetailResponse.Financials toFinancialResponse(CreateSimulatorOrderRequest.Financials value) {
         if (value == null) return null;
