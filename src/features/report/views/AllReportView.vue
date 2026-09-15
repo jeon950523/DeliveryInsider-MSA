@@ -259,6 +259,10 @@ const summaryStats = computed(() => {
       : 0,
     totalCount,
     completedCount: Number(summary.completedOrderCount || 0),
+    customerRefundAmount: Number(summary.customerRefundAmount || 0),
+    merchantLiabilityAmount: Number(summary.merchantLiabilityAmount || 0),
+    platformLiabilityAmount: Number(summary.platformLiabilityAmount || 0),
+    netSales: Number(summary.netSales || 0),
   };
 });
 
@@ -849,9 +853,9 @@ onMounted(async () => {
     </section>
     <section v-else class="report-summary-grid report-overview-kpis" aria-label="운영 리포트 핵심 지표">
       <article class="summary-box">
-        <span>매출</span>
+        <span>총매출</span>
         <strong data-testid="report-kpi-revenue">{{ formatMoney(summaryStats.totalSales) }}</strong>
-        <p>완료 주문 기준</p>
+        <p>환불 전 원 거래금액</p>
       </article>
       <article
         class="summary-box profit-box"
@@ -872,6 +876,12 @@ onMounted(async () => {
         <strong data-testid="report-kpi-cancel-rate">{{ summaryStats.cancelRate }}%</strong>
         <p>취소 {{ summaryStats.cancelCount }}건 / 전체 {{ summaryStats.totalCount }}건</p>
       </article>
+    </section>
+    <section class="report-summary-grid sales-summary-grid" aria-label="환불 반영 매출 지표">
+      <article class="summary-box"><span>고객 환불액</span><strong>{{ formatMoney(summaryStats.customerRefundAmount) }}</strong><p>고객에게 실제 환불된 금액</p></article>
+      <article class="summary-box"><span>매장 귀책 환불액</span><strong>{{ formatMoney(summaryStats.merchantLiabilityAmount) }}</strong><p>매장 실적 차감 기준</p></article>
+      <article class="summary-box"><span>플랫폼 귀책 환불액</span><strong>{{ formatMoney(summaryStats.platformLiabilityAmount) }}</strong><p>고객 환불과 매장 차감은 분리</p></article>
+      <article class="summary-box"><span>순매출</span><strong>{{ formatMoney(summaryStats.netSales) }}</strong><p>총매출 − 매장 귀책 환불액</p></article>
     </section>
 
     <p v-if="hasIncompleteFinancialData && !reportStore.isLoading && !reportStore.loadError" class="financial-coverage-note">
