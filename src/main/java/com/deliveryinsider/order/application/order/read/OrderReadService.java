@@ -755,7 +755,9 @@ public class OrderReadService {
                 true;
 
             case COMPLETED,
-                 CANCELED ->
+                 CANCELED,
+                 REFUND_REQUESTED,
+                 REFUNDED ->
                 false;
         };
     }
@@ -794,7 +796,9 @@ public class OrderReadService {
                 order.getPickedUpAt();
 
             case COMPLETED,
-                 CANCELED ->
+                 CANCELED,
+                 REFUND_REQUESTED,
+                 REFUNDED ->
                 null;
         };
     }

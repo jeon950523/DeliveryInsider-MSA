@@ -29,7 +29,11 @@ public class OrderStatusTransitionPolicy {
             case PICKED_UP ->
                 targetStatus == OrderStatus.DELIVERED;
 
-            case DELIVERED, CANCELED -> false;
+            case DELIVERED -> targetStatus == OrderStatus.REFUND_REQUESTED;
+
+            case REFUND_REQUESTED -> targetStatus == OrderStatus.REFUNDED;
+
+            case CANCELED, REFUNDED -> false;
         };
     }
 }

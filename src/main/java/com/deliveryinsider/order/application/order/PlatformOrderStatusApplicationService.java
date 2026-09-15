@@ -117,6 +117,12 @@ public class PlatformOrderStatusApplicationService {
             case "ORDER_CANCELED" ->
                 new PlatformOrderTransition(OrderStatus.CANCELED, OrderOperationStatus.CANCELED);
 
+            case "ORDER_REFUND_REQUESTED" ->
+                new PlatformOrderTransition(OrderStatus.REFUND_REQUESTED, OrderOperationStatus.REFUND_REQUESTED);
+
+            case "ORDER_REFUNDED" ->
+                new PlatformOrderTransition(OrderStatus.REFUNDED, OrderOperationStatus.REFUNDED);
+
             default ->
                 throw unsupportedEventType();
         };

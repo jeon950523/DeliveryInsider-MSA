@@ -42,9 +42,12 @@ public class OrderOperationStatusTransitionPolicy {
             case DELIVERING ->
                 targetStatus == OrderOperationStatus.COMPLETED;
 
-            case COMPLETED,
-                 CANCELED ->
-                false;
+            case COMPLETED -> targetStatus == OrderOperationStatus.REFUND_REQUESTED;
+
+            case REFUND_REQUESTED -> targetStatus == OrderOperationStatus.REFUNDED;
+
+            case REFUNDED,
+                 CANCELED -> false;
         };
     }
 }

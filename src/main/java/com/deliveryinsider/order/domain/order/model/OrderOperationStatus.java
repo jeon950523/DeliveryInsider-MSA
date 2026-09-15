@@ -7,5 +7,7 @@ public enum OrderOperationStatus {
     READY_FOR_PICKUP,
     DELIVERING,
     COMPLETED,
-    CANCELED
+    CANCELED,
+    REFUND_REQUESTED,
+    REFUNDED
 }

@@ -3,11 +3,13 @@ package com.deliveryinsider.order.application.order;
 import com.deliveryinsider.order.application.order.exception.DuplicatePlatformEventException;
 import com.deliveryinsider.order.domain.order.entity.OrderEntity;
 import com.deliveryinsider.order.domain.order.entity.OrderItemEntity;
+import com.deliveryinsider.order.domain.order.entity.OrderRefundEntity;
 import com.deliveryinsider.order.domain.order.entity.OutboxEventEntity;
 import com.deliveryinsider.order.domain.order.entity.ProcessedPlatformEvent;
 import com.deliveryinsider.order.domain.order.mapper.OrderMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderItemMapper;
 import com.deliveryinsider.order.domain.order.mapper.OrderCancellationMapper;
+import com.deliveryinsider.order.domain.order.mapper.OrderRefundMapper;
 import com.deliveryinsider.order.domain.order.mapper.OutboxEventMapper;
 import com.deliveryinsider.order.domain.order.mapper.ProcessedPlatformEventMapper;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatus;
@@ -15,6 +17,8 @@ import com.deliveryinsider.order.domain.order.model.OrderStatus;
 import com.deliveryinsider.order.domain.order.model.OrderStatusTransitionPolicy;
 import com.deliveryinsider.order.domain.order.model.OrderOperationStatusTransitionPolicy;
 import com.deliveryinsider.order.domain.order.model.CancellationReasonCode;
+import com.deliveryinsider.order.domain.order.model.CancellationActor;
+import com.deliveryinsider.order.domain.order.model.OrderRefundStatus;
 import com.deliveryinsider.order.domain.order.model.ProcessedPlatformEventResult;
 import com.deliveryinsider.order.messaging.platform.dto.PlatformOrderEventMessage;
 import com.deliveryinsider.order.messaging.platform.exception.RetryableOrderEventProcessingException;
@@ -38,12 +42,24 @@ public class PlatformOrderStatusTransactionService {
     private final OrderMapper orderMapper;
     private final OrderItemMapper orderItemMapper;
     private final OrderCancellationMapper cancellationMapper;
+    private final OrderRefundMapper refundMapper;
     private final ProcessedPlatformEventMapper processedEventMapper;
     private final OutboxEventMapper outboxEventMapper;
     private final OrderOutboxEventFactory outboxFactory;
     private final OrderStatusTransitionPolicy transitionPolicy;
     private final OrderOperationStatusTransitionPolicy operationTransitionPolicy;
     private final Clock clock;
+
+    /** Kept for existing direct unit tests; production injection always provides the refund mapper. */
+    public PlatformOrderStatusTransactionService(
+        OrderMapper orderMapper, OrderItemMapper orderItemMapper, OrderCancellationMapper cancellationMapper,
+        ProcessedPlatformEventMapper processedEventMapper, OutboxEventMapper outboxEventMapper,
+        OrderOutboxEventFactory outboxFactory, OrderStatusTransitionPolicy transitionPolicy,
+        OrderOperationStatusTransitionPolicy operationTransitionPolicy, Clock clock
+    ) {
+        this(orderMapper, orderItemMapper, cancellationMapper, null, processedEventMapper, outboxEventMapper,
+            outboxFactory, transitionPolicy, operationTransitionPolicy, clock);
+    }
 
     @Transactional
     public OrderEventHandlingResult apply(
@@ -184,6 +200,25 @@ public class PlatformOrderStatusTransactionService {
             );
         }
 
+        if (targetStatus == OrderStatus.REFUNDED) {
+            long refundAmount = requireFullRefundAmount(order, message);
+            if (refundMapper.findByOrderId(order.getId()).isEmpty()) {
+                refundMapper.insert(
+                    OrderRefundEntity.builder()
+                    .orderId(order.getId())
+                    .providerRefundId(message.data().providerRefundId())
+                    .sourceEventId(message.eventId())
+                    .status(OrderRefundStatus.REFUNDED)
+                        .amount(refundAmount)
+                        .actor(CancellationActor.PROVIDER)
+                        .reasonCode(message.data().providerRefundReasonCode())
+                        .reasonText(message.data().providerRefundReason())
+                        .requestedAt(providerOccurredAt)
+                        .build()
+                );
+            }
+        }
+
         OutboxEventEntity outboxEvent = targetStatus == null
             ? outboxFactory.createOrderOperationStatusChanged(
                 order,
@@ -202,6 +237,22 @@ public class PlatformOrderStatusTransactionService {
         );
 
         return OrderEventHandlingResult.APPLIED;
+    }
+
+    private long requireFullRefundAmount(OrderEntity order, PlatformOrderEventMessage message) {
+        Long amount = message.data().providerRefundAmount();
+        if (message.data().providerRefundId() == null || message.data().providerRefundId().isBlank()
+            || amount == null || amount <= 0
+            || message.data().providerRefundReasonCode() == null || message.data().providerRefundReasonCode().isBlank()
+            || message.data().providerRefundReason() == null || message.data().providerRefundReason().isBlank()) {
+            throw new BusinessException(OrderErrorCode.ORDER_REFUND_NOT_ALLOWED);
+        }
+        long expected = order.getProviderCustomerPaidAmountSnapshot() == null
+            ? order.getProviderGrossOrderAmountSnapshot() : order.getProviderCustomerPaidAmountSnapshot();
+        if (expected <= 0 || amount.longValue() != expected) {
+            throw new BusinessException(OrderErrorCode.ORDER_REFUND_NOT_ALLOWED);
+        }
+        return amount;
     }
 
     private OrderEventHandlingResult determineResult(

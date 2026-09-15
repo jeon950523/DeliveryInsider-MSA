@@ -97,14 +97,20 @@ public class OrderOutboxEventFactory {
 
                 sourceEvent
                     .data()
-                    .providerCancelReason()
+                    .providerCancelReason(),
+
+                sourceEvent.data().providerRefundId(),
+                sourceEvent.data().providerRefundAmount(),
+                sourceEvent.data().providerRefundReasonCode(),
+                sourceEvent.data().providerRefundReason()
             );
 
-        String eventType =
-            order.getStatus()
-                == OrderStatus.CANCELED
-                ? "ORDER_CANCELED"
-                : "ORDER_STATUS_CHANGED";
+        String eventType = switch (order.getStatus()) {
+            case CANCELED -> "ORDER_CANCELED";
+            case REFUND_REQUESTED -> "ORDER_REFUND_REQUESTED";
+            case REFUNDED -> "ORDER_REFUNDED";
+            default -> "ORDER_STATUS_CHANGED";
+        };
 
         OrderDomainEventMessage<OrderStatusChangedEventData> event =
             new OrderDomainEventMessage<>(

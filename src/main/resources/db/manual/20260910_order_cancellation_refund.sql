@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS order_cancellations (
 
 CREATE TABLE IF NOT EXISTS order_refunds (
     order_id BIGINT NOT NULL PRIMARY KEY,
+    provider_refund_id VARCHAR(120) NULL UNIQUE,
+    source_event_id VARCHAR(120) NULL UNIQUE,
     status VARCHAR(30) NOT NULL,
     amount BIGINT NOT NULL,
     actor VARCHAR(30) NOT NULL,

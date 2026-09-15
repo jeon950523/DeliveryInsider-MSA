@@ -23,7 +23,11 @@ public record OrderStatusChangedEventData(
     Instant providerOccurredAt,
 
     String providerCancelCode,
-    String providerCancelReason
+    String providerCancelReason,
+    String providerRefundId,
+    Long providerRefundAmount,
+    String providerRefundReasonCode,
+    String providerRefundReason
 
 ) {
 }

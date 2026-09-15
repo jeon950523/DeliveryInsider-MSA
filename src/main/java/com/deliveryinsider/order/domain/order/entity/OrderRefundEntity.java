@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 @Builder
 public class OrderRefundEntity {
     private Long orderId;
+    private String providerRefundId;
+    private String sourceEventId;
     private OrderRefundStatus status;
     private long amount;
     private CancellationActor actor;
