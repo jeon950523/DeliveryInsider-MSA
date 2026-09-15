@@ -70,7 +70,9 @@ public class PlatformOrderEventListener {
                  "ORDER_READY_FOR_PICKUP",
                  "ORDER_PICKED_UP",
                  "ORDER_DELIVERED",
-                 "ORDER_CANCELED" ->
+                 "ORDER_CANCELED",
+                 "ORDER_REFUND_REQUESTED",
+                 "ORDER_REFUNDED" ->
                 orderStatusService.handle(
                     message
                 );

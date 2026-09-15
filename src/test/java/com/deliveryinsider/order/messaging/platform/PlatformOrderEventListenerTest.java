@@ -107,6 +107,34 @@ class PlatformOrderEventListenerTest {
     }
 
     @Test
+    void refundStatusEventIsDelegatedToStatusApplicationService() {
+        ConsumerRecord<String, String> record =
+            record(
+                "BAEMIN:BAE-ORDER-001",
+                validJson("ORDER_REFUNDED")
+            );
+
+        when(
+            statusService.handle(
+                any(PlatformOrderEventMessage.class)
+            )
+        ).thenReturn(
+            OrderEventHandlingResult.APPLIED
+        );
+
+        listener.consume(record);
+
+        verify(statusService).handle(
+            argThat(message ->
+                "ORDER_REFUNDED".equals(
+                    message.eventType()
+                )
+            )
+        );
+        verifyNoInteractions(createdService);
+    }
+
+    @Test
     void malformedJsonIsNonRetryable() {
         ConsumerRecord<String, String> record =
             record(
