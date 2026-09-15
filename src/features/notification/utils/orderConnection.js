@@ -1,4 +1,11 @@
-const eventTypes = new Set(['ORDER_CREATED', 'ORDER_OPERATION_STATUS_CHANGED', 'ORDER_STATUS_CHANGED', 'ORDER_CANCELED']);
+const eventTypes = new Set([
+  'ORDER_CREATED',
+  'ORDER_OPERATION_STATUS_CHANGED',
+  'ORDER_STATUS_CHANGED',
+  'ORDER_CANCELED',
+  'ORDER_REFUND_REQUESTED',
+  'ORDER_REFUNDED',
+]);
 
 export function validOrderSignal(signal, storeId) {
   return Boolean(signal && signal.storeId === storeId && Number.isSafeInteger(signal.orderId) && signal.orderId > 0

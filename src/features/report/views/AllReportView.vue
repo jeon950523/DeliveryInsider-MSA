@@ -208,7 +208,7 @@ const cancellationHistory = computed(() => reportHistory.value.filter((entry) =>
 )));
 
 const refundHistory = computed(() => reportHistory.value.filter((entry) => (
-  entry.historyType === 'REFUND_REQUESTED'
+  entry.historyType === 'REFUND_REQUESTED' || entry.historyType === 'REFUNDED'
 )));
 
 const historyEntries = computed(() => reportHistory.value);
@@ -608,7 +608,7 @@ const exportExcel = async (type = '전체') => {
   }
 
   if (type === '환불') {
-    exportFilters.historyType = 'REFUND_REQUESTED';
+    exportFilters.historyType = 'REFUNDED';
   }
 
   // 화면에서 적용된 이력 필터도 export에 동일하게 전달한다.
@@ -618,7 +618,7 @@ const exportExcel = async (type = '전체') => {
   }
 
   if (type === '전체' && exportFilters.risk === 'REFUND') {
-    exportFilters.historyType = 'REFUND_REQUESTED';
+    exportFilters.historyType = 'REFUNDED';
   }
 
   await reportStore.downloadReportXlsx(exportFilters);
@@ -1291,7 +1291,7 @@ onMounted(async () => {
               {{ entry.reasonText || '-' }}
             </td>
             <td class="text-muted">
-              {{ entry.historyType === 'REFUND_REQUESTED' ? formatMoney(entry.amount) : '-' }}
+              {{ (entry.historyType === 'REFUND_REQUESTED' || entry.historyType === 'REFUNDED') ? formatMoney(entry.amount) : '-' }}
             </td>
             <td class="text-muted cancel-processed-at-cell">
               {{ entry.occurredAtText || '-' }}
@@ -1511,7 +1511,7 @@ onMounted(async () => {
 
         <article class="card col-4 export-card">
           <h3>환불 이력 내보내기</h3>
-          <p>현재 필터 결과 중 환불 요청 이력 {{ refundHistory.length }}건의 상세 사유를 저장합니다.</p>
+          <p>현재 필터 결과 중 환불 이력 {{ refundHistory.length }}건의 상세 사유를 저장합니다.</p>
           <button class="primary-button card-button" :disabled="reportStore.isExporting" @click="exportExcel('환불')">
             필터 환불 Excel 생성
           </button>
