@@ -436,7 +436,7 @@
                 ro.order_id,
                 ro.platform_type,
                 ro.platform_order_id,
-                'REFUND_REQUESTED' AS history_type,
+                CASE WHEN rr.status = 'REFUNDED' THEN 'REFUNDED' ELSE 'REFUND_REQUESTED' END AS history_type,
                 rr.reason_code,
                 rr.reason_text,
                 rr.amount,

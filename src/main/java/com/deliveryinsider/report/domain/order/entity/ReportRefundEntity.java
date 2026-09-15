@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 public class ReportRefundEntity {
 
     private Long orderId;
+    private String providerRefundId;
     private String status;
     private long amount;
     private String reasonCode;

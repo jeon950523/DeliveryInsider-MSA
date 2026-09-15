@@ -2,6 +2,7 @@
 -- Do not modify report_orders lifecycle or financial snapshot columns.
 CREATE TABLE IF NOT EXISTS report_refunds (
     order_id BIGINT NOT NULL,
+    provider_refund_id VARCHAR(120) NULL UNIQUE,
     status VARCHAR(32) NOT NULL,
     amount BIGINT NOT NULL,
     reason_code VARCHAR(120) NULL,

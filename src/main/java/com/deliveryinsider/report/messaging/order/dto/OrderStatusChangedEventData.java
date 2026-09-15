@@ -23,7 +23,20 @@ public record OrderStatusChangedEventData(
     Instant providerOccurredAt,
 
     String providerCancelCode,
-    String providerCancelReason
+    String providerCancelReason,
+    String providerRefundId,
+    Long providerRefundAmount,
+    String providerRefundReasonCode,
+    String providerRefundReason
 
 ) {
+
+    public OrderStatusChangedEventData(
+        Long orderId, String platformType, String platformOrderId, String externalStoreId,
+        String previousStatus, String status, String operationStatus, Long sourceSequence,
+        Instant providerOccurredAt, String providerCancelCode, String providerCancelReason
+    ) {
+        this(orderId, platformType, platformOrderId, externalStoreId, previousStatus, status, operationStatus,
+            sourceSequence, providerOccurredAt, providerCancelCode, providerCancelReason, null, null, null, null);
+    }
 }

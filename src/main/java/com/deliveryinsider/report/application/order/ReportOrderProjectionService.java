@@ -67,7 +67,8 @@ public class ReportOrderProjectionService {
                 );
 
             case "ORDER_STATUS_CHANGED",
-                 "ORDER_CANCELED" ->
+                 "ORDER_CANCELED",
+                 "ORDER_REFUNDED" ->
                 handleProviderStatusChanged(
                     event
                 );
@@ -78,9 +79,9 @@ public class ReportOrderProjectionService {
                 );
 
             case "ORDER_REFUND_REQUESTED" ->
-                handleRefundRequested(
-                    event
-                );
+                "ORDER_REFUND".equals(event.aggregateType())
+                    ? handleRefundRequested(event)
+                    : handleProviderStatusChanged(event);
 
             default ->
                 throw new NonRetryableReportEventException(
@@ -332,7 +333,36 @@ public class ReportOrderProjectionService {
             );
         }
 
+        if ("ORDER_REFUNDED".equals(event.eventType())) {
+            insertExternalRefund(event, data, occurredAt);
+        }
+
         return ReportProjectionResult.APPLIED;
+    }
+
+    private void insertExternalRefund(OrderEventEnvelope event, OrderStatusChangedEventData data, LocalDateTime occurredAt) {
+        if (data.providerRefundId() == null || data.providerRefundId().isBlank()
+            || data.providerRefundAmount() == null || data.providerRefundAmount() <= 0
+            || data.providerRefundReasonCode() == null || data.providerRefundReasonCode().isBlank()
+            || data.providerRefundReason() == null || data.providerRefundReason().isBlank()) {
+            throw new NonRetryableReportEventException("ORDER_REFUNDED 필수 환불 정보가 없습니다.");
+        }
+        try {
+            reportRefundMapper.insert(
+                ReportRefundEntity.builder()
+                    .orderId(data.orderId())
+                    .providerRefundId(data.providerRefundId())
+                    .status("REFUNDED")
+                    .amount(data.providerRefundAmount())
+                    .reasonCode(data.providerRefundReasonCode())
+                    .reasonText(data.providerRefundReason())
+                    .requestedAt(occurredAt)
+                    .eventVersion(event.eventVersion())
+                    .build()
+            );
+        } catch (DuplicateKeyException ignored) {
+            // The report projection is idempotent by its one-refund-per-order constraint.
+        }
     }
 
 

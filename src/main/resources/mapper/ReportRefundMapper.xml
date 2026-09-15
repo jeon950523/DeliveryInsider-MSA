@@ -8,6 +8,7 @@
     <insert id="insert">
         INSERT INTO report_refunds (
             order_id,
+            provider_refund_id,
             status,
             amount,
             reason_code,
@@ -17,6 +18,7 @@
         )
         VALUES (
             #{orderId},
+            #{providerRefundId},
             #{status},
             #{amount},
             #{reasonCode},
