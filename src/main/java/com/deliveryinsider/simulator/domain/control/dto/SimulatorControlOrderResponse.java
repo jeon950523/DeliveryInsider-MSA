@@ -21,7 +21,11 @@ public record SimulatorControlOrderResponse(
     long totalAmount,
     List<Item> items,
     String cancelCode,
-    String cancelReason
+    String cancelReason,
+    String refundId,
+    Long refundAmount,
+    String refundReasonCode,
+    String refundReason
 ) {
 
     public record Item(

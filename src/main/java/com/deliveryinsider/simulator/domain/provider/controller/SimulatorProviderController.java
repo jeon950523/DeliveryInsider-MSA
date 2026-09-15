@@ -35,4 +35,9 @@ public class SimulatorProviderController {
         @Valid @RequestBody ChangeSimulatorOrderStatusRequest request) {
         return orderService.changeStatus(platformType, orderId, request);
     }
+    @PostMapping("/{orderId}/refunds")
+    public SimulatorOrderDetailResponse refund(@PathVariable PlatformType platformType, @PathVariable String orderId,
+        @Valid @RequestBody RefundSimulatorOrderRequest request) {
+        return orderService.refund(platformType, orderId, request);
+    }
 }

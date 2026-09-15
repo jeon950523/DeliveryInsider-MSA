@@ -33,7 +33,12 @@ public record SimulatorOrder(
         CreateSimulatorOrderRequest.Financials financials,
 
         String cancelCode,
-        String cancelReason
+        String cancelReason,
+
+        String refundId,
+        Long refundAmount,
+        String refundReasonCode,
+        String refundReason
 
 ) {
 
@@ -68,6 +73,8 @@ public record SimulatorOrder(
             case PICKED_UP -> SimulatorOrderOperationStatus.DELIVERING;
             case DELIVERED -> SimulatorOrderOperationStatus.COMPLETED;
             case CANCELED -> SimulatorOrderOperationStatus.CANCELED;
+            case REFUND_REQUESTED -> SimulatorOrderOperationStatus.REFUND_REQUESTED;
+            case REFUNDED -> SimulatorOrderOperationStatus.REFUNDED;
         };
     }
 }

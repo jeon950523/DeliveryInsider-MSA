@@ -145,6 +145,39 @@ class SimulatorProviderServiceTest {
         assertThrows(SimulatorInvalidOrderStatusTransitionException.class,
             () -> service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.DELIVERED)));
     }
+
+    @org.junit.jupiter.api.Test
+    void refundIsAllowedOnlyAfterDeliveryAndEmitsRequestedThenRefundedSnapshots() {
+        var provider = PlatformType.BAEMIN;
+        var created = service.create(provider, request());
+
+        assertThrows(SimulatorInvalidOrderStatusTransitionException.class,
+            () -> service.refund(provider, created.orderId(), new RefundSimulatorOrderRequest("CUSTOMER_REQUEST", "고객 요청")));
+
+        service.changeStatus(provider, created.orderId(), cooking());
+        service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.READY_FOR_PICKUP));
+        service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.PICKED_UP));
+        var delivered = service.changeStatus(provider, created.orderId(), status(SimulatorOrderStatus.DELIVERED));
+
+        var refunded = service.refund(provider, created.orderId(), new RefundSimulatorOrderRequest("CUSTOMER_REQUEST", "고객 요청"));
+
+        assertEquals(SimulatorOrderStatus.REFUNDED, refunded.status());
+        assertEquals(SimulatorOrderOperationStatus.REFUNDED, refunded.operationStatus());
+        assertEquals(18_000L, refunded.refundAmount());
+        assertNotNull(refunded.refundId());
+        assertEquals(7, refunded.sequence());
+
+        var events = ArgumentCaptor.forClass(OrderWebhookEvent.class);
+        verify(client, times(7)).send(eq(provider), events.capture());
+        assertEquals("ORDER_REFUND_REQUESTED", events.getAllValues().get(5).eventType());
+        assertEquals("ORDER_REFUNDED", events.getAllValues().get(6).eventType());
+        assertEquals(SimulatorOrderStatus.REFUND_REQUESTED,
+            service.findById(provider, created.orderId(), events.getAllValues().get(5).sourceEventId()).status());
+        assertEquals(SimulatorOrderStatus.REFUNDED,
+            service.findById(provider, created.orderId(), events.getAllValues().get(6).sourceEventId()).status());
+        assertThrows(SimulatorInvalidOrderStatusTransitionException.class,
+            () -> service.refund(provider, created.orderId(), new RefundSimulatorOrderRequest("CUSTOMER_REQUEST", "중복 환불")));
+    }
     private ChangeSimulatorOrderStatusRequest status(SimulatorOrderStatus status) { return new ChangeSimulatorOrderStatusRequest(status, null, null, null); }
     private ChangeSimulatorOrderStatusRequest cooking() { return new ChangeSimulatorOrderStatusRequest(null, SimulatorOrderOperationStatus.COOKING, null, null); }
     private CreateSimulatorOrderRequest request() {

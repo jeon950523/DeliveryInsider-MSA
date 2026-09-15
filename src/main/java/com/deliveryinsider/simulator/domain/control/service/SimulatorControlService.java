@@ -8,6 +8,7 @@ import com.deliveryinsider.simulator.domain.control.model.SimulatorEventAttempt;
 import com.deliveryinsider.simulator.domain.control.repository.SimulatorEventHistoryRepository;
 import com.deliveryinsider.simulator.domain.provider.PlatformType;
 import com.deliveryinsider.simulator.domain.provider.dto.ChangeSimulatorOrderStatusRequest;
+import com.deliveryinsider.simulator.domain.provider.dto.RefundSimulatorOrderRequest;
 import com.deliveryinsider.simulator.domain.provider.model.SimulatorOrder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -59,6 +60,11 @@ public class SimulatorControlService {
         );
     }
 
+    public SimulatorControlOrderResponse refundOrder(PlatformType provider, String orderId, RefundSimulatorOrderRequest request) {
+        var updated = orderService.refund(provider, orderId, request);
+        return toControlOrderResponse(orderService.findCurrent(provider, updated.orderId()));
+    }
+
     public List<SimulatorEventResponse> findRecentEvents(int limit) {
         return eventHistoryRepository.findRecent(Math.min(Math.max(limit, 1), 100)).stream().map(this::toEventResponse).toList();
     }
@@ -106,8 +112,8 @@ public class SimulatorControlService {
             order.customerRequest(),
             totalAmount,
             items,
-            order.cancelCode(),
-            order.cancelReason()
+            order.cancelCode(), order.cancelReason(), order.refundId(), order.refundAmount(),
+            order.refundReasonCode(), order.refundReason()
         );
     }
 

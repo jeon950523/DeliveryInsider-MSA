@@ -107,6 +107,49 @@ public class SimulatorProviderService {
         return toResponse(updated);
     }
 
+    /** Emits ordered REQUESTED and REFUNDED events. Only a delivered order can be fully refunded. */
+    public SimulatorOrderDetailResponse refund(PlatformType provider, String orderId, RefundSimulatorOrderRequest request) {
+        if (request == null || request.refundReasonCode() == null || request.refundReasonCode().isBlank()
+            || request.refundReason() == null || request.refundReason().isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                "환불 사유 코드와 상세 사유는 필수입니다.");
+        }
+        String refundId = provider.prefix() + "-REFUND-" + UUID.randomUUID();
+        String requestedEventId = provider.prefix() + "-EVENT-" + UUID.randomUUID();
+        SimulatorOrder requested = orderRepository.update(provider, orderId, requestedEventId, current -> {
+            if (current == null) throw new SimulatorOrderNotFoundException(orderId);
+            if (current.status() != SimulatorOrderStatus.DELIVERED) {
+                throw new SimulatorInvalidOrderStatusTransitionException(orderId, current.status(), SimulatorOrderStatus.REFUND_REQUESTED);
+            }
+            long amount = current.financials() == null || current.financials().paidAmount() == null
+                ? current.items().stream().mapToLong(item -> item.unitPrice() * item.quantity()).sum()
+                : current.financials().paidAmount();
+            return current.toBuilder().sequence(current.sequence() + 1)
+                .status(SimulatorOrderStatus.REFUND_REQUESTED)
+                .operationStatus(SimulatorOrderOperationStatus.REFUND_REQUESTED)
+                .eventOccurredAt(clock.instant())
+                .refundId(refundId).refundAmount(amount)
+                .refundReasonCode(request.refundReasonCode().trim())
+                .refundReason(request.refundReason().trim())
+                .build();
+        });
+        send(requested, requestedEventId);
+
+        String completedEventId = provider.prefix() + "-EVENT-" + UUID.randomUUID();
+        SimulatorOrder completed = orderRepository.update(provider, orderId, completedEventId, current -> {
+            if (current == null || current.status() != SimulatorOrderStatus.REFUND_REQUESTED) {
+                throw new SimulatorInvalidOrderStatusTransitionException(orderId,
+                    current == null ? null : current.status(), SimulatorOrderStatus.REFUNDED);
+            }
+            return current.toBuilder().sequence(current.sequence() + 1)
+                .status(SimulatorOrderStatus.REFUNDED)
+                .operationStatus(SimulatorOrderOperationStatus.REFUNDED)
+                .eventOccurredAt(clock.instant()).build();
+        });
+        send(completed, completedEventId);
+        return toResponse(completed);
+    }
+
     private void requireCancellationReason(ChangeSimulatorOrderStatusRequest request) {
         if (request != null
             && request.status() == SimulatorOrderStatus.CANCELED
@@ -160,6 +203,7 @@ public class SimulatorProviderService {
                     || (current.status() == SimulatorOrderStatus.READY_FOR_PICKUP
                         && current.operationStatus() == SimulatorOrderOperationStatus.READY_FOR_PICKUP);
             case CREATED -> false;
+            case REFUND_REQUESTED, REFUNDED -> false;
         };
 
         if (!valid) {
@@ -176,6 +220,7 @@ public class SimulatorProviderService {
             case DELIVERED -> SimulatorOrderOperationStatus.COMPLETED;
             case CANCELED -> SimulatorOrderOperationStatus.CANCELED;
             case CREATED -> throw new IllegalStateException("CREATED transition is not supported");
+            case REFUND_REQUESTED, REFUNDED -> throw new IllegalStateException("Refund status must use the refund endpoint");
         };
 
         return current.toBuilder()
@@ -208,7 +253,8 @@ public class SimulatorProviderService {
             order.operationStatus(), order.orderedAt(),
             order.eventOccurredAt(), order.deliveryAddress(), order.customerRequest(),
             order.items().stream().map(item -> new SimulatorOrderDetailResponse.Item(item.menuId(), item.quantity(), item.unitPrice())).toList(),
-            toFinancialResponse(order.financials()), order.cancelCode(), order.cancelReason());
+            toFinancialResponse(order.financials()), order.cancelCode(), order.cancelReason(), order.refundId(),
+            order.refundAmount(), order.refundReasonCode(), order.refundReason());
     }
     private SimulatorOrderDetailResponse.Financials toFinancialResponse(CreateSimulatorOrderRequest.Financials value) {
         if (value == null) return null;

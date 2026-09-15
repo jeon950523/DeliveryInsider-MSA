@@ -6,5 +6,7 @@ public enum SimulatorOrderOperationStatus {
     READY_FOR_PICKUP,
     DELIVERING,
     COMPLETED,
-    CANCELED
+    CANCELED,
+    REFUND_REQUESTED,
+    REFUNDED
 }

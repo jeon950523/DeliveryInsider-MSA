@@ -6,6 +6,7 @@ import com.deliveryinsider.simulator.domain.control.dto.SimulatorOrderCreateRequ
 import com.deliveryinsider.simulator.domain.control.dto.SimulatorOrderSendResponse;
 import com.deliveryinsider.simulator.domain.control.dto.SimulatorControlOrderResponse;
 import com.deliveryinsider.simulator.domain.provider.dto.ChangeSimulatorOrderStatusRequest;
+import com.deliveryinsider.simulator.domain.provider.dto.RefundSimulatorOrderRequest;
 import com.deliveryinsider.simulator.domain.control.service.SimulatorControlService;
 import com.deliveryinsider.simulator.domain.catalog.dto.ExternalMenuProvisionRequest;
 import com.deliveryinsider.simulator.domain.catalog.dto.ExternalMenuResponse;
@@ -95,6 +96,12 @@ public class SimulatorControlController {
                 orderId,
                 request
         );
+    }
+
+    @PostMapping("/providers/{platformType}/orders/{orderId}/refunds")
+    public SimulatorControlOrderResponse refundOrder(@PathVariable PlatformType platformType, @PathVariable String orderId,
+        @Valid @RequestBody RefundSimulatorOrderRequest request) {
+        return controlService.refundOrder(platformType, orderId, request);
     }
 
     @GetMapping("/events")
