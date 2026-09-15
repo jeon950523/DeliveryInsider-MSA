@@ -93,6 +93,12 @@ const refundStatusLabels = {
   REQUESTED: '환불 요청됨',
 };
 
+const liabilityPartyLabels = {
+  MERCHANT: '매장', PLATFORM: '플랫폼', DELIVERY: '배달', CUSTOMER: '고객', SHARED: '공동 부담', UNKNOWN: '확인 필요',
+};
+const getLiabilityPartyLabel = (value) => liabilityPartyLabels[value] || '확인 필요';
+const getPlatformLabel = (value) => ({ BAEMIN: '배민', COUPANG_EATS: '쿠팡이츠', YOGIYO: '요기요', DDANGYO: '땡겨요' }[value] || value || '-');
+
 // 실제 Order API 응답의 화면 표시 모델
 const orders = ref([]);
 
@@ -553,6 +559,10 @@ const toOrderViewData = (order) => {
 
     refundType: order.refundType || '',
     refundReason: order.refundReason || '',
+    refundAmount: order.refundAmount ?? null,
+    liabilityParty: order.liabilityParty || '',
+    merchantLiabilityAmount: order.merchantLiabilityAmount ?? null,
+    platformLiabilityAmount: order.platformLiabilityAmount ?? null,
     refundedAt: formatTime(order.refundedAt),
 
     items: [],
@@ -650,6 +660,11 @@ const toOrderDetailViewData = (detail, baseOrder = {}) => {
       refund.refundReason ||
       baseOrder.refundReason ||
       '',
+
+    refundAmount: refund.refundAmount ?? baseOrder.refundAmount ?? null,
+    liabilityParty: refund.liabilityParty || baseOrder.liabilityParty || '',
+    merchantLiabilityAmount: refund.merchantLiabilityAmount ?? baseOrder.merchantLiabilityAmount ?? null,
+    platformLiabilityAmount: refund.platformLiabilityAmount ?? baseOrder.platformLiabilityAmount ?? null,
 
     items: detail.items || [],
   };
@@ -1488,6 +1503,13 @@ const submitRefund = async () => {
             {{ getRefundStatusLabel(selectedOrder.refundType) }} ·
             {{ getReasonLabel(selectedOrder.refundReason) }}
           </p>
+          <dl v-if="isExternalProviderOrder(selectedOrder)" class="refund-liability-summary">
+            <dt>환불 금액</dt><dd>{{ formatMoney(selectedOrder.refundAmount) }}</dd>
+            <dt>귀책</dt><dd>{{ getLiabilityPartyLabel(selectedOrder.liabilityParty) }}</dd>
+            <dt>매장 부담</dt><dd>{{ formatMoney(selectedOrder.merchantLiabilityAmount) }}</dd>
+            <dt>플랫폼 부담</dt><dd>{{ formatMoney(selectedOrder.platformLiabilityAmount) }}</dd>
+            <dt>처리 플랫폼</dt><dd>{{ getPlatformLabel(selectedOrder.platformType) }}</dd>
+          </dl>
         </div>
 
         <div class="detail-actions order-command-actions" ref="detailActionsRef">
