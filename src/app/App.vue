@@ -83,7 +83,8 @@ const dashboardRefresh = createCoalescedRefresh(() => {
 watch(() => realtime.revision, dashboardRefresh.request);
 const refreshOnFocus = () => dashboardRefresh.request();
 const syncSidebarForViewport = () => {
-  const nextCompactViewport = window.innerWidth <= 768;
+  // 1024×768 POS에서는 넓은 사이드바 대신 주문 처리 영역을 우선한다.
+  const nextCompactViewport = window.innerWidth <= 1200;
 
   if (nextCompactViewport === isCompactViewport) {
     return;
@@ -261,5 +262,15 @@ onBeforeUnmount(() => {
     left: 16px;
     min-width: 0;
   }
+}
+
+@media (max-width: 1200px) {
+  .header-area {
+    flex-basis: 64px;
+    height: 64px;
+    min-height: 64px;
+  }
+
+  .page-area { padding: 16px; }
 }
 </style>

@@ -1375,8 +1375,7 @@ const submitRefund = async () => {
         </div>
 
         <div class="detail-section processing-time-section">
-          <h3>외부 플랫폼 이벤트 타임라인</h3>
-          <p class="timeline-description">DeliveryInsider가 직접 변경한 단계가 아니라 외부 플랫폼에서 수신한 이벤트 시각입니다.</p>
+          <h3>전체 타임라인</h3>
 
           <div class="processing-summary">
             <div>
@@ -1518,9 +1517,6 @@ const submitRefund = async () => {
         </div>
 
         <div class="detail-actions order-command-actions" ref="detailActionsRef">
-          <p v-if="isExternalProviderOrder(selectedOrder)" class="external-order-readonly-note">
-            취소·환불은 연결된 외부 플랫폼에서 처리되며, DeliveryInsider에는 처리 결과가 자동 반영됩니다.
-          </p>
           <button
             v-if="canCancelOrder(selectedOrder)"
             type="button"
@@ -2745,13 +2741,6 @@ const submitRefund = async () => {
   margin-top: 10px;
 }
 
-.timeline-description {
-  margin: -4px 0 14px;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
 .terminal-cancel-timeline {
   border-color: #fecaca;
   background: #fff7f7;
@@ -2787,6 +2776,70 @@ const submitRefund = async () => {
 @container (max-width: 1500px) {
   .orders-content { grid-template-columns: minmax(0, 1fr); }
   .order-detail-panel { position: static; }
+}
+
+/* 1024×768 POS: 탐색과 핵심 주문 처리를 한 화면 폭에 우선 배치한다. */
+@container (max-width: 1100px) {
+  .summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .summary-card {
+    height: auto;
+    min-height: 104px;
+    padding: 13px 10px;
+  }
+
+  .summary-card-head { margin-bottom: 7px; }
+  .summary-card-head span { font-size: 13px; }
+  .summary-card strong { margin-bottom: 0; font-size: 24px; }
+  .summary-card p { display: none; }
+
+  .filter-panel {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .filter-group {
+    flex: 1 1 150px;
+    min-width: 0;
+  }
+
+  .filter-group.grow { flex-basis: 230px; }
+  .filter-group label { font-size: 14px; }
+  .filter-group select,
+  .filter-group input { min-height: 42px; font-size: 15px; }
+  .filter-button { min-height: 42px; }
+
+  .order-list-panel { padding: 18px; }
+  .panel-title-row h2 { font-size: 20px; }
+  .panel-title-row p, .count-text { font-size: 14px; }
+
+  .order-table th,
+  .order-table td { padding: 10px 6px; }
+
+  .order-table th:nth-child(5),
+  .order-table td:nth-child(5),
+  .order-table th:nth-child(6),
+  .order-table td:nth-child(6) { display: none; }
+
+  .order-table th:nth-child(1),
+  .order-table td:nth-child(1) { width: 128px; }
+  .order-table th:nth-child(2),
+  .order-table td:nth-child(2) { width: 74px; }
+  .order-table th:nth-child(3),
+  .order-table td:nth-child(3) { width: 80px; }
+  .order-table th:nth-child(4),
+  .order-table td:nth-child(4) { width: 1%; }
+  .order-table th:nth-child(7),
+  .order-table td:nth-child(7) { width: 74px; }
+  .order-table th:nth-child(8),
+  .order-table td:nth-child(8) { width: 82px; }
+
+  .detail-section { padding: 16px; }
+  .detail-head { padding: 18px; }
 }
 
 /* ============================================================
@@ -2923,18 +2976,6 @@ const submitRefund = async () => {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 22px;
-}
-
-.external-order-readonly-note {
-  width: 100%;
-  margin: 0;
-  padding: 12px 14px;
-  border: 1px solid #bfdbfe;
-  border-radius: 10px;
-  background: #eff6ff;
-  color: #1e40af;
-  font-size: 14px;
-  line-height: 1.5;
 }
 
 @media (max-width: 720px) {

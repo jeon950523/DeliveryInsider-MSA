@@ -349,6 +349,17 @@ const logout = async () => {
   letter-spacing: -0.3px;
 }
 
+@media (max-width: 1200px) {
+  .main-header {
+    min-height: 64px;
+    padding: 0 16px;
+  }
+
+  .header-title { font-size: 20px; }
+  .header-action-button:not(.logout) { display: none; }
+  .header-action-button { min-height: 38px; padding: 0 12px; font-size: 14px; }
+}
+
 /* ============================================================
    우측 액션 버튼 및 알림 아이콘 (가독성/터치 영역 강화)
    ============================================================ */
