@@ -16,6 +16,7 @@ public class ReportDailyTrendProjection {
     private long totalOrderCount;
     private long completedOrderCount;
     private long canceledOrderCount;
+    private long refundedOrderCount;
 
     private long grossSales;
     private long customerPaidAmount;

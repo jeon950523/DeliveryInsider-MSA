@@ -597,7 +597,7 @@
         COALESCE(
         SUM(
         CASE
-        WHEN status = 'DELIVERED'
+        WHEN status IN ('DELIVERED', 'REFUNDED')
         THEN 1
         ELSE 0
         END
@@ -619,7 +619,18 @@
         COALESCE(
         SUM(
         CASE
-        WHEN status = 'DELIVERED'
+        WHEN status = 'REFUNDED'
+        THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS refundedOrderCount,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN status IN ('DELIVERED', 'REFUNDED')
         THEN gross_order_amount
         ELSE 0
         END
@@ -630,7 +641,7 @@
         COALESCE(
         SUM(
         CASE
-        WHEN status = 'DELIVERED'
+        WHEN status IN ('DELIVERED', 'REFUNDED')
         THEN customer_paid_amount
         ELSE 0
         END
@@ -641,7 +652,7 @@
         COALESCE(
         SUM(
         CASE
-        WHEN status = 'DELIVERED'
+        WHEN status IN ('DELIVERED', 'REFUNDED')
         THEN provider_funded_discount
         ELSE 0
         END
@@ -652,7 +663,7 @@
         GROUP_CONCAT(
         DISTINCT
         CASE
-        WHEN status = 'DELIVERED'
+        WHEN status IN ('DELIVERED', 'REFUNDED')
         THEN provider_financial_data_status
         ELSE NULL
         END
@@ -676,7 +687,7 @@
         INNER JOIN report_order_charges rc
         ON rc.order_id = fo.order_id
 
-        WHERE fo.status = 'DELIVERED'
+        WHERE fo.status IN ('DELIVERED', 'REFUNDED')
 
         GROUP BY DATE(fo.ordered_at)
         ),
@@ -702,7 +713,7 @@
         INNER JOIN report_order_items ri
         ON ri.order_id = fo.order_id
 
-        WHERE fo.status = 'DELIVERED'
+        WHERE fo.status IN ('DELIVERED', 'REFUNDED')
 
         GROUP BY DATE(fo.ordered_at)
         )
@@ -711,6 +722,7 @@
         d.totalOrderCount,
         d.completedOrderCount,
         d.canceledOrderCount,
+        d.refundedOrderCount,
         d.grossSales,
         d.customerPaidAmount,
 
