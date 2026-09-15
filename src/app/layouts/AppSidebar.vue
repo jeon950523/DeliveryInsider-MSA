@@ -372,9 +372,36 @@ onMounted(async () => {
 .side-performance-title { display: block; margin-bottom: 10px; color: #164E68; font-size: 19px; font-weight: 950; letter-spacing: -0.03em; }
 .side-sales-amount { display: block; color: #0f172a; font-size: 36px; line-height: 1.05; font-weight: 950; letter-spacing: -0.06em; }
 
-.side-profit-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 12px 13px; border-radius: 14px; background: #ecfdf5; border: 1px solid #bbf7d0; }
-.side-profit-row span { color: #166534; font-size: 16px; font-weight: 900; margin-bottom: 0; }
-.side-profit-row strong { color: #15803d; font-size: 25px; line-height: 1.05; font-weight: 950; margin-bottom: 0; }
+.side-profit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 11px 10px;
+  border-radius: 14px;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+}
+.side-profit-row span {
+  min-width: 0;
+  color: #166534;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+  margin-bottom: 0;
+}
+.side-profit-row strong {
+  color: #15803d;
+  font-size: clamp(18px, 1.45vw, 22px);
+  line-height: 1.1;
+  font-weight: 950;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-bottom: 0;
+}
 
 .side-performance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .side-performance-grid div { padding: 12px 10px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; text-align: center; }
