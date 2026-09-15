@@ -242,7 +242,10 @@ const summaryStats = computed(() => {
 
   const totalCount = Number(summary.totalOrderCount || 0);
   const cancelCount = Number(summary.canceledOrderCount || 0);
-  const refundCount = refundHistory.value.length;
+  const refundCount = dailyTrend.value.reduce(
+    (total, point) => total + Number(point.refundedOrderCount || 0),
+    0,
+  );
   const closedCount = cancelCount + refundCount;
 
   return {
@@ -362,6 +365,17 @@ const orderChartDatasets = computed(() => [
     borderRadius: 7,
     maxBarThickness: 54,
   },
+  {
+    type: 'bar',
+    label: '환불 수',
+    data: dailyTrend.value.map((point) => Number(point.refundedOrderCount || 0)),
+    unit: 'count',
+    borderColor: '#c2410c',
+    backgroundColor: 'rgba(234, 88, 12, 0.72)',
+    borderWidth: 1,
+    borderRadius: 7,
+    maxBarThickness: 54,
+  },
 ]);
 
 const platformChartLabels = computed(() => platformMetrics.value.map((metric) => (
@@ -395,6 +409,7 @@ const orderChartRows = computed(() => dailyTrend.value.map((point) => [
   point.reportDate,
   `${Number(point.totalOrderCount || 0).toLocaleString('ko-KR')}건`,
   `${Number(point.canceledOrderCount || 0).toLocaleString('ko-KR')}건`,
+  `${Number(point.refundedOrderCount || 0).toLocaleString('ko-KR')}건`,
 ]));
 
 const platformChartRows = computed(() => platformMetrics.value.map((metric) => [
@@ -913,8 +928,8 @@ onMounted(async () => {
       />
       <ReportChartCard
         chart-id="order-cancel-trend"
-        :title="isSingleDayTrend ? '주문 / 취소 비교' : '주문 / 취소 추이'"
-        description="전체 주문 수와 취소 주문 수를 같은 기준의 묶음 막대로 비교합니다."
+        :title="isSingleDayTrend ? '주문 / 취소 / 환불 비교' : '주문 / 취소 / 환불 추이'"
+        description="전체 주문 수와 취소·환불 완료 주문 수를 같은 기준의 묶음 막대로 비교합니다."
         chart-type="bar"
         :labels="chartDateLabels"
         :tooltip-labels="chartTooltipLabels"
@@ -922,7 +937,7 @@ onMounted(async () => {
         :loading="reportStore.isLoading"
         :error="reportStore.loadError"
         :empty="dailyTrend.length === 0"
-        :table-headers="['날짜', '주문 수', '취소 수']"
+        :table-headers="['날짜', '주문 수', '취소 수', '환불 수']"
         :table-rows="orderChartRows"
         data-testid="order-cancel-chart"
         @retry="searchReports"
