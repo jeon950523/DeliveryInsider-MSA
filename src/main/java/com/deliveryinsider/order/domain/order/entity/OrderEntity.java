@@ -22,6 +22,12 @@ public class OrderEntity {
 
     private String platformOrderId;
 
+    /*
+     * 매장 운영 화면에서 사용하는 주문번호.
+     * 플랫폼이 내려주는 원본 주문번호와는 별도로 보관한다.
+     */
+    private String merchantOrderNo;
+
     private Long storeId;
 
     private String externalStoreId;

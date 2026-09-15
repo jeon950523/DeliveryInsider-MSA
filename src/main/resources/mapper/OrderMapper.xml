@@ -25,6 +25,11 @@
         />
 
         <result
+                property="merchantOrderNo"
+                column="merchant_order_no"
+        />
+
+        <result
                 property="storeId"
                 column="store_id"
         />
@@ -217,6 +222,12 @@
                )
 
     </insert>
+
+    <update id="updateMerchantOrderNo">
+        UPDATE orders
+        SET merchant_order_no = #{merchantOrderNo}
+        WHERE id = #{id}
+    </update>
 
 
     <!-- 플랫폼 종류 + 외부 주문 ID로 조회 -->

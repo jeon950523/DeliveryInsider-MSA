@@ -20,6 +20,11 @@
         />
 
         <result
+                property="merchantOrderNo"
+                column="merchant_order_no"
+        />
+
+        <result
                 property="platformType"
                 column="platform_type"
         />
@@ -122,6 +127,8 @@
 
             o.platform_order_id
                 AS platform_order_number,
+
+            o.merchant_order_no,
 
             o.platform_type,
 

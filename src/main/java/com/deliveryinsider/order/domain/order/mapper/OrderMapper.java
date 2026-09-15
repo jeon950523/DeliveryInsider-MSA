@@ -17,6 +17,11 @@ public interface OrderMapper {
         OrderEntity order
     );
 
+    int updateMerchantOrderNo(
+        @Param("id") Long id,
+        @Param("merchantOrderNo") String merchantOrderNo
+    );
+
     Optional<OrderEntity> findByPlatformIdentity(
         @Param("platformType")
         PlatformType platformType,

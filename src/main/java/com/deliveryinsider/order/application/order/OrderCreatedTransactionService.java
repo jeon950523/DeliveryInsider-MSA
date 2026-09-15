@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -53,6 +54,8 @@ public class OrderCreatedTransactionService {
             createOrder(message);
 
         insertOrder(order);
+
+        assignMerchantOrderNo(order);
 
         List<OrderItemEntity> items =
             createItems(
@@ -205,6 +208,23 @@ public class OrderCreatedTransactionService {
                 e
             );
         }
+    }
+
+    private void assignMerchantOrderNo(
+        OrderEntity order
+    ) {
+        String merchantOrderNo = String.format(
+            Locale.ROOT,
+            "M%d-%08d",
+            order.getStoreId(),
+            order.getId()
+        );
+
+        orderMapper.updateMerchantOrderNo(
+            order.getId(),
+            merchantOrderNo
+        );
+        order.setMerchantOrderNo(merchantOrderNo);
     }
 
     private List<OrderItemEntity> createItems(

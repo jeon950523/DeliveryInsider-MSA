@@ -11,6 +11,8 @@ public record OrderDetailResponse(
 
     String orderNo,
 
+    String merchantOrderNo,
+
     String platformOrderNumber,
 
     PlatformType platformType,

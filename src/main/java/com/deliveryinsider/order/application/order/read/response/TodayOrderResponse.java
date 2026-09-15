@@ -10,6 +10,8 @@ public record TodayOrderResponse(
 
     String orderNo,
 
+    String merchantOrderNo,
+
     String platformOrderNumber,
 
     PlatformType platformType,

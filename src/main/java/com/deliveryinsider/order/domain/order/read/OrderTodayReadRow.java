@@ -18,6 +18,8 @@ public class OrderTodayReadRow {
 
     private String platformOrderNumber;
 
+    private String merchantOrderNo;
+
     private PlatformType platformType;
 
     private OrderOperationStatus operationStatus;

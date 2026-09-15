@@ -416,6 +416,8 @@ public class OrderReadService {
 
             "ORD-" + order.getId(),
 
+            merchantOrderNo(order),
+
             order.getPlatformOrderId(),
 
             order.getPlatformType(),
@@ -668,6 +670,8 @@ public class OrderReadService {
 
             "ORD-" + order.getId(),
 
+            merchantOrderNo(order),
+
             order.getPlatformOrderNumber(),
 
             order.getPlatformType(),
@@ -724,6 +728,41 @@ public class OrderReadService {
         return status == null
             ? null
             : status.name();
+    }
+
+    private String merchantOrderNo(
+        OrderEntity order
+    ) {
+        if (
+            order.getMerchantOrderNo() != null
+                && !order.getMerchantOrderNo().isBlank()
+        ) {
+            return order.getMerchantOrderNo();
+        }
+
+        return String.format(
+            java.util.Locale.ROOT,
+            "M%d-%08d",
+            order.getStoreId(),
+            order.getId()
+        );
+    }
+
+    private String merchantOrderNo(
+        OrderTodayReadRow order
+    ) {
+        if (
+            order.getMerchantOrderNo() != null
+                && !order.getMerchantOrderNo().isBlank()
+        ) {
+            return order.getMerchantOrderNo();
+        }
+
+        return String.format(
+            java.util.Locale.ROOT,
+            "M-%08d",
+            order.getId()
+        );
     }
 
     private int countOperationStatus(
