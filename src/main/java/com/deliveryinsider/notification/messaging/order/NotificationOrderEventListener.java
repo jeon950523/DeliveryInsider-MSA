@@ -144,7 +144,9 @@ public class NotificationOrderEventListener {
             case "ORDER_CREATED",
                  "ORDER_STATUS_CHANGED",
                  "ORDER_OPERATION_STATUS_CHANGED",
-                 "ORDER_CANCELED" ->
+                 "ORDER_CANCELED",
+                 "ORDER_REFUND_REQUESTED",
+                 "ORDER_REFUNDED" ->
                 true;
 
             default ->
