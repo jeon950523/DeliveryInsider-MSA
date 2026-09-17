@@ -89,15 +89,10 @@ const cancelActorLabels = {
   SYSTEM: '시스템',
 };
 
-const refundStatusLabels = {
-  REQUESTED: '환불 요청됨',
-};
-
 const liabilityPartyLabels = {
   MERCHANT: '매장', PLATFORM: '플랫폼', DELIVERY: '배달', CUSTOMER: '고객', SHARED: '공동 부담', UNKNOWN: '확인 필요',
 };
 const getLiabilityPartyLabel = (value) => liabilityPartyLabels[value] || '확인 필요';
-const getPlatformLabel = (value) => ({ BAEMIN: '배민', COUPANG_EATS: '쿠팡이츠', YOGIYO: '요기요', DDANGYO: '땡겨요' }[value] || value || '-');
 
 // 실제 Order API 응답의 화면 표시 모델
 const orders = ref([]);
@@ -241,7 +236,16 @@ const nextWaitingOrder = computed(() => {
 // 유틸리티 함수들
 const getPlatformName = (type) => ({ BAEMIN: '배민', COUPANG_EATS: '쿠팡이츠', YOGIYO: '요기요', DDANGYO: '땡겨요' }[type] || type);
 const getPlatformClass = (type) => ({ BAEMIN: 'baemin', COUPANG_EATS: 'coupang', YOGIYO: 'yogiyo', DDANGYO: 'ddangyo' }[type] || 'default');
-const getOrderStatusName = (status) => ({ WAITING: '접수대기', COOKING: '조리중', READY_FOR_PICKUP: '픽업대기', DELIVERING: '배달중', COMPLETED: '배달 완료', CANCELED: '취소' }[status] || status);
+const getOrderStatusName = (status) => ({ WAITING: '접수대기', COOKING: '조리중', READY_FOR_PICKUP: '픽업대기', DELIVERING: '배달중', COMPLETED: '배달 완료', CANCELED: '취소', REFUNDED: '환불 완료' }[status] || status);
+const hasRefundDetail = (order) => Boolean(
+  order?.orderStatus === 'REFUNDED'
+  || order?.refundType
+  || order?.refundReason
+  || order?.refundAmount != null
+  || order?.refundedAt,
+);
+const getDetailStatusName = (order) => getOrderStatusName(order?.orderStatus);
+const getDetailStatusClass = (order) => `status-${String(order?.orderStatus || '').toLowerCase()}`;
 const getInternalOrderNumber = (order) => order?.orderNo || order?.merchantOrderNo || (order?.id ? `ORD-${order.id}` : '-');
 const formatMoney = formatReportMoney;
 const formatCost = (amount) => {
@@ -433,9 +437,6 @@ const getReasonLabel = (reasonCode) =>
 
 const getCancelActorLabel = (actor) =>
   cancelActorLabels[actor] || actor || '-';
-
-const getRefundStatusLabel = (status) =>
-  refundStatusLabels[status] || status || '-';
 
 const getOrderItemName = (item) => {
   return item.orderedMenuName || item.menuName || '-';
@@ -821,14 +822,12 @@ const isDetailActionVisible = () => {
 const scrollToDetailPanel = async () => {
   await nextTick();
 
-  if (isDetailActionVisible()) {
+  // Desktop에서는 목록과 상세를 함께 보며 비교할 수 있도록 자동 스크롤하지 않는다.
+  if (!window.matchMedia('(max-width: 760px)').matches || isDetailActionVisible()) {
     return;
   }
 
-  const scrollTarget =
-    detailActionsRef.value ||
-    detailBottomRef.value ||
-    detailPanelRef.value;
+  const scrollTarget = detailPanelRef.value || detailBottomRef.value;
 
   if (!scrollTarget) {
     return;
@@ -836,7 +835,7 @@ const scrollToDetailPanel = async () => {
 
   scrollTarget.scrollIntoView({
     behavior: 'smooth',
-    block: 'end',
+    block: 'start',
     inline: 'nearest',
   });
 };
@@ -1188,7 +1187,6 @@ const submitRefund = async () => {
                 <th>배달주소</th>
                 <th>요청사항</th>
                 <th>경과시간</th>
-                <th>액션</th>
               </tr>
             </thead>
             <tbody>
@@ -1257,13 +1255,9 @@ const submitRefund = async () => {
                   <strong>{{ getElapsedPrimaryText(order) }}</strong>
                   <small v-if="isActiveOrder(order)">{{ getElapsedSecondaryText(order) }}</small>
                 </td>
-
-                <td>
-                  <span class="done-text">{{ getStateActionHint(order.orderStatus) }}</span>
-                </td>
               </tr>
               <tr v-if="filteredOrders.length === 0">
-                <td colspan="8" class="empty-message">조건에 맞는 주문이 없습니다.</td>
+                <td colspan="7" class="empty-message">조건에 맞는 주문이 없습니다.</td>
               </tr>
             </tbody>
           </table>
@@ -1303,10 +1297,11 @@ const submitRefund = async () => {
         </div>
       </article>
 
-      <aside
+      <section
         v-if="selectedOrder"
         ref="detailPanelRef"
         class="order-detail-panel"
+        data-testid="order-detail-full-width"
       >
         <div class="detail-head">
           <div>
@@ -1316,13 +1311,14 @@ const submitRefund = async () => {
           </div>
           <span
             class="status-badge"
-            :class="`status-${String(selectedOrder.orderStatus || '').toLowerCase()}`"
+            :class="getDetailStatusClass(selectedOrder)"
           >
-            {{ getOrderStatusName(selectedOrder.orderStatus) }}
+            {{ getDetailStatusName(selectedOrder) }}
           </span>
         </div>
 
-        <div class="detail-section">
+        <div class="order-detail-grid">
+        <div class="detail-section detail-card order-info-card">
           <h3>주문 정보</h3>
           <div class="detail-row"><span>주문번호</span><strong>{{ getInternalOrderNumber(selectedOrder) }}</strong></div>
           <div class="detail-row"><span>플랫폼</span><strong>{{ getPlatformName(selectedOrder.platformType) }}</strong></div>
@@ -1361,7 +1357,7 @@ const submitRefund = async () => {
           <div class="detail-row request-row"><span>요청사항</span><strong>{{ selectedOrder.requestText || '없음' }}</strong></div>
         </div>
 
-        <div class="detail-section processing-time-section">
+        <div class="detail-section detail-card processing-time-section">
           <h3>전체 타임라인</h3>
 
           <div class="processing-summary">
@@ -1404,7 +1400,7 @@ const submitRefund = async () => {
 
         </div>
 
-        <div class="detail-section request-guide" :class="(selectedOrder.riskBadges||[]).length ? 'attention' : 'plain'">
+        <div class="detail-section detail-card request-guide" :class="(selectedOrder.riskBadges||[]).length ? 'attention' : 'plain'">
           <h3>고객 요청사항</h3>
           <p class="request-text-large">{{ selectedOrder.requestText || '요청사항이 없습니다.' }}</p>
           
@@ -1414,7 +1410,7 @@ const submitRefund = async () => {
           </div>
         </div>
 
-        <div class="detail-section">
+        <div class="detail-section detail-card financial-card">
           <h3>비용 스냅샷</h3><p data-testid="order-financial-status">{{ financialStatusText(selectedOrder.financialDataStatus) }}</p>
           <p v-if="selectedOrder.financialDataStatus === 'PROVISIONAL'" class="financial-snapshot-note">
             주문 발생 시점의 가격과 비용 조건으로 계산된 예상값입니다. 실제 플랫폼 정산값과 차이가 발생할 수 있습니다.
@@ -1467,33 +1463,34 @@ const submitRefund = async () => {
             <strong>{{ formatMoney(selectedOrder.netProfit) }}</strong>
           </div>
         </div>
+        </div>
 
-        <div v-if="selectedOrder.cancelReason" class="detail-section cancel-history">
+        <section v-if="selectedOrder.cancelReason" class="detail-history-card cancel-history">
           <h3>{{ isExternalProviderOrder(selectedOrder) ? '외부 플랫폼 취소 결과' : '취소 이력' }}</h3>
           <p>
             {{ selectedOrder.canceledAt }} ·
             {{ getCancelActorLabel(selectedOrder.cancelType) }} ·
             {{ getReasonLabel(selectedOrder.cancelReason) }}
           </p>
-        </div>
+        </section>
 
-        <div v-if="selectedOrder.refundReason" class="detail-section refund-history">
-          <h3>환불 이력</h3>
-          <p>
-            {{ selectedOrder.refundedAt }} ·
-            {{ getRefundStatusLabel(selectedOrder.refundType) }} ·
-            {{ getReasonLabel(selectedOrder.refundReason) }}
-          </p>
-          <dl v-if="isExternalProviderOrder(selectedOrder)" class="refund-liability-summary">
-            <dt>환불 금액</dt><dd>{{ formatMoney(selectedOrder.refundAmount) }}</dd>
-            <dt>귀책</dt><dd>{{ getLiabilityPartyLabel(selectedOrder.liabilityParty) }}</dd>
-            <dt>매장 부담</dt><dd>{{ formatMoney(selectedOrder.merchantLiabilityAmount) }}</dd>
-            <dt>플랫폼 부담</dt><dd>{{ formatMoney(selectedOrder.platformLiabilityAmount) }}</dd>
-            <dt>처리 플랫폼</dt><dd>{{ getPlatformLabel(selectedOrder.platformType) }}</dd>
+        <section v-if="hasRefundDetail(selectedOrder)" class="detail-history-card refund-history">
+          <h3>환불 정보</h3>
+          <dl class="refund-liability-summary">
+            <div><dt>고객 환불액</dt><dd>{{ formatMoney(selectedOrder.refundAmount) }}</dd></div>
+            <div><dt>환불 사유</dt><dd>{{ getReasonLabel(selectedOrder.refundReason) }}</dd></div>
+            <div><dt>귀책 주체</dt><dd>{{ getLiabilityPartyLabel(selectedOrder.liabilityParty) }}</dd></div>
+            <div><dt>매장 부담</dt><dd>{{ formatMoney(selectedOrder.merchantLiabilityAmount) }}</dd></div>
+            <div><dt>플랫폼 부담</dt><dd>{{ formatMoney(selectedOrder.platformLiabilityAmount) }}</dd></div>
+            <div><dt>환불 시각</dt><dd>{{ selectedOrder.refundedAt || '-' }}</dd></div>
           </dl>
-        </div>
+        </section>
 
-        <div class="detail-actions order-command-actions" ref="detailActionsRef">
+        <div
+          v-if="canCancelOrder(selectedOrder) || canRefundOrder(selectedOrder) || !isExternalProviderOrder(selectedOrder)"
+          ref="detailActionsRef"
+          class="detail-actions order-command-actions"
+        >
           <button
             v-if="canCancelOrder(selectedOrder)"
             type="button"
@@ -1524,7 +1521,7 @@ const submitRefund = async () => {
           </button>
         </div>
         <div ref="detailBottomRef" class="detail-bottom-anchor"></div>
-      </aside>
+      </section>
     </section>
 
     <div
@@ -1831,7 +1828,7 @@ const submitRefund = async () => {
 /* ============================================================
    메인 테이블 & 상세 패널 (가독성 향상)
    ============================================================ */
-.orders-content { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 16px; align-items: start; }
+.orders-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
 /* .order-list-panel, .order-detail-panel { border: 1px solid #e5e7eb; border-radius: 18px; background-color: #ffffff; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06); } */
 .order-list-panel,
 .order-detail-panel {
@@ -2113,15 +2110,13 @@ const submitRefund = async () => {
 /* ============================================================
    상세 패널
    ============================================================ */
-/* .order-detail-panel { position: sticky; top: 86px; padding: 22px; } */
 .order-detail-panel {
-  position: sticky;
-  top: 86px;
+  position: static;
   padding: 30px;
 }
 .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9; }
 .detail-label { color: #64748b; font-size: 14px; font-weight: 900; }
-.detail-head h2 { margin: 6px 0 0; color: #111827; font-size: 13px; font-weight: 900; }
+.detail-head h2 { margin: 6px 0 0; color: #111827; font-size: 22px; font-weight: 900; }
 .detail-sub-id { margin: 6px 0 0; color: #64748b; font-size: 15px; font-weight: 750; }
 
 .detail-section { padding-top: 20px; }
@@ -2190,6 +2185,73 @@ const submitRefund = async () => {
 
 .detail-actions { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-top: 24px; }
 
+.order-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.detail-card,
+.detail-history-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background-color: #ffffff;
+}
+
+.order-detail-grid .detail-section {
+  padding-top: 0;
+}
+
+.order-detail-grid .request-guide {
+  grid-column: 1 / -1;
+  order: 4;
+  margin-top: 0;
+}
+
+.detail-history-card {
+  margin-top: 16px;
+}
+
+.detail-history-card h3 {
+  margin: 0 0 12px;
+  color: #111827;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.refund-liability-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.refund-liability-summary > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.refund-liability-summary dt {
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.refund-liability-summary dd {
+  margin: 5px 0 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 /* ============================================================
    반응형
    ============================================================ */
@@ -2206,6 +2268,8 @@ const submitRefund = async () => {
   .summary-grid { grid-template-columns: 1fr; }
   .cancel-preset-grid { grid-template-columns: repeat(2, 1fr); }
   .detail-actions { grid-template-columns: 1fr; }
+
+  .refund-liability-summary { grid-template-columns: 1fr; }
 }
 
 /* ============================================================
@@ -2732,6 +2796,27 @@ const submitRefund = async () => {
 @container (max-width: 1500px) {
   .orders-content { grid-template-columns: minmax(0, 1fr); }
   .order-detail-panel { position: static; }
+}
+
+@container (max-width: 1200px) {
+  .order-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .refund-liability-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 760px) {
+  .order-detail-grid,
+  .refund-liability-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .order-detail-grid .request-guide {
+    grid-column: auto;
+  }
 }
 
 /* 1024×768 POS: 탐색과 핵심 주문 처리를 한 화면 폭에 우선 배치한다. */
