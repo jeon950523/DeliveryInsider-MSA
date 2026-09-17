@@ -1494,9 +1494,6 @@ const submitRefund = async () => {
         </div>
 
         <div class="detail-actions order-command-actions" ref="detailActionsRef">
-          <p v-if="isExternalProviderOrder(selectedOrder)" class="external-order-readonly">
-            외부 시스템에서 확정된 주문 상태를 수신해 표시합니다. 이 화면에서는 외부 주문 상태를 변경하지 않습니다.
-          </p>
           <button
             v-if="canCancelOrder(selectedOrder)"
             type="button"
@@ -2192,7 +2189,6 @@ const submitRefund = async () => {
 .cancel-history p, .refund-history p { margin: 0; color: #475569; font-size: 16px; line-height: 1.6; font-weight: 700; }
 
 .detail-actions { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-top: 24px; }
-.external-order-readonly { margin: 0; padding: 12px 14px; border-radius: 8px; background: #eff6ff; color: #1e3a5f; font-size: 14px; line-height: 1.5; }
 
 /* ============================================================
    반응형

@@ -11,6 +11,7 @@ import {
   normalizePremiumFeatures,
   premiumFeatureCodes,
 } from '../../billing/utils/premiumFeatures.js';
+import { financialStatusText } from '../utils/reportHelpers.js';
 import { formatDurationSeconds } from '../../../shared/utils/timeFormatters.js';
 
 const router = useRouter();
