@@ -3,6 +3,7 @@ package com.deliveryinsider.report.domain.report.service;
 import com.deliveryinsider.report.domain.report.request.ReportDailyTrendRequest;
 import com.deliveryinsider.report.domain.report.request.ReportOrderSearchRequest;
 import com.deliveryinsider.report.domain.report.request.ReportSummaryRequest;
+import com.deliveryinsider.report.domain.report.projection.ReportDailyTrendProjection;
 import com.deliveryinsider.report.domain.report.response.*;
 import com.deliveryinsider.report.integration.billing.BillingEntitlementClient;
 import com.deliveryinsider.report.integration.store.CurrentStoreClient;
@@ -13,6 +14,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +24,46 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class ReportXlsxExportServiceTest {
+    @Test
+    void refundedGrossAndMerchantAdjustmentKeepSeparateMeanings() {
+        ReportDailyTrendProjection projection = new ReportDailyTrendProjection();
+        projection.setTotalOrderCount(1);
+        projection.setCompletedOrderCount(0);
+        projection.setRefundedOrderCount(1);
+        projection.setGrossSales(20_000);
+        projection.setProviderChargeAmount(3_000);
+        projection.setEstimatedMenuCost(1_000);
+        projection.setEstimatedPackagingCost(500);
+        projection.setMerchantLiabilityAmount(4_000);
+
+        ReportDailyTrendResponse response = ReportDailyTrendResponse.from(projection);
+
+        assertEquals(20_000, response.grossSales());
+        assertEquals(0, response.completedOrderCount());
+        assertEquals(1, response.refundedOrderCount());
+        assertEquals(15_500, response.estimatedNetProfit());
+        assertEquals(11_500, response.adjustedEstimatedProfit());
+    }
+
+    @Test
+    void mapperSeparatesDeliveredCountFromRefundedRevenue() throws Exception {
+        try (var input = getClass().getClassLoader()
+            .getResourceAsStream("mapper/report/ReportReadMapper.xml")) {
+            assertNotNull(input);
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8)
+                .replaceAll("\\s+", " ");
+
+            assertFalse(sql.contains("WHEN fo.status IN ('DELIVERED', 'REFUNDED') THEN 1"));
+            assertFalse(sql.contains("WHEN status IN ('DELIVERED', 'REFUNDED') THEN 1"));
+            assertTrue(sql.contains("WHEN fo.status = 'DELIVERED' THEN 1"));
+            assertTrue(sql.contains("WHEN status = 'DELIVERED' THEN 1"));
+            assertTrue(sql.contains(
+                "WHEN fo.status IN ('DELIVERED', 'REFUNDED') THEN COALESCE( fo.gross_order_amount"
+            ));
+            assertTrue(sql.contains("WHERE fo.status IN ('DELIVERED', 'REFUNDED')"));
+        }
+    }
+
     @Test
     void createsRealWorkbookWithStringsNumbersAndNoFormulas() throws Exception {
         CurrentStoreClient storeClient = mock(CurrentStoreClient.class);

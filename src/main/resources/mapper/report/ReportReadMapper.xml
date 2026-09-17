@@ -150,7 +150,7 @@
         COALESCE(
         SUM(
         CASE
-        WHEN fo.status IN ('DELIVERED', 'REFUNDED')
+        WHEN fo.status = 'DELIVERED'
         THEN 1
         ELSE 0
         END
@@ -598,7 +598,7 @@
         COALESCE(
         SUM(
         CASE
-        WHEN status IN ('DELIVERED', 'REFUNDED')
+        WHEN status = 'DELIVERED'
         THEN 1
         ELSE 0
         END
