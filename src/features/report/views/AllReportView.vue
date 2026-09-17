@@ -343,7 +343,7 @@ const orderStatusValues = computed(() => {
     (sum, point) => sum + Number(point.refundedOrderCount || 0),
     0,
   );
-  const normalCompleted = Math.max(0, completed - refunded);
+  const normalCompleted = completed;
   const inProgress = Math.max(0, total - normalCompleted - canceled - refunded);
 
   return { normalCompleted, canceled, refunded, inProgress };
