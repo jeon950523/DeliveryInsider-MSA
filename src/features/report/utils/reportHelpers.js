@@ -25,7 +25,9 @@ export const formatProcessingMetric = (metric) => {
 };
 export const financialStatusText = (status) => {
   if (!status || status === 'UNAVAILABLE') return '플랫폼 비용 미확보';
-  return status === 'AVAILABLE' ? '플랫폼 비용 확보' : status;
+  if (status === 'AVAILABLE') return '플랫폼 비용 확보';
+  if (status === 'PROVISIONAL') return '주문 시점 예상';
+  return status;
 };
 export const normalizeFilters = (filters = {}) => ({
   startDate: filters.startDate || '', endDate: filters.endDate || '',

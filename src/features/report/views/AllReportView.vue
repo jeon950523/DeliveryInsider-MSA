@@ -975,7 +975,7 @@ onMounted(async () => {
         <div class="card-header">
           <div class="title-area">
             <h2>매출 리포트</h2>
-            <p class="required-note">Report Projection의 완료 주문 금액과 정산정보 상태를 확인합니다. 플랫폼 정산정보가 없는 주문은 Item 주문금액을 매출로 보완합니다.</p>
+            <p class="required-note">완료 주문의 매출과 예상 수익을 조회합니다. 주문 시점에 저장된 비용 정보를 기준으로 표시합니다.</p>
           </div>
           <button class="primary-button" :disabled="reportStore.isExporting" @click="exportExcel('매출')">매출 내보내기</button>
         </div>
@@ -984,7 +984,7 @@ onMounted(async () => {
         <table class="data-table report-actual-sales-table">
           <thead>
             <tr>
-              <th>플랫폼 주문번호</th>
+              <th>주문번호</th>
               <th>플랫폼</th>
               <th>상태</th>
               <th>주문금액</th>
@@ -996,7 +996,7 @@ onMounted(async () => {
           <tbody>
             <tr v-for="order in pagedSalesOrders" :key="order.orderNo">
               <td>
-                <strong class="order-no-main">{{ order.platformOrderNo }}</strong>
+                <strong class="order-no-main">{{ order.orderNo }}</strong>
               </td>
               <td>
                 <span class="platform-badge" :class="getPlatformClass(order.platformType)">
@@ -1015,9 +1015,7 @@ onMounted(async () => {
                   class="financial-status-badge"
                   :class="{ unavailable: order.financialDataStatus === 'UNAVAILABLE' }"
                 >
-                  {{ order.financialDataStatus === 'UNAVAILABLE'
-                    ? '플랫폼 비용 미확보'
-                    : order.financialDataStatus }}
+                  {{ financialStatusText(order.financialDataStatus) }}
                 </span>
               </td>
               <td class="text-muted">{{ order.orderedAtText || '-' }}</td>
@@ -1257,7 +1255,7 @@ onMounted(async () => {
           <tr>
             <th>날짜</th>
             <th>이력</th>
-            <th>플랫폼 주문번호</th>
+            <th>주문번호</th>
             <th>플랫폼</th>
             <th>사유코드</th>
             <th>상세사유</th>
@@ -1277,7 +1275,7 @@ onMounted(async () => {
               </span>
             </td>
             <td class="cancel-order-no-cell">
-              <strong class="order-no-main">{{ entry.platformOrderNo }}</strong>
+              <strong class="order-no-main">{{ entry.orderNo }}</strong>
             </td>
             <td class="cancel-platform-cell">
               <span class="platform-badge" :class="getPlatformClass(entry.platformType)">
@@ -1412,7 +1410,7 @@ onMounted(async () => {
           </div>
           <div class="filter-group wide keyword-filter">
             <label>검색어</label>
-            <input type="text" v-model="filters.keyword" placeholder="내부 주문번호 또는 플랫폼 주문번호 검색">
+            <input type="text" v-model="filters.keyword" placeholder="주문번호 검색">
           </div>
         </div>
         
@@ -1448,7 +1446,7 @@ onMounted(async () => {
               <tr>
                 <th>날짜</th>
                 <th>상태</th>
-                <th>플랫폼 주문번호</th>
+                <th>주문번호</th>
                 <th>플랫폼</th>
                 <th>주문금액</th>
                 <th>고객 실결제액</th>
@@ -1463,11 +1461,11 @@ onMounted(async () => {
                     {{ statusNames[order.orderStatus] || order.orderStatus }}
                   </span>
                 </td>
-                <td><strong>{{ order.platformOrderNo || '-' }}</strong></td>
+                <td><strong>{{ order.orderNo || '-' }}</strong></td>
                 <td>{{ platformNames[order.platformType] || order.platformType }}</td>
                 <td>{{ order.totalAmount == null ? '-' : formatMoney(order.totalAmount) }}</td>
                 <td>{{ order.customerPaidAmount == null ? '-' : formatMoney(order.customerPaidAmount) }}</td>
-                <td>{{ order.financialDataStatus === 'UNAVAILABLE' ? '플랫폼 비용 미확보' : order.financialDataStatus }}</td>
+                <td>{{ financialStatusText(order.financialDataStatus) }}</td>
               </tr>
               <tr v-if="previewOrders.length === 0">
                 <td colspan="7" class="empty-message">현재 조건에 맞는 주문이 없습니다.</td>
@@ -1530,7 +1528,7 @@ onMounted(async () => {
 
         <article class="card col-12">
           <div class="info-banner" style="margin-bottom:0;">
-            Excel 파일은 서버의 Report Projection 결과로 생성됩니다. 금액과 추정 순수익은 파일에서 다시 계산하지 않습니다.
+            Excel 파일은 서버에서 생성합니다. 금액과 예상 수익은 파일에서 다시 계산하지 않습니다.
           </div>
         </article>
       </section>

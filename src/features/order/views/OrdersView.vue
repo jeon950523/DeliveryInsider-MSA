@@ -242,6 +242,7 @@ const nextWaitingOrder = computed(() => {
 const getPlatformName = (type) => ({ BAEMIN: '배민', COUPANG_EATS: '쿠팡이츠', YOGIYO: '요기요', DDANGYO: '땡겨요' }[type] || type);
 const getPlatformClass = (type) => ({ BAEMIN: 'baemin', COUPANG_EATS: 'coupang', YOGIYO: 'yogiyo', DDANGYO: 'ddangyo' }[type] || 'default');
 const getOrderStatusName = (status) => ({ WAITING: '접수대기', COOKING: '조리중', READY_FOR_PICKUP: '픽업대기', DELIVERING: '배달중', COMPLETED: '배달 완료', CANCELED: '취소' }[status] || status);
+const getInternalOrderNumber = (order) => order?.orderNo || order?.merchantOrderNo || (order?.id ? `ORD-${order.id}` : '-');
 const formatMoney = formatReportMoney;
 const formatCost = (amount) => {
   if (amount == null) return '-';
@@ -249,7 +250,7 @@ const formatCost = (amount) => {
 };
 const orderProfitLabel = (financialDataStatus) => ({
   AVAILABLE: '추정 수익',
-  PROVISIONAL: '추정 수익 · 플랫폼 예상 비용 반영',
+  PROVISIONAL: '추정 수익 · 주문 시점 예상',
   PARTIAL: '추정 수익 · 플랫폼 비용 일부 미확정',
   UNAVAILABLE: '추정 수익 · 플랫폼 비용 미확정',
 }[financialDataStatus] || '추정 수익 · 플랫폼 비용 미확정');
@@ -258,19 +259,6 @@ const formatDateTime = (dateTime) => formatKstDateTime(dateTime, '');
 const formatDuration = (minutes) => formatDurationMinutes(minutes, {
   zeroAsLessThanMinute: true,
 });
-
-const formatPlatformOrderNumber = (value) => {
-  const text = String(value || '');
-  const match = text.match(/^([A-Z]+-ORDER-)([0-9a-f]{8})/i);
-
-  if (match) {
-    return `${match[1]}${match[2]}…`;
-  }
-
-  return text.length > 24
-    ? `${text.slice(0, 23)}…`
-    : text;
-};
 
 const getElapsedPrimaryText = (order) => {
   const elapsed = formatDuration(getTotalElapsedMinutes(order));
@@ -1056,7 +1044,7 @@ const submitRefund = async () => {
       <div class="new-order-head">
         <div>
           <span class="new-label">다음 접수 주문</span>
-          <strong>{{ getPlatformName(nextWaitingOrder.platformType) }} {{ nextWaitingOrder.platformOrderNo }}</strong>
+          <strong>{{ getInternalOrderNumber(nextWaitingOrder) }}</strong>
         </div>
         <span class="queue-badge">접수대기 {{ operationSummary.waitingCount }}건</span>
       </div>
@@ -1193,7 +1181,7 @@ const submitRefund = async () => {
           <table class="order-table">
             <thead>
               <tr>
-                <th>매장 주문번호</th>
+                <th>주문번호</th>
                 <th>플랫폼</th>
                 <th>상태</th>
                 <th>메뉴</th>
@@ -1216,7 +1204,7 @@ const submitRefund = async () => {
                     class="order-number-button merchant-order-number"
                     @click.stop="selectOrderAndScroll(order)"
                   >
-                    <span :title="order.merchantOrderNo">{{ order.merchantOrderNo }}</span>
+                    <span :title="getInternalOrderNumber(order)">{{ getInternalOrderNumber(order) }}</span>
                   </button>
                   <small>{{ order.orderedAt }}</small>
                 </td>
@@ -1323,8 +1311,8 @@ const submitRefund = async () => {
         <div class="detail-head">
           <div>
             <span class="detail-label">주문 상세</span>
-            <h2>{{ selectedOrder.merchantOrderNo }}</h2>
-            <p class="detail-sub-id">{{ getPlatformName(selectedOrder.platformType) }} · 원본 {{ selectedOrder.platformOrderNo }}</p>
+            <h2>{{ getInternalOrderNumber(selectedOrder) }}</h2>
+            <p class="detail-sub-id">플랫폼 {{ getPlatformName(selectedOrder.platformType) }}</p>
           </div>
           <span
             class="status-badge"
@@ -1336,8 +1324,7 @@ const submitRefund = async () => {
 
         <div class="detail-section">
           <h3>주문 정보</h3>
-          <div class="detail-row"><span>매장 주문번호</span><strong>{{ selectedOrder.merchantOrderNo }}</strong></div>
-          <div class="detail-row"><span>플랫폼 원본번호</span><strong>{{ selectedOrder.platformOrderNo }}</strong></div>
+          <div class="detail-row"><span>주문번호</span><strong>{{ getInternalOrderNumber(selectedOrder) }}</strong></div>
           <div class="detail-row"><span>플랫폼</span><strong>{{ getPlatformName(selectedOrder.platformType) }}</strong></div>
           <div class="detail-menu-block">
           <div class="detail-menu-title">
@@ -1415,19 +1402,6 @@ const submitRefund = async () => {
             </div>
           </div>
 
-          <div class="processing-timeline" v-if="selectedOrder.orderStatus !== 'CANCELED'">
-            <span>접수 {{ selectedOrder.orderedAt || '-' }}</span>
-            <span>조리시작 {{ selectedOrder.cookingStartedAt || '-' }}</span>
-            <span>조리완료 {{ selectedOrder.readyForPickupAt || '-' }}</span>
-            <span>픽업 {{ selectedOrder.pickedUpAt || '-' }}</span>
-            <span>배달 완료 {{ selectedOrder.completedAt || '-' }}</span>
-          </div>
-          <div v-else class="processing-timeline terminal-cancel-timeline">
-            <span>접수 {{ selectedOrder.orderedAt || '-' }}</span>
-            <span>조리시작 {{ selectedOrder.cookingStartedAt || '-' }}</span>
-            <span>외부 플랫폼 취소 {{ selectedOrder.canceledAt || '-' }}</span>
-            <span>사유 {{ selectedOrder.cancelReasonText || selectedOrder.cancelReason || '-' }}</span>
-          </div>
         </div>
 
         <div class="detail-section request-guide" :class="(selectedOrder.riskBadges||[]).length ? 'attention' : 'plain'">
@@ -1442,6 +1416,9 @@ const submitRefund = async () => {
 
         <div class="detail-section">
           <h3>비용 스냅샷</h3><p data-testid="order-financial-status">{{ financialStatusText(selectedOrder.financialDataStatus) }}</p>
+          <p v-if="selectedOrder.financialDataStatus === 'PROVISIONAL'" class="financial-snapshot-note">
+            주문 발생 시점의 가격과 비용 조건으로 계산된 예상값입니다. 실제 플랫폼 정산값과 차이가 발생할 수 있습니다.
+          </p>
 
           <div class="cost-row">
             <span>주문금액</span>
@@ -1517,6 +1494,9 @@ const submitRefund = async () => {
         </div>
 
         <div class="detail-actions order-command-actions" ref="detailActionsRef">
+          <p v-if="isExternalProviderOrder(selectedOrder)" class="external-order-readonly">
+            외부 시스템에서 확정된 주문 상태를 수신해 표시합니다. 이 화면에서는 외부 주문 상태를 변경하지 않습니다.
+          </p>
           <button
             v-if="canCancelOrder(selectedOrder)"
             type="button"
@@ -2212,6 +2192,7 @@ const submitRefund = async () => {
 .cancel-history p, .refund-history p { margin: 0; color: #475569; font-size: 16px; line-height: 1.6; font-weight: 700; }
 
 .detail-actions { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-top: 24px; }
+.external-order-readonly { margin: 0; padding: 12px 14px; border-radius: 8px; background: #eff6ff; color: #1e3a5f; font-size: 14px; line-height: 1.5; }
 
 /* ============================================================
    반응형
@@ -2732,27 +2713,6 @@ const submitRefund = async () => {
 
 .processing-stage-list {
   margin-top: 10px;
-}
-
-.processing-timeline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.terminal-cancel-timeline {
-  border-color: #fecaca;
-  background: #fff7f7;
-}
-
-.processing-timeline span {
-  padding: 6px 8px;
-  border-radius: 999px;
-  background: #eef2f7;
-  color: #475569;
-  font-size: 12px;
-  font-weight: 700;
 }
 
 @media (max-width: 760px) {
