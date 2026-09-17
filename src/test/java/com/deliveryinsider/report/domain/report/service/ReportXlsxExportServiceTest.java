@@ -8,6 +8,7 @@ import com.deliveryinsider.report.integration.billing.BillingEntitlementClient;
 import com.deliveryinsider.report.integration.store.CurrentStoreClient;
 import com.deliveryinsider.report.integration.store.CurrentStoreResponse;
 import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 
@@ -47,8 +48,13 @@ class ReportXlsxExportServiceTest {
         try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
             assertEquals(List.of("요약", "일별추이", "플랫폼성과", "주문목록", "메뉴수익", "취소환불"),
                 java.util.stream.IntStream.range(0, workbook.getNumberOfSheets()).mapToObj(workbook::getSheetName).toList());
-            assertEquals(CellType.STRING, workbook.getSheet("주문목록").getRow(1).getCell(1).getCellType());
-            assertEquals(CellType.NUMERIC, workbook.getSheet("주문목록").getRow(1).getCell(5).getCellType());
+            assertEquals("주문번호", workbook.getSheet("주문목록").getRow(0).getCell(0).getStringCellValue());
+            assertEquals("ORD-77", workbook.getSheet("주문목록").getRow(1).getCell(0).getStringCellValue());
+            assertEquals(CellType.NUMERIC, workbook.getSheet("주문목록").getRow(1).getCell(4).getCellType());
+            DataFormatter formatter = new DataFormatter();
+            assertFalse(java.util.stream.IntStream.range(0, 7)
+                .mapToObj(index -> formatter.formatCellValue(workbook.getSheet("주문목록").getRow(1).getCell(index)))
+                .anyMatch("=external-order"::equals));
             assertEquals(1, workbook.getSheet("취소환불").getLastRowNum());
             assertEquals("REFUND_REQUESTED", workbook.getSheet("취소환불").getRow(1).getCell(1).getStringCellValue());
             long formulaCount = java.util.stream.IntStream.range(0, workbook.getNumberOfSheets()).mapToLong(i -> {
