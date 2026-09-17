@@ -118,7 +118,7 @@ const summary = computed(() => {
 
   return {
     sales: data.todaySales || 0,
-    profit: data.todayNetProfit || 0,
+    profit: data.todayAdjustedEstimatedProfit ?? data.todayNetProfit ?? 0,
     completedSales: data.completedSales || 0,
     completedCount: data.completedCount || 0,
     activeCount: data.progressOrderCount || 0,
@@ -439,7 +439,7 @@ onBeforeUnmount(() => {
       <div class="kpi-card col-3 border-success clickable-card" @click="goToSalesReport">
         <div class="card-label">예상 매출</div>
         <div class="card-value">{{ formatMoney(summary.sales) }}</div>
-        <div class="card-sub">예상 순수익 {{ formatMoney(summary.profit) }}</div>
+        <div class="card-sub">조정 후 예상 순수익 {{ formatMoney(summary.profit) }}</div>
       </div>
 
       <div class="kpi-card col-3 clickable-card" @click="goToSalesReport">

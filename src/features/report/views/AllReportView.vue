@@ -235,11 +235,17 @@ const formatMarginRate = (value) => (value === null || value === undefined
   ? '-'
   : `${Number(value).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}%`);
 
+const adjustedEstimatedProfit = computed(() => Number(
+  reportSummary.value?.adjustedEstimatedProfit
+    ?? reportSummary.value?.estimatedNetProfit
+    ?? 0,
+));
+
 const summaryStats = computed(() => {
   const summary = reportSummary.value || {};
 
   const totalSales = Number(summary.grossOrderAmount || 0);
-  const totalProfit = Number(summary.estimatedNetProfit || 0);
+  const totalProfit = adjustedEstimatedProfit.value;
 
   const totalCount = Number(summary.totalOrderCount || 0);
   const cancelCount = Number(summary.canceledOrderCount || 0);
@@ -272,7 +278,7 @@ const summaryStats = computed(() => {
 
 const hasIncompleteFinancialData = computed(() => {
   return (reportSummary.value?.financialDataStatuses || [])
-    .some((status) => status !== 'AVAILABLE');
+    .some((status) => status === 'UNAVAILABLE');
 });
 
 const formatAppliedDate = (value) => String(value || '').replaceAll('-', '.');
@@ -299,16 +305,16 @@ const appliedPeriodContext = computed(() => {
 });
 
 const revenueProfitLabels = computed(() => {
-  const profit = Number(reportSummary.value?.estimatedNetProfit || 0);
-  return ['매출', profit < 0 ? '추정 손실' : '추정 순수익'];
+  const profit = adjustedEstimatedProfit.value;
+  return ['매출', profit < 0 ? '조정 후 추정 손실' : '조정 후 예상 순수익'];
 });
 
 const revenueProfitDatasets = computed(() => {
   const grossSales = Number(reportSummary.value?.grossOrderAmount || 0);
-  const estimatedNetProfit = Number(reportSummary.value?.estimatedNetProfit || 0);
+  const estimatedNetProfit = adjustedEstimatedProfit.value;
 
   return [{
-    label: '매출 및 추정 수익·손실',
+    label: '매출 및 조정 후 예상 수익·손실',
     data: [grossSales, Math.abs(estimatedNetProfit)],
     tooltipValues: [grossSales, estimatedNetProfit],
     unit: 'currency',
@@ -386,7 +392,7 @@ const platformChartDatasets = computed(() => {
 const revenueProfitRows = computed(() => [[
   appliedPeriodContext.value,
   formatMoney(reportSummary.value?.grossOrderAmount),
-  formatMoney(reportSummary.value?.estimatedNetProfit),
+  formatMoney(adjustedEstimatedProfit.value),
 ]]);
 
 const orderStatusRows = computed(() => [[
@@ -861,10 +867,10 @@ onMounted(async () => {
         class="summary-box profit-box"
         :class="{ 'profit-loss-box': summaryStats.totalProfit < 0 }"
       >
-        <span>추정 순수익</span>
+        <span>조정 후 예상 순수익</span>
         <strong data-testid="report-kpi-estimated-profit">{{ formatMoney(summaryStats.totalProfit) }}</strong>
         <p v-if="hasIncompleteFinancialData">일부 금융 정보가 미확보된 잠정 집계</p>
-        <p v-else>플랫폼 비용·원가·포장비 반영</p>
+        <p v-else>플랫폼 비용·원가·포장비와 매장 귀책 환불 반영</p>
       </article>
       <article class="summary-box">
         <span>완료 주문</span>
@@ -885,7 +891,8 @@ onMounted(async () => {
     </section>
 
     <p v-if="hasIncompleteFinancialData && !reportStore.isLoading && !reportStore.loadError" class="financial-coverage-note">
-      플랫폼 금융 정보가 일부 미확보되어 매출과 추정 순수익은 현재 확보된 주문 스냅샷 기준입니다. 미확보 비용을 0원 확정치로 간주하지 않습니다.
+      일부 주문의 플랫폼 비용이 아직 확인되지 않았습니다.<br>
+      추정 순수익은 현재 확인된 비용 정보 기준으로 표시됩니다.
     </p>
 
     <p class="report-period-context" data-testid="report-period-context">
@@ -895,15 +902,15 @@ onMounted(async () => {
     <section class="report-chart-grid" aria-label="운영 추이 차트">
       <ReportChartCard
         chart-id="revenue-profit-trend"
-        title="매출 / 추정 수익·손실 비중"
-        description="조회 기간의 매출과 추정 수익 또는 손실 금액을 원형으로 비교합니다."
+        title="매출 / 조정 후 예상 수익·손실 비중"
+        description="조회 기간의 매출과 매장 귀책 환불을 반영한 예상 수익 또는 손실 금액을 원형으로 비교합니다."
         chart-type="pie"
         :labels="revenueProfitLabels"
         :datasets="revenueProfitDatasets"
         :loading="reportStore.isLoading"
         :error="reportStore.loadError"
         :empty="dailyTrend.length === 0"
-        :table-headers="['조회 조건', '매출', '추정 순수익']"
+        :table-headers="['조회 조건', '매출', '조정 후 예상 순수익']"
         :table-rows="revenueProfitRows"
         data-testid="revenue-profit-chart"
         @retry="searchReports"

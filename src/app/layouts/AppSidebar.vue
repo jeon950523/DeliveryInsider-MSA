@@ -91,7 +91,7 @@ const operationSummary = computed(() => {
     requestRisk,
     lossRisk: data.lossRiskCount || 0,
     sales: data.todaySales || 0,
-    profit: data.todayNetProfit || 0,
+    profit: data.todayAdjustedEstimatedProfit ?? data.todayNetProfit ?? 0,
     completedCount: data.completedCount || 0,
     cancelCount: data.canceledCount || data.cancelCount || 0,
     cancelRate: data.cancelRate || 0,
@@ -176,7 +176,7 @@ onMounted(async () => {
         <span class="side-performance-title">오늘 실적</span>
         <strong class="side-sales-amount">{{ formatMoney(operationSummary.sales) }}</strong>
         <div class="side-profit-row">
-          <span>예상 순수익</span>
+          <span>조정 후 예상 순수익</span>
           <strong>{{ formatMoney(operationSummary.profit) }}</strong>
         </div>
         <div class="side-performance-grid">
