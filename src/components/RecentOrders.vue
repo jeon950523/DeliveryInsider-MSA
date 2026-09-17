@@ -56,6 +56,14 @@ const actionClass = {
   CANCELED: 'action-button action-button--danger',
 };
 
+const actionActor = {
+  COOKING: '매장/POS 동작',
+  READY_FOR_PICKUP: '매장/POS 동작',
+  PICKED_UP: '플랫폼/라이더 동작',
+  DELIVERED: '플랫폼/라이더 동작',
+  CANCELED: '고객/플랫폼 이벤트',
+};
+
 const hasOrders = computed(() => props.orders.length > 0);
 const cancelTarget = ref(null);
 const cancelReasonCode = ref('CUSTOMER_CHANGED_MIND');
@@ -203,7 +211,8 @@ const submitCancellation = () => {
             :disabled="disabledOrderId === order.externalOrderId"
             @click="requestStatusChange(order, action)"
           >
-            {{ actionLabel[action] }}
+            <span>{{ actionLabel[action] }}</span>
+            <small class="action-actor">{{ actionActor[action] }}</small>
           </button>
           <button
             v-if="order.status === 'DELIVERED'"
@@ -211,7 +220,7 @@ const submitCancellation = () => {
             class="action-button action-button--danger"
             :disabled="disabledOrderId === order.externalOrderId"
             @click="openRefundDialog(order)"
-          >환불</button>
+          ><span>환불</span><small class="action-actor">고객/플랫폼 이벤트</small></button>
         </div>
       </article>
     </div>
@@ -273,4 +282,5 @@ const submitCancellation = () => {
 .cancel-dialog textarea, .cancel-dialog select { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }.cancel-dialog textarea { resize: vertical; }
 .cancel-dialog__error { color: #b91c1c; font-size: 13px; }.cancel-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .refund-box { padding: 10px; border-radius: 8px; background: #fff7ed; color: #9a3412; font-weight: 700; }
+.action-actor { display: block; margin-top: 3px; font-size: 11px; font-weight: 700; opacity: .82; }
 </style>

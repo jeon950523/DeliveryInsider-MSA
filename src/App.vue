@@ -552,10 +552,11 @@ onMounted(async () => {
   <div class="app-shell">
     <header class="app-header">
       <div>
-        <span class="header-kicker">EXTERNAL DELIVERY PLATFORM</span>
-        <h1>배달 플랫폼 Simulator</h1>
+        <span class="header-kicker">EXTERNAL INTEGRATION SIMULATOR</span>
+        <h1>외부 연동 통합 Simulator</h1>
         <p>
-          DeliveryInsider와 분리된 외부 시스템입니다. 주문은 8101 Simulator Backend를 통해 Webhook으로 전달됩니다.
+          실제 환경에서는 고객·POS·배달 플랫폼·라이더 시스템으로 역할이 분리되지만,
+          이 화면에서는 외부 연동 흐름 검증을 위해 하나의 Simulator에서 통합 재현합니다.
         </p>
       </div>
       <div class="backend-state" :class="{ 'is-online': isBackendAvailable }">

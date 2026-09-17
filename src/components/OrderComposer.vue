@@ -40,7 +40,7 @@ const formatMoney = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원
     <div class="panel-heading">
       <div>
         <span class="eyebrow">ORDER</span>
-        <h2>주문 만들기</h2>
+        <h2>고객/플랫폼 이벤트</h2>
       </div>
     </div>
 
@@ -88,12 +88,12 @@ const formatMoney = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원
       :disabled="disabled || selectedItemCount === 0 || !externalStoreId"
       @click="emit('submit')"
     >
-      {{ disabled ? '전송 중...' : '주문하기' }}
+      {{ disabled ? '전송 중...' : '신규 주문 생성' }}
     </button>
 
     <p class="ownership-note">
-      이 화면에서 주문 생성부터 조리 시작·완료, 기사 픽업, 배달 완료까지 정상 lifecycle을 제어합니다.
-      DeliveryInsider 점주 화면은 상태를 읽기 전용으로 관제합니다.
+      고객이 플랫폼에서 주문하면 플랫폼이 매장/POS로 전달합니다. 이 버튼은 그 외부 주문 발생을 테스트용으로 재현합니다.
+      조리 시작·완료는 매장/POS, 픽업·배달 완료는 플랫폼/라이더 동작으로 최근 주문에서 구분합니다.
     </p>
   </aside>
 </template>
