@@ -22,7 +22,8 @@ public record ReportSummaryResponse(
     long customerRefundAmount,
     long merchantLiabilityAmount,
     long platformLiabilityAmount,
-    long netSales
+    long netSales,
+    long adjustedEstimatedProfit
 ) {
     public ReportSummaryResponse(
         long totalOrderCount,
@@ -51,7 +52,8 @@ public record ReportSummaryResponse(
             0,
             0,
             0,
-            grossOrderAmount
+            grossOrderAmount,
+            estimatedNetProfit
         );
     }
 }

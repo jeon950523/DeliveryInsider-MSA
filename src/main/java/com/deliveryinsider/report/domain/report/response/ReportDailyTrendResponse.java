@@ -19,12 +19,21 @@ public record ReportDailyTrendResponse(
     long estimatedMenuCost,
     long estimatedPackagingCost,
     long estimatedNetProfit,
-    List<String> financialDataStatuses
+    List<String> financialDataStatuses,
+    long merchantLiabilityAmount,
+    long adjustedEstimatedProfit
 ) {
 
     public static ReportDailyTrendResponse from(
         ReportDailyTrendProjection projection
     ) {
+        long estimatedNetProfit =
+            projection.getGrossSales()
+                - projection.getProviderChargeAmount()
+                + projection.getProviderFundedDiscountAmount()
+                - projection.getEstimatedMenuCost()
+                - projection.getEstimatedPackagingCost();
+
         return new ReportDailyTrendResponse(
             projection.getReportDate(),
             projection.getTotalOrderCount(),
@@ -37,14 +46,12 @@ public record ReportDailyTrendResponse(
             projection.getProviderFundedDiscountAmount(),
             projection.getEstimatedMenuCost(),
             projection.getEstimatedPackagingCost(),
-            projection.getGrossSales()
-                - projection.getProviderChargeAmount()
-                + projection.getProviderFundedDiscountAmount()
-                - projection.getEstimatedMenuCost()
-                - projection.getEstimatedPackagingCost(),
+            estimatedNetProfit,
             parseStatuses(
                 projection.getFinancialDataStatusesCsv()
-            )
+            ),
+            projection.getMerchantLiabilityAmount(),
+            estimatedNetProfit - projection.getMerchantLiabilityAmount()
         );
     }
 
@@ -74,7 +81,9 @@ public record ReportDailyTrendResponse(
             estimatedMenuCost,
             estimatedPackagingCost,
             estimatedNetProfit,
-            financialDataStatuses
+            financialDataStatuses,
+            0,
+            estimatedNetProfit
         );
     }
 

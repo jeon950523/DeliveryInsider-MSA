@@ -172,7 +172,7 @@
         COALESCE(
         SUM(
         CASE
-        WHEN fo.status = 'DELIVERED'
+        WHEN fo.status IN ('DELIVERED', 'REFUNDED')
         THEN COALESCE(
             fo.gross_order_amount,
             ci.item_order_amount,
@@ -185,12 +185,12 @@
         ) AS gross_order_amount,
 
         <!-- Sum only acquired values; no acquired financial data is null, not a confirmed zero. -->
-        SUM(CASE WHEN fo.status = 'DELIVERED' THEN fo.customer_paid_amount END) AS customer_paid_amount,
+        SUM(CASE WHEN fo.status IN ('DELIVERED', 'REFUNDED') THEN fo.customer_paid_amount END) AS customer_paid_amount,
 
         COALESCE(
         SUM(
         CASE
-        WHEN fo.status = 'DELIVERED'
+        WHEN fo.status IN ('DELIVERED', 'REFUNDED')
         THEN COALESCE(fo.provider_funded_discount, 0)
         ELSE 0
         END
@@ -236,6 +236,7 @@
         FROM filtered_orders fo
         INNER JOIN report_refunds rr ON rr.order_id = fo.order_id
         WHERE fo.status = 'REFUNDED'
+        AND rr.status = 'REFUNDED'
         )
         SELECT
         os.total_order_count,
@@ -280,7 +281,7 @@
 
         WHERE store_id = #{storeId}
 
-        AND status = 'DELIVERED'
+        AND status IN ('DELIVERED', 'REFUNDED')
 
         AND provider_financial_data_status IS NOT NULL
 
@@ -716,6 +717,24 @@
         WHERE fo.status IN ('DELIVERED', 'REFUNDED')
 
         GROUP BY DATE(fo.ordered_at)
+        ),
+        daily_refunds AS (
+        SELECT
+        DATE(fo.ordered_at) AS reportDate,
+
+        COALESCE(
+        SUM(rr.merchant_liability_amount),
+        0
+        ) AS merchantLiabilityAmount
+
+        FROM filtered_orders fo
+        INNER JOIN report_refunds rr
+        ON rr.order_id = fo.order_id
+
+        WHERE fo.status = 'REFUNDED'
+        AND rr.status = 'REFUNDED'
+
+        GROUP BY DATE(fo.ordered_at)
         )
         SELECT
         d.reportDate,
@@ -743,6 +762,11 @@
         0
         ) AS estimatedPackagingCost,
 
+        COALESCE(
+        r.merchantLiabilityAmount,
+        0
+        ) AS merchantLiabilityAmount,
+
         d.financialDataStatusesCsv
 
         FROM daily_orders d
@@ -750,6 +774,8 @@
         ON c.reportDate = d.reportDate
         LEFT JOIN daily_items i
         ON i.reportDate = d.reportDate
+        LEFT JOIN daily_refunds r
+        ON r.reportDate = d.reportDate
 
         ORDER BY d.reportDate ASC
 

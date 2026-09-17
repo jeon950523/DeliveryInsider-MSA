@@ -25,6 +25,7 @@ public class ReportDailyTrendProjection {
 
     private long estimatedMenuCost;
     private long estimatedPackagingCost;
+    private long merchantLiabilityAmount;
 
     private String financialDataStatusesCsv;
 }

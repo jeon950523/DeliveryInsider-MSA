@@ -100,6 +100,15 @@ public class ReportReadService {
                     request.platformType()
                 );
 
+        long estimatedNetProfit =
+            summary.getGrossOrderAmount()
+                - (summary.getProviderChargeAmount() == null
+                    ? 0
+                    : summary.getProviderChargeAmount())
+                + summary.getProviderFundedDiscountAmount()
+                - summary.getEstimatedMenuCost()
+                - summary.getEstimatedPackagingCost();
+
         return new ReportSummaryResponse(
             summary.getTotalOrderCount(),
             summary.getCompletedOrderCount(),
@@ -110,18 +119,13 @@ public class ReportReadService {
             summary.getProviderFundedDiscountAmount(),
             summary.getEstimatedMenuCost(),
             summary.getEstimatedPackagingCost(),
-            summary.getGrossOrderAmount()
-                - (summary.getProviderChargeAmount() == null
-                    ? 0
-                    : summary.getProviderChargeAmount())
-                + summary.getProviderFundedDiscountAmount()
-                - summary.getEstimatedMenuCost()
-                - summary.getEstimatedPackagingCost(),
+            estimatedNetProfit,
             financialDataStatuses,
             summary.getCustomerRefundAmount(),
             summary.getMerchantLiabilityAmount(),
             summary.getPlatformLiabilityAmount(),
-            summary.getGrossOrderAmount() - summary.getMerchantLiabilityAmount()
+            summary.getGrossOrderAmount() - summary.getMerchantLiabilityAmount(),
+            estimatedNetProfit - summary.getMerchantLiabilityAmount()
         );
     }
 
