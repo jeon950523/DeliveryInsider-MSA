@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.report.domain.order.mapper.ReportRefundMapper">
+
+    <insert id="insert">
+        INSERT INTO report_refunds (
+            order_id,
+            provider_refund_id,
+            status,
+            amount,
+            reason_code,
+            reason_text,
+            liability_party,
+            merchant_liability_amount,
+            platform_liability_amount,
+            requested_at,
+            event_version
+        )
+        VALUES (
+            #{orderId},
+            #{providerRefundId},
+            #{status},
+            #{amount},
+            #{reasonCode},
+            #{reasonText},
+            #{liabilityParty},
+            #{merchantLiabilityAmount},
+            #{platformLiabilityAmount},
+            #{requestedAt},
+            #{eventVersion}
+        )
+    </insert>
+
+</mapper>

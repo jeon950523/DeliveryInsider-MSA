@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.report.domain.order.mapper.ReportOrderChargeMapper">
+
+    <insert id="insertAll">
+
+        INSERT INTO report_order_charges (
+        order_id,
+        charge_type,
+        amount,
+        rate,
+        basis_amount,
+        provisional,
+        source_code
+        )
+        VALUES
+        <foreach
+                collection="charges"
+                item="charge"
+                separator=",">
+            (
+            #{charge.orderId},
+            #{charge.chargeType},
+            #{charge.amount},
+            #{charge.rate},
+            #{charge.basisAmount},
+            #{charge.provisional},
+            #{charge.sourceCode}
+            )
+        </foreach>
+
+    </insert>
+
+</mapper>

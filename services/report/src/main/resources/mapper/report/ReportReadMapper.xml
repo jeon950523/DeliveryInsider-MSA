@@ -1,0 +1,1239 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.report.domain.report.mapper.ReportReadMapper">
+
+    <resultMap
+            id="reportSummaryResultMap"
+            type="com.deliveryinsider.report.domain.report.projection.ReportSummaryProjection">
+
+        <result
+                column="total_order_count"
+                property="totalOrderCount"/>
+
+        <result
+                column="completed_order_count"
+                property="completedOrderCount"/>
+
+        <result
+                column="canceled_order_count"
+                property="canceledOrderCount"/>
+
+        <result
+                column="gross_order_amount"
+                property="grossOrderAmount"/>
+
+        <result
+                column="customer_paid_amount"
+                property="customerPaidAmount"/>
+
+        <result
+                column="provider_charge_amount"
+                property="providerChargeAmount"/>
+
+        <result
+                column="provider_funded_discount_amount"
+                property="providerFundedDiscountAmount"/>
+
+        <result
+                column="estimated_menu_cost"
+                property="estimatedMenuCost"/>
+
+        <result
+                column="estimated_packaging_cost"
+                property="estimatedPackagingCost"/>
+        <result column="customer_refund_amount" property="customerRefundAmount"/>
+        <result column="merchant_liability_amount" property="merchantLiabilityAmount"/>
+        <result column="platform_liability_amount" property="platformLiabilityAmount"/>
+
+    </resultMap>
+
+    <sql id="orderFilter">
+
+        WHERE store_id = #{storeId}
+
+        <if test="from != null">
+            AND ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND platform_type = #{platformType}
+        </if>
+
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+
+    </sql>
+
+    <select
+            id="findSummary"
+            resultMap="reportSummaryResultMap">
+
+        WITH filtered_orders AS (
+        SELECT
+        ro.order_id,
+        ro.status,
+        ro.gross_order_amount,
+        ro.customer_paid_amount,
+        ro.provider_funded_discount
+
+        FROM report_orders ro
+
+        WHERE ro.store_id = #{storeId}
+
+        <if test="from != null">
+            AND ro.ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND ro.platform_type = #{platformType}
+        </if>
+        ),
+        completed_items_by_order AS (
+        SELECT
+        fo.order_id,
+
+        COALESCE(
+        SUM(
+        ri.ordered_unit_price * ri.quantity
+        ),
+        0
+        ) AS item_order_amount,
+
+        COALESCE(
+        SUM(
+        ri.menu_cost * ri.quantity
+        ),
+        0
+        ) AS menu_cost,
+
+        COALESCE(
+        SUM(
+        ri.packaging_cost * ri.quantity
+        ),
+        0
+        ) AS packaging_cost
+
+        FROM filtered_orders fo
+
+        INNER JOIN report_order_items ri
+        ON ri.order_id = fo.order_id
+
+        WHERE fo.status IN ('DELIVERED', 'REFUNDED')
+
+        GROUP BY
+        fo.order_id
+        ),
+        order_summary AS (
+        SELECT
+        COUNT(*) AS total_order_count,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN fo.status = 'DELIVERED'
+        THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS completed_order_count,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN fo.status = 'CANCELED'
+        THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS canceled_order_count,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN fo.status IN ('DELIVERED', 'REFUNDED')
+        THEN COALESCE(
+            fo.gross_order_amount,
+            ci.item_order_amount,
+            0
+        )
+        ELSE 0
+        END
+        ),
+        0
+        ) AS gross_order_amount,
+
+        <!-- Sum only acquired values; no acquired financial data is null, not a confirmed zero. -->
+        SUM(CASE WHEN fo.status IN ('DELIVERED', 'REFUNDED') THEN fo.customer_paid_amount END) AS customer_paid_amount,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN fo.status IN ('DELIVERED', 'REFUNDED')
+        THEN COALESCE(fo.provider_funded_discount, 0)
+        ELSE 0
+        END
+        ),
+        0
+        ) AS provider_funded_discount_amount
+
+        FROM filtered_orders fo
+
+        LEFT JOIN completed_items_by_order ci
+        ON ci.order_id = fo.order_id
+        ),
+        completed_charges AS (
+        SELECT
+        SUM(rc.amount) AS provider_charge_amount
+
+        FROM filtered_orders fo
+
+        INNER JOIN report_order_charges rc
+        ON rc.order_id = fo.order_id
+
+        WHERE fo.status IN ('DELIVERED', 'REFUNDED')
+        ),
+        completed_item_totals AS (
+        SELECT
+        COALESCE(
+        SUM(menu_cost),
+        0
+        ) AS estimated_menu_cost,
+
+        COALESCE(
+        SUM(packaging_cost),
+        0
+        ) AS estimated_packaging_cost
+
+        FROM completed_items_by_order
+        ),
+        refund_summary AS (
+        SELECT
+        COALESCE(SUM(rr.amount), 0) AS customer_refund_amount,
+        COALESCE(SUM(rr.merchant_liability_amount), 0) AS merchant_liability_amount,
+        COALESCE(SUM(rr.platform_liability_amount), 0) AS platform_liability_amount
+        FROM filtered_orders fo
+        INNER JOIN report_refunds rr ON rr.order_id = fo.order_id
+        WHERE fo.status = 'REFUNDED'
+        AND rr.status = 'REFUNDED'
+        )
+        SELECT
+        os.total_order_count,
+        os.completed_order_count,
+        os.canceled_order_count,
+        os.gross_order_amount,
+        os.customer_paid_amount,
+
+        cc.provider_charge_amount,
+
+        os.provider_funded_discount_amount,
+
+        COALESCE(
+        cit.estimated_menu_cost,
+        0
+        ) AS estimated_menu_cost,
+
+        COALESCE(
+        cit.estimated_packaging_cost,
+        0
+        ) AS estimated_packaging_cost,
+        rs.customer_refund_amount,
+        rs.merchant_liability_amount,
+        rs.platform_liability_amount
+
+        FROM order_summary os
+
+        CROSS JOIN completed_charges cc
+        CROSS JOIN completed_item_totals cit
+        CROSS JOIN refund_summary rs
+
+    </select>
+
+    <select
+            id="findFinancialDataStatuses"
+            resultType="java.lang.String">
+
+        SELECT DISTINCT
+        provider_financial_data_status
+
+        FROM report_orders
+
+        WHERE store_id = #{storeId}
+
+        AND status IN ('DELIVERED', 'REFUNDED')
+
+        AND provider_financial_data_status IS NOT NULL
+
+        <if test="from != null">
+            AND ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND platform_type = #{platformType}
+        </if>
+
+        ORDER BY provider_financial_data_status
+
+    </select>
+
+    <select
+            id="findCancellationReasonCounts"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportCancellationReasonProjection">
+
+        SELECT
+        rc.provider_cancel_code AS reasonCode,
+        COUNT(DISTINCT ro.order_id) AS count
+
+        FROM report_orders ro
+        INNER JOIN report_cancellations rc
+        ON rc.order_id = ro.order_id
+
+        WHERE ro.store_id = #{storeId}
+        AND ro.status = 'CANCELED'
+        AND rc.provider_cancel_code IS NOT NULL
+        AND TRIM(rc.provider_cancel_code) != ''
+
+        <if test="from != null">
+            AND ro.ordered_at <![CDATA[ >= ]]> #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at <![CDATA[ <= ]]> #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND ro.platform_type = #{platformType}
+        </if>
+
+        GROUP BY rc.provider_cancel_code
+        ORDER BY count DESC, reasonCode ASC
+        LIMIT 5
+
+    </select>
+
+    <select
+            id="findOrders"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportOrderProjection">
+
+        SELECT
+        order_id AS orderId,
+        platform_type AS platformType,
+        platform_order_id AS platformOrderId,
+        status,
+        ordered_at AS orderedAt,
+        COALESCE(
+            ro.gross_order_amount,
+            (
+                SELECT SUM(ri.ordered_unit_price * ri.quantity)
+                FROM report_order_items ri
+                WHERE ri.order_id = ro.order_id
+            )
+        ) AS grossOrderAmount,
+        customer_paid_amount AS customerPaidAmount,
+        provider_financial_data_status AS financialDataStatus
+
+        FROM report_orders ro
+
+        <include refid="orderFilter"/>
+
+        ORDER BY
+
+        <choose>
+            <when test="sortBy == 'grossOrderAmount'">
+                grossOrderAmount
+            </when>
+
+            <when test="sortBy == 'status'">
+                status
+            </when>
+
+            <otherwise>
+                ordered_at
+            </otherwise>
+        </choose>
+
+        <choose>
+            <when test="direction == 'asc'">
+                ASC
+            </when>
+
+            <otherwise>
+                DESC
+            </otherwise>
+        </choose>
+
+        LIMIT #{size}
+        OFFSET #{offset}
+
+    </select>
+
+    <select
+            id="countOrders"
+            resultType="long">
+
+        SELECT COUNT(*)
+
+        FROM report_orders
+
+        <include refid="orderFilter"/>
+
+    </select>
+
+    <select
+            id="findOrderHistory"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportOrderHistoryProjection">
+
+        SELECT
+            history.order_id AS orderId,
+            history.platform_type AS platformType,
+            history.platform_order_id AS platformOrderId,
+            history.history_type AS historyType,
+            history.reason_code AS reasonCode,
+            history.reason_text AS reasonText,
+            history.amount AS amount,
+            history.refund_status AS refundStatus,
+            history.occurred_at AS occurredAt
+        FROM (
+            SELECT
+                ro.order_id,
+                ro.platform_type,
+                ro.platform_order_id,
+                'CANCELED' AS history_type,
+                rc.provider_cancel_code AS reason_code,
+                rc.provider_cancel_reason AS reason_text,
+                NULL AS amount,
+                NULL AS refund_status,
+                rc.canceled_at AS occurred_at
+            FROM report_orders ro
+            INNER JOIN report_cancellations rc
+                ON rc.order_id = ro.order_id
+            WHERE ro.store_id = #{storeId}
+            <if test="from != null">
+                AND rc.canceled_at <![CDATA[ >= ]]> #{from}
+            </if>
+            <if test="to != null">
+                AND rc.canceled_at <![CDATA[ <= ]]> #{to}
+            </if>
+            <if test="platformType != null and platformType != ''">
+                AND ro.platform_type = #{platformType}
+            </if>
+
+            UNION ALL
+
+            SELECT
+                ro.order_id,
+                ro.platform_type,
+                ro.platform_order_id,
+                CASE WHEN rr.status = 'REFUNDED' THEN 'REFUNDED' ELSE 'REFUND_REQUESTED' END AS history_type,
+                rr.reason_code,
+                rr.reason_text,
+                rr.amount,
+                rr.status AS refund_status,
+                rr.requested_at AS occurred_at
+            FROM report_orders ro
+            INNER JOIN report_refunds rr
+                ON rr.order_id = ro.order_id
+            WHERE ro.store_id = #{storeId}
+            <if test="from != null">
+                AND rr.requested_at <![CDATA[ >= ]]> #{from}
+            </if>
+            <if test="to != null">
+                AND rr.requested_at <![CDATA[ <= ]]> #{to}
+            </if>
+            <if test="platformType != null and platformType != ''">
+                AND ro.platform_type = #{platformType}
+            </if>
+        ) history
+        ORDER BY history.occurred_at DESC, history.order_id DESC
+
+    </select>
+
+    <select
+            id="findMenuPerformance"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportMenuPerformanceProjection">
+
+        SELECT
+        ri.menu_id AS menuId,
+        ri.menu_name AS menuName,
+
+        COUNT(
+        DISTINCT ro.order_id
+        ) AS orderCount,
+
+        COALESCE(
+        SUM(ri.quantity),
+        0
+        ) AS soldQuantity,
+
+        COALESCE(
+        SUM(
+        ri.ordered_unit_price
+        * ri.quantity
+        ),
+        0
+        ) AS grossSales,
+
+        COALESCE(
+        SUM(
+        ri.menu_cost
+        * ri.quantity
+        ),
+        0
+        ) AS estimatedMenuCost,
+
+        COALESCE(
+        SUM(
+        ri.packaging_cost
+        * ri.quantity
+        ),
+        0
+        ) AS estimatedPackagingCost
+
+        FROM report_order_items ri
+
+        INNER JOIN report_orders ro
+        ON ro.order_id = ri.order_id
+
+        WHERE ro.store_id = #{storeId}
+
+        AND ro.status = 'DELIVERED'
+
+        <if test="from != null">
+            AND ro.ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND ro.platform_type = #{platformType}
+        </if>
+
+        GROUP BY
+        ri.menu_id,
+        ri.menu_name
+
+        ORDER BY
+        grossSales DESC,
+        soldQuantity DESC,
+        ri.menu_id ASC
+
+    </select>
+
+    <select
+            id="findDailyTrend"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportDailyTrendProjection">
+
+        WITH filtered_orders AS (
+        SELECT
+        ro.order_id,
+        ro.ordered_at,
+        ro.status,
+        COALESCE(
+            ro.gross_order_amount,
+            (
+                SELECT SUM(ri.ordered_unit_price * ri.quantity)
+                FROM report_order_items ri
+                WHERE ri.order_id = ro.order_id
+            )
+        ) AS gross_order_amount,
+        ro.customer_paid_amount,
+        COALESCE(ro.provider_funded_discount, 0) AS provider_funded_discount,
+        ro.provider_financial_data_status
+        FROM report_orders ro
+        WHERE ro.store_id = #{storeId}
+
+        <if test="from != null">
+            AND ro.ordered_at <![CDATA[ >= ]]> #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at <![CDATA[ <= ]]> #{to}
+        </if>
+
+        <if test="platformType != null">
+            AND ro.platform_type = #{platformType}
+        </if>
+        ),
+        daily_orders AS (
+        SELECT
+        DATE(ordered_at) AS reportDate,
+
+        COUNT(*) AS totalOrderCount,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN status = 'DELIVERED'
+        THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS completedOrderCount,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN status = 'CANCELED'
+        THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS canceledOrderCount,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN status = 'REFUNDED'
+        THEN 1
+        ELSE 0
+        END
+        ),
+        0
+        ) AS refundedOrderCount,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN status IN ('DELIVERED', 'REFUNDED')
+        THEN gross_order_amount
+        ELSE 0
+        END
+        ),
+        0
+        ) AS grossSales,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN status IN ('DELIVERED', 'REFUNDED')
+        THEN customer_paid_amount
+        ELSE 0
+        END
+        ),
+        0
+        ) AS customerPaidAmount,
+
+        COALESCE(
+        SUM(
+        CASE
+        WHEN status IN ('DELIVERED', 'REFUNDED')
+        THEN provider_funded_discount
+        ELSE 0
+        END
+        ),
+        0
+        ) AS providerFundedDiscountAmount,
+
+        GROUP_CONCAT(
+        DISTINCT
+        CASE
+        WHEN status IN ('DELIVERED', 'REFUNDED')
+        THEN provider_financial_data_status
+        ELSE NULL
+        END
+        ORDER BY provider_financial_data_status
+        SEPARATOR ','
+        ) AS financialDataStatusesCsv
+
+        FROM filtered_orders
+        GROUP BY DATE(ordered_at)
+        ),
+        daily_charges AS (
+        SELECT
+        DATE(fo.ordered_at) AS reportDate,
+
+        COALESCE(
+        SUM(rc.amount),
+        0
+        ) AS providerChargeAmount
+
+        FROM filtered_orders fo
+        INNER JOIN report_order_charges rc
+        ON rc.order_id = fo.order_id
+
+        WHERE fo.status IN ('DELIVERED', 'REFUNDED')
+
+        GROUP BY DATE(fo.ordered_at)
+        ),
+        daily_items AS (
+        SELECT
+        DATE(fo.ordered_at) AS reportDate,
+
+        COALESCE(
+        SUM(
+        ri.menu_cost * ri.quantity
+        ),
+        0
+        ) AS estimatedMenuCost,
+
+        COALESCE(
+        SUM(
+        ri.packaging_cost * ri.quantity
+        ),
+        0
+        ) AS estimatedPackagingCost
+
+        FROM filtered_orders fo
+        INNER JOIN report_order_items ri
+        ON ri.order_id = fo.order_id
+
+        WHERE fo.status IN ('DELIVERED', 'REFUNDED')
+
+        GROUP BY DATE(fo.ordered_at)
+        ),
+        daily_refunds AS (
+        SELECT
+        DATE(fo.ordered_at) AS reportDate,
+
+        COALESCE(
+        SUM(rr.merchant_liability_amount),
+        0
+        ) AS merchantLiabilityAmount
+
+        FROM filtered_orders fo
+        INNER JOIN report_refunds rr
+        ON rr.order_id = fo.order_id
+
+        WHERE fo.status = 'REFUNDED'
+        AND rr.status = 'REFUNDED'
+
+        GROUP BY DATE(fo.ordered_at)
+        )
+        SELECT
+        d.reportDate,
+        d.totalOrderCount,
+        d.completedOrderCount,
+        d.canceledOrderCount,
+        d.refundedOrderCount,
+        d.grossSales,
+        d.customerPaidAmount,
+
+        COALESCE(
+        c.providerChargeAmount,
+        0
+        ) AS providerChargeAmount,
+
+        d.providerFundedDiscountAmount,
+
+        COALESCE(
+        i.estimatedMenuCost,
+        0
+        ) AS estimatedMenuCost,
+
+        COALESCE(
+        i.estimatedPackagingCost,
+        0
+        ) AS estimatedPackagingCost,
+
+        COALESCE(
+        r.merchantLiabilityAmount,
+        0
+        ) AS merchantLiabilityAmount,
+
+        d.financialDataStatusesCsv
+
+        FROM daily_orders d
+        LEFT JOIN daily_charges c
+        ON c.reportDate = d.reportDate
+        LEFT JOIN daily_items i
+        ON i.reportDate = d.reportDate
+        LEFT JOIN daily_refunds r
+        ON r.reportDate = d.reportDate
+
+        ORDER BY d.reportDate ASC
+
+    </select>
+
+    <select
+            id="findPlatformMetrics"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportPlatformMetricProjection">
+
+        WITH filtered_orders AS (
+        SELECT
+        ro.order_id,
+        ro.platform_type,
+        ro.status,
+        ro.gross_order_amount
+
+        FROM report_orders ro
+
+        WHERE ro.store_id = #{storeId}
+
+        <if test="from != null">
+            AND ro.ordered_at <![CDATA[ >= ]]> #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at <![CDATA[ <= ]]> #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND ro.platform_type = #{platformType}
+        </if>
+        ),
+        completed_items_by_order AS (
+        SELECT
+        fo.order_id,
+        COALESCE(
+        SUM(ri.ordered_unit_price * ri.quantity),
+        0
+        ) AS item_order_amount
+
+        FROM filtered_orders fo
+        INNER JOIN report_order_items ri
+        ON ri.order_id = fo.order_id
+
+        WHERE fo.status = 'DELIVERED'
+
+        GROUP BY fo.order_id
+        )
+        SELECT
+        fo.platform_type AS platformType,
+        COUNT(*) AS totalOrderCount,
+        COALESCE(
+        SUM(CASE WHEN fo.status = 'DELIVERED' THEN 1 ELSE 0 END),
+        0
+        ) AS completedOrderCount,
+        COALESCE(
+        SUM(CASE WHEN fo.status = 'CANCELED' THEN 1 ELSE 0 END),
+        0
+        ) AS canceledOrderCount,
+        COALESCE(
+        SUM(
+        CASE
+        WHEN fo.status = 'DELIVERED'
+        THEN COALESCE(fo.gross_order_amount, ci.item_order_amount, 0)
+        ELSE 0
+        END
+        ),
+        0
+        ) AS grossSales
+
+        FROM filtered_orders fo
+        LEFT JOIN completed_items_by_order ci
+        ON ci.order_id = fo.order_id
+
+        GROUP BY fo.platform_type
+        ORDER BY fo.platform_type ASC
+
+    </select>
+
+    <select id="findMenuProfitItems"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportMenuProfitItemProjection">
+        SELECT
+            ro.order_id AS orderId,
+            ro.platform_type AS platformType,
+            ro.external_store_id AS externalStoreId,
+            ro.provider_financial_data_status AS financialDataStatus,
+            ro.gross_order_amount AS orderGrossAmount,
+            ro.provider_funded_discount AS providerFundedDiscount,
+            ri.menu_id AS menuId,
+            ri.menu_name AS menuName,
+            ri.quantity AS quantity,
+            COALESCE(ri.ordered_unit_price * ri.quantity, 0) AS grossSales,
+            COALESCE(ri.menu_cost * ri.quantity, 0) AS costOfGoods,
+            COALESCE(ri.packaging_cost * ri.quantity, 0) AS packagingCost
+        FROM report_orders ro
+        INNER JOIN report_order_items ri ON ri.order_id = ro.order_id
+        WHERE ro.store_id = #{storeId}
+          AND ro.status = 'DELIVERED'
+        <if test="from != null">AND ro.ordered_at <![CDATA[ >= ]]> #{from}</if>
+        <if test="to != null">AND ro.ordered_at <![CDATA[ <= ]]> #{to}</if>
+        <if test="platformType != null and platformType != ''">AND ro.platform_type = #{platformType}</if>
+        ORDER BY ro.order_id ASC, ri.menu_id ASC, ri.menu_name ASC
+    </select>
+
+    <select id="findMenuProfitCharges"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportMenuProfitChargeProjection">
+        SELECT
+            rc.order_id AS orderId,
+            rc.charge_type AS chargeType,
+            rc.amount AS amount
+        FROM report_order_charges rc
+        INNER JOIN report_orders ro ON ro.order_id = rc.order_id
+        WHERE ro.store_id = #{storeId}
+          AND ro.status = 'DELIVERED'
+        <if test="from != null">AND ro.ordered_at <![CDATA[ >= ]]> #{from}</if>
+        <if test="to != null">AND ro.ordered_at <![CDATA[ <= ]]> #{to}</if>
+        <if test="platformType != null and platformType != ''">AND ro.platform_type = #{platformType}</if>
+        ORDER BY rc.order_id ASC, rc.charge_type ASC
+    </select>
+    <select
+            id="findProcessingTimeSummary"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportProcessingTimeProjection">
+
+        SELECT
+        COUNT(*) AS completedOrderCount,
+
+        COUNT(
+        CASE
+        WHEN ro.ordered_at IS NOT NULL
+        AND ro.completed_at IS NOT NULL
+        AND ro.completed_at >= ro.ordered_at
+        THEN 1
+        END
+        ) AS totalProcessingSampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.ordered_at IS NOT NULL
+        AND ro.completed_at IS NOT NULL
+        AND ro.completed_at >= ro.ordered_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.ordered_at,
+        ro.completed_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averageTotalProcessingSeconds,
+
+        COUNT(
+        CASE
+        WHEN ro.ordered_at IS NOT NULL
+        AND ro.cooking_started_at IS NOT NULL
+        AND ro.cooking_started_at >= ro.ordered_at
+        THEN 1
+        END
+        ) AS waitingSampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.ordered_at IS NOT NULL
+        AND ro.cooking_started_at IS NOT NULL
+        AND ro.cooking_started_at >= ro.ordered_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.ordered_at,
+        ro.cooking_started_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averageWaitingSeconds,
+
+        COUNT(
+        CASE
+        WHEN ro.cooking_started_at IS NOT NULL
+        AND ro.ready_for_pickup_at IS NOT NULL
+        AND ro.ready_for_pickup_at >= ro.cooking_started_at
+        THEN 1
+        END
+        ) AS cookingSampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.cooking_started_at IS NOT NULL
+        AND ro.ready_for_pickup_at IS NOT NULL
+        AND ro.ready_for_pickup_at >= ro.cooking_started_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.cooking_started_at,
+        ro.ready_for_pickup_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averageCookingSeconds,
+
+        COUNT(
+        CASE
+        WHEN ro.ready_for_pickup_at IS NOT NULL
+        AND ro.picked_up_at IS NOT NULL
+        AND ro.picked_up_at >= ro.ready_for_pickup_at
+        THEN 1
+        END
+        ) AS pickupWaitingSampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.ready_for_pickup_at IS NOT NULL
+        AND ro.picked_up_at IS NOT NULL
+        AND ro.picked_up_at >= ro.ready_for_pickup_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.ready_for_pickup_at,
+        ro.picked_up_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averagePickupWaitingSeconds,
+
+        COUNT(
+        CASE
+        WHEN ro.picked_up_at IS NOT NULL
+        AND ro.completed_at IS NOT NULL
+        AND ro.completed_at >= ro.picked_up_at
+        THEN 1
+        END
+        ) AS deliverySampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.picked_up_at IS NOT NULL
+        AND ro.completed_at IS NOT NULL
+        AND ro.completed_at >= ro.picked_up_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.picked_up_at,
+        ro.completed_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averageDeliverySeconds
+
+        FROM report_orders ro
+
+        WHERE ro.store_id = #{storeId}
+
+        AND ro.operation_status = 'COMPLETED'
+
+        <if test="from != null">
+            AND ro.ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND ro.platform_type = #{platformType}
+        </if>
+
+    </select>
+
+
+    <select
+            id="findProcessingTimeByPlatform"
+            resultType="com.deliveryinsider.report.domain.report.projection.ReportPlatformProcessingTimeProjection">
+
+        SELECT
+        ro.platform_type AS platformType,
+
+        COUNT(*) AS completedOrderCount,
+
+        COUNT(
+        CASE
+        WHEN ro.ordered_at IS NOT NULL
+        AND ro.completed_at IS NOT NULL
+        AND ro.completed_at >= ro.ordered_at
+        THEN 1
+        END
+        ) AS totalProcessingSampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.ordered_at IS NOT NULL
+        AND ro.completed_at IS NOT NULL
+        AND ro.completed_at >= ro.ordered_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.ordered_at,
+        ro.completed_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averageTotalProcessingSeconds,
+
+        COUNT(
+        CASE
+        WHEN ro.ordered_at IS NOT NULL
+        AND ro.cooking_started_at IS NOT NULL
+        AND ro.cooking_started_at >= ro.ordered_at
+        THEN 1
+        END
+        ) AS waitingSampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.ordered_at IS NOT NULL
+        AND ro.cooking_started_at IS NOT NULL
+        AND ro.cooking_started_at >= ro.ordered_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.ordered_at,
+        ro.cooking_started_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averageWaitingSeconds,
+
+        COUNT(
+        CASE
+        WHEN ro.cooking_started_at IS NOT NULL
+        AND ro.ready_for_pickup_at IS NOT NULL
+        AND ro.ready_for_pickup_at >= ro.cooking_started_at
+        THEN 1
+        END
+        ) AS cookingSampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.cooking_started_at IS NOT NULL
+        AND ro.ready_for_pickup_at IS NOT NULL
+        AND ro.ready_for_pickup_at >= ro.cooking_started_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.cooking_started_at,
+        ro.ready_for_pickup_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averageCookingSeconds,
+
+        COUNT(
+        CASE
+        WHEN ro.ready_for_pickup_at IS NOT NULL
+        AND ro.picked_up_at IS NOT NULL
+        AND ro.picked_up_at >= ro.ready_for_pickup_at
+        THEN 1
+        END
+        ) AS pickupWaitingSampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.ready_for_pickup_at IS NOT NULL
+        AND ro.picked_up_at IS NOT NULL
+        AND ro.picked_up_at >= ro.ready_for_pickup_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.ready_for_pickup_at,
+        ro.picked_up_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averagePickupWaitingSeconds,
+
+        COUNT(
+        CASE
+        WHEN ro.picked_up_at IS NOT NULL
+        AND ro.completed_at IS NOT NULL
+        AND ro.completed_at >= ro.picked_up_at
+        THEN 1
+        END
+        ) AS deliverySampleCount,
+
+        CAST(
+        ROUND(
+        AVG(
+        CASE
+        WHEN ro.picked_up_at IS NOT NULL
+        AND ro.completed_at IS NOT NULL
+        AND ro.completed_at >= ro.picked_up_at
+        THEN TIMESTAMPDIFF(
+        SECOND,
+        ro.picked_up_at,
+        ro.completed_at
+        )
+        END
+        )
+        )
+        AS SIGNED
+        ) AS averageDeliverySeconds
+
+        FROM report_orders ro
+
+        WHERE ro.store_id = #{storeId}
+
+        AND ro.operation_status = 'COMPLETED'
+
+        <if test="from != null">
+            AND ro.ordered_at
+            <![CDATA[ >= ]]>
+            #{from}
+        </if>
+
+        <if test="to != null">
+            AND ro.ordered_at
+            <![CDATA[ <= ]]>
+            #{to}
+        </if>
+
+        <if test="platformType != null and platformType != ''">
+            AND ro.platform_type = #{platformType}
+        </if>
+
+        GROUP BY
+        ro.platform_type
+
+        ORDER BY
+        completedOrderCount DESC,
+        ro.platform_type ASC
+
+    </select>
+</mapper>
