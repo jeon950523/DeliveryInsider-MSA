@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.order.domain.order.mapper.OrderItemMapper">
+
+    <resultMap
+            id="orderItemResultMap"
+            type="com.deliveryinsider.order.domain.order.entity.OrderItemEntity">
+
+        <id property="id" column="id"/>
+
+        <result property="orderId" column="order_id"/>
+        <result property="menuId" column="menu_id"/>
+
+        <result property="externalMenuId" column="external_menu_id"/>
+
+        <result property="menuNameSnapshot" column="menu_name_snapshot"/>
+
+        <result property="menuPriceSnapshot" column="menu_price_snapshot"/>
+
+        <result property="menuCostSnapshot" column="menu_cost_snapshot"/>
+
+        <result property="packagingCostSnapshot" column="packaging_cost_snapshot"/>
+
+        <result
+                property="expectedCookingTimeSnapshot"
+                column="expected_cooking_time_snapshot"/>
+
+        <result property="orderedUnitPrice" column="ordered_unit_price"/>
+
+        <result property="quantity" column="quantity"/>
+
+        <result property="createdAt" column="created_at"/>
+
+    </resultMap>
+
+    <insert
+            id="insert"
+            useGeneratedKeys="true"
+            keyProperty="id">
+
+        INSERT INTO order_items (
+            order_id,
+            menu_id,
+            external_menu_id,
+            menu_name_snapshot,
+            menu_price_snapshot,
+            menu_cost_snapshot,
+            packaging_cost_snapshot,
+            expected_cooking_time_snapshot,
+            ordered_unit_price,
+            quantity
+        )
+        VALUES (
+                   #{orderId},
+                   #{menuId},
+                   #{externalMenuId},
+                   #{menuNameSnapshot},
+                   #{menuPriceSnapshot},
+                   #{menuCostSnapshot},
+                   #{packagingCostSnapshot},
+            #{expectedCookingTimeSnapshot},
+                   #{orderedUnitPrice},
+                   #{quantity}
+               )
+
+    </insert>
+
+    <select
+            id="findAllByOrderId"
+            resultMap="orderItemResultMap">
+
+        SELECT
+            id,
+            order_id,
+            menu_id,
+            external_menu_id,
+            menu_name_snapshot,
+            menu_price_snapshot,
+            menu_cost_snapshot,
+            packaging_cost_snapshot,
+            expected_cooking_time_snapshot,
+            ordered_unit_price,
+            quantity,
+            created_at
+        FROM order_items
+        WHERE order_id = #{orderId}
+        ORDER BY id
+
+    </select>
+
+</mapper>

@@ -1,0 +1,442 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.order.domain.order.mapper.OrderMapper">
+
+    <resultMap
+            id="orderResultMap"
+            type="com.deliveryinsider.order.domain.order.entity.OrderEntity">
+
+        <id
+                property="id"
+                column="id"
+        />
+
+        <result
+                property="platformType"
+                column="platform_type"
+        />
+
+        <result
+                property="platformOrderId"
+                column="platform_order_id"
+        />
+
+        <result
+                property="merchantOrderNo"
+                column="merchant_order_no"
+        />
+
+        <result
+                property="storeId"
+                column="store_id"
+        />
+
+        <result
+                property="externalStoreId"
+                column="external_store_id"
+        />
+
+        <!-- 외부 플랫폼 Lifecycle -->
+        <result
+                property="status"
+                column="status"
+        />
+
+        <!-- 매장 내부 운영 Lifecycle -->
+        <result
+                property="operationStatus"
+                column="operation_status"
+        />
+
+        <!-- 매장 운영 상태 전용 버전 -->
+        <result
+                property="operationVersion"
+                column="operation_version"
+        />
+
+        <!-- 외부 플랫폼 이벤트 Sequence -->
+        <result
+                property="lastSourceSequence"
+                column="last_source_sequence"
+        />
+
+        <!-- order.events Domain Event Version -->
+        <result
+                property="eventVersion"
+                column="event_version"
+        />
+
+        <result
+                property="orderedAt"
+                column="ordered_at"
+        />
+
+        <result
+                property="providerOccurredAt"
+                column="provider_occurred_at"
+        />
+
+        <result
+                property="cookingStartedAt"
+                column="cooking_started_at"
+        />
+
+        <result
+                property="readyForPickupAt"
+                column="ready_for_pickup_at"
+        />
+
+        <result
+                property="pickedUpAt"
+                column="picked_up_at"
+        />
+
+        <result
+                property="completedAt"
+                column="completed_at"
+        />
+
+        <result
+                property="canceledAt"
+                column="canceled_at"
+        />
+
+        <result
+                property="deliveryAddress"
+                column="delivery_address"
+        />
+
+        <result
+                property="customerRequestText"
+                column="customer_request_text"
+        />
+
+        <result
+                property="providerGrossOrderAmountSnapshot"
+                column="provider_gross_order_amount_snapshot"
+        />
+
+        <result
+                property="providerCustomerPaidAmountSnapshot"
+                column="provider_customer_paid_amount_snapshot"
+        />
+
+        <result
+                property="providerMerchantFundedDiscountSnapshot"
+                column="provider_merchant_funded_discount_snapshot"
+        />
+
+        <result
+                property="providerFundedDiscountSnapshot"
+                column="provider_funded_discount_snapshot"
+        />
+
+        <result
+                property="providerFinancialDataStatusSnapshot"
+                column="provider_financial_data_status_snapshot"
+        />
+
+        <result
+                property="createdAt"
+                column="created_at"
+        />
+
+        <result
+                property="updatedAt"
+                column="updated_at"
+        />
+
+    </resultMap>
+
+
+    <!-- 신규 주문 저장 -->
+    <insert
+            id="insert"
+            useGeneratedKeys="true"
+            keyProperty="id">
+
+        INSERT INTO orders (
+            platform_type,
+            platform_order_id,
+            store_id,
+            external_store_id,
+
+            status,
+            operation_status,
+            operation_version,
+
+            last_source_sequence,
+            event_version,
+
+            ordered_at,
+            provider_occurred_at,
+
+            cooking_started_at,
+            ready_for_pickup_at,
+            picked_up_at,
+            completed_at,
+            canceled_at,
+
+            delivery_address,
+            customer_request_text,
+
+            provider_gross_order_amount_snapshot,
+            provider_customer_paid_amount_snapshot,
+            provider_merchant_funded_discount_snapshot,
+            provider_funded_discount_snapshot,
+            provider_financial_data_status_snapshot
+        )
+        VALUES (
+                   #{platformType},
+                   #{platformOrderId},
+                   #{storeId},
+                   #{externalStoreId},
+
+                   #{status},
+                   #{operationStatus},
+                   #{operationVersion},
+
+                   #{lastSourceSequence},
+                   #{eventVersion},
+
+                   #{orderedAt},
+                   #{providerOccurredAt},
+
+                   #{cookingStartedAt},
+                   #{readyForPickupAt},
+                   #{pickedUpAt},
+                   #{completedAt},
+                   #{canceledAt},
+
+                   #{deliveryAddress},
+                   #{customerRequestText},
+
+                   #{providerGrossOrderAmountSnapshot},
+                   #{providerCustomerPaidAmountSnapshot},
+                   #{providerMerchantFundedDiscountSnapshot},
+                   #{providerFundedDiscountSnapshot},
+                   #{providerFinancialDataStatusSnapshot}
+               )
+
+    </insert>
+
+    <update id="updateMerchantOrderNo">
+        UPDATE orders
+        SET merchant_order_no = #{merchantOrderNo}
+        WHERE id = #{id}
+    </update>
+
+
+    <!-- 플랫폼 종류 + 외부 주문 ID로 조회 -->
+    <select
+            id="findByPlatformIdentity"
+            resultMap="orderResultMap">
+
+        SELECT *
+        FROM orders
+        WHERE platform_type = #{platformType}
+          AND platform_order_id = #{platformOrderId}
+        LIMIT 1
+
+    </select>
+
+
+    <!-- 내부 Order ID 상세조회 -->
+    <select
+            id="findById"
+            resultMap="orderResultMap">
+
+        SELECT *
+        FROM orders
+        WHERE id = #{id}
+
+    </select>
+
+
+    <!--
+        점주 운영 상태변경용 Row Lock.
+
+        WAITING → COOKING 같은 상태변경 중
+        두 요청이 동시에 들어오는 것을 막는다.
+    -->
+    <select
+            id="findByIdForUpdate"
+            resultMap="orderResultMap">
+
+        SELECT *
+        FROM orders
+        WHERE id = #{id}
+            FOR UPDATE
+
+    </select>
+
+
+    <!--
+        Platform Kafka 상태변경용 Row Lock.
+    -->
+    <select
+            id="findByPlatformIdentityForUpdate"
+            resultMap="orderResultMap">
+
+        SELECT *
+        FROM orders
+        WHERE platform_type = #{platformType}
+          AND platform_order_id = #{platformOrderId}
+        LIMIT 1
+        FOR UPDATE
+
+    </select>
+
+
+     <!--
+        외부 플랫폼 Lifecycle + 매장 운영 Lifecycle 동기화.
+
+        PICKED_UP
+        → status = PICKED_UP
+        → operation_status = DELIVERING
+
+        DELIVERED
+        → status = DELIVERED
+        → operation_status = COMPLETED
+
+        CANCELED
+        → status = CANCELED
+        → operation_status = CANCELED
+
+        하나의 Provider Event가 같은 Order Row의 두 상태를
+        함께 변경하므로 단일 UPDATE로 처리한다.
+    -->
+    <update id="updateProviderStatus">
+
+        UPDATE orders
+        SET
+        status = COALESCE(#{status}, status),
+
+        operation_status = #{operationStatus},
+
+        last_source_sequence =
+        COALESCE(
+        #{lastSourceSequence},
+        last_source_sequence
+        ),
+
+        event_version = #{eventVersion},
+
+        operation_version = #{operationVersion},
+
+        cooking_started_at =
+        COALESCE(
+        #{cookingStartedAt},
+        cooking_started_at
+        ),
+
+        ready_for_pickup_at =
+        COALESCE(
+        #{readyForPickupAt},
+        ready_for_pickup_at
+        ),
+
+        picked_up_at =
+        COALESCE(
+        #{pickedUpAt},
+        picked_up_at
+        ),
+
+        completed_at =
+        COALESCE(
+        #{completedAt},
+        completed_at
+        ),
+
+        canceled_at =
+        COALESCE(
+        #{canceledAt},
+        canceled_at
+        )
+
+        WHERE id = #{id}
+
+    </update>
+
+
+
+    <!--
+        매장 내부 운영 Lifecycle 변경.
+
+        점주:
+        WAITING
+        → COOKING
+        → READY_FOR_PICKUP
+
+        DELIVERING / COMPLETED / CANCELED은
+        updateProviderStatus가 Platform Event 기준으로 변경한다.
+    -->
+    <!--
+     매장 내부 운영 Lifecycle 변경.
+
+     점주:
+     WAITING
+     → COOKING
+     → READY_FOR_PICKUP
+
+     operation_version
+     → 운영상태 변경 버전
+
+     event_version
+     → order.events 전체 Domain Event 순서
+
+     DELIVERING / COMPLETED / CANCELED은
+     updateProviderStatus가 Platform Event 기준으로 변경한다.
+ -->
+    <update id="updateOperationStatus">
+
+        UPDATE orders
+
+        SET
+        operation_status =
+        #{operationStatus},
+
+        operation_version =
+        #{operationVersion},
+
+        event_version =
+        #{eventVersion},
+
+        cooking_started_at =
+        COALESCE(
+        #{cookingStartedAt},
+        cooking_started_at
+        ),
+
+        ready_for_pickup_at =
+        COALESCE(
+        #{readyForPickupAt},
+        ready_for_pickup_at
+        ),
+
+        picked_up_at =
+        COALESCE(
+        #{pickedUpAt},
+        picked_up_at
+        ),
+
+        completed_at =
+        COALESCE(
+        #{completedAt},
+        completed_at
+        ),
+
+        canceled_at =
+        COALESCE(
+        #{canceledAt},
+        canceled_at
+        )
+
+        WHERE id = #{id}
+
+    </update>
+
+</mapper>

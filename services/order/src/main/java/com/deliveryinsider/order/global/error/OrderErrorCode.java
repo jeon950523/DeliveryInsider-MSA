@@ -1,0 +1,113 @@
+package com.deliveryinsider.order.global.error;
+
+import org.springframework.http.HttpStatus;
+
+public enum OrderErrorCode implements ErrorCode {
+
+    ORDER_NOT_FOUND(
+        "ORDER-001",
+        HttpStatus.NOT_FOUND,
+        "주문을 찾을 수 없습니다."
+    ),
+
+    INVALID_STATUS_TRANSITION(
+        "ORDER-002",
+        HttpStatus.BAD_REQUEST,
+        "허용되지 않은 주문 상태 변경입니다."
+    ),
+
+    DUPLICATED_PROVIDER_EVENT(
+        "ORDER-003",
+        HttpStatus.CONFLICT,
+        "이미 처리된 플랫폼 이벤트입니다."
+    ),
+
+    STORE_NOT_FOUND(
+        "ORDER-004",
+        HttpStatus.NOT_FOUND,
+        "주문 조회 대상 매장을 찾을 수 없습니다."
+    ),
+
+    STORE_SERVICE_UNAVAILABLE(
+        "ORDER-005",
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Store Service 연결에 실패했습니다."
+    ),
+
+    STORE_BUSINESS_HOURS_INVALID(
+        "ORDER-012",
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Store Service의 영업시간 정보가 올바르지 않습니다."
+    ),
+
+    ORDER_MENU_MAPPING_REQUIRED(
+        "ORDER-013",
+        HttpStatus.CONFLICT,
+        "메뉴 연결이 완료되지 않은 주문은 조리를 시작할 수 없습니다."
+    ),
+
+    OPERATION_STATUS_PROVIDER_CONTROLLED(
+        "ORDER-006",
+        HttpStatus.CONFLICT,
+        "해당 주문 상태는 플랫폼 이벤트에 의해 변경됩니다."
+    ),
+
+    INVALID_OPERATION_STATUS_TRANSITION(
+        "ORDER-007",
+        HttpStatus.CONFLICT,
+        "현재 운영 상태에서 요청한 상태로 변경할 수 없습니다."
+    ),
+
+    ORDER_REFUND_NOT_ALLOWED(
+        "ORDER-008",
+        HttpStatus.CONFLICT,
+        "배달 완료된 주문만 환불 요청할 수 있습니다."
+    ),
+
+    ORDER_REFUND_ALREADY_REQUESTED(
+        "ORDER-009",
+        HttpStatus.CONFLICT,
+        "이미 환불 요청 이력이 있는 주문입니다."
+    ),
+
+    ORDER_CANCELLATION_NOT_ALLOWED(
+        "ORDER-010",
+        HttpStatus.CONFLICT,
+        "플랫폼 픽업 전 주문만 취소 요청할 수 있습니다."
+    ),
+
+    PROVIDER_CANCEL_UNAVAILABLE(
+        "ORDER-011",
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "플랫폼 취소 요청에 실패했습니다."
+    );
+
+    private final String code;
+    private final HttpStatus status;
+    private final String message;
+
+    OrderErrorCode(
+        String code,
+        HttpStatus status,
+        String message
+    ) {
+        this.code = code;
+        this.status = status;
+        this.message = message;
+    }
+
+    @Override
+    public String code() {
+        return code;
+    }
+
+    @Override
+    public HttpStatus status() {
+        return status;
+    }
+
+    @Override
+    public String message() {
+        return message;
+    }
+}

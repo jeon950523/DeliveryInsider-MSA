@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.order.domain.order.mapper.OrderReadMapper">
+
+    <resultMap
+            id="orderTodayReadResultMap"
+            type="com.deliveryinsider.order.domain.order.read.OrderTodayReadRow">
+
+        <id
+                property="id"
+                column="id"
+        />
+
+        <result
+                property="platformOrderNumber"
+                column="platform_order_number"
+        />
+
+        <result
+                property="merchantOrderNo"
+                column="merchant_order_no"
+        />
+
+        <result
+                property="platformType"
+                column="platform_type"
+        />
+
+        <result
+                property="operationStatus"
+                column="operation_status"
+        />
+
+        <result
+                property="menuSummary"
+                column="menu_summary"
+        />
+
+        <result
+                property="totalQuantity"
+                column="total_quantity"
+        />
+
+        <result
+                property="totalAmount"
+                column="total_amount"
+        />
+
+        <result
+                property="totalMenuCost"
+                column="total_menu_cost"
+        />
+
+        <result
+                property="totalPackagingCost"
+                column="total_packaging_cost"
+        />
+
+        <result
+                property="providerChargeAmount"
+                column="provider_charge_amount"
+        />
+
+        <result
+                property="providerFundedDiscount"
+                column="provider_funded_discount"
+        />
+
+        <result property="merchantLiabilityAmount" column="merchant_liability_amount"/>
+
+        <result
+                property="providerFinancialDataStatus"
+                column="provider_financial_data_status"
+        />
+
+        <result
+                property="orderedAt"
+                column="ordered_at"
+        />
+
+        <result
+                property="cookingStartedAt"
+                column="cooking_started_at"
+        />
+
+        <result
+                property="readyForPickupAt"
+                column="ready_for_pickup_at"
+        />
+
+        <result
+                property="pickedUpAt"
+                column="picked_up_at"
+        />
+
+        <result
+                property="completedAt"
+                column="completed_at"
+        />
+
+        <result
+                property="canceledAt"
+                column="canceled_at"
+        />
+
+        <result
+                property="deliveryAddress"
+                column="delivery_address"
+        />
+
+        <result
+                property="requestText"
+                column="request_text"
+        />
+
+    </resultMap>
+
+    <select
+            id="findTodayByStoreId"
+            resultMap="orderTodayReadResultMap">
+
+        SELECT
+            o.id,
+
+            o.platform_order_id
+                AS platform_order_number,
+
+            o.merchant_order_no,
+
+            o.platform_type,
+
+            o.operation_status,
+
+            COALESCE(
+                    item_summary.menu_summary,
+                    ''
+            ) AS menu_summary,
+
+            COALESCE(
+                    item_summary.total_quantity,
+                    0
+            ) AS total_quantity,
+
+            COALESCE(
+                    o.provider_gross_order_amount_snapshot,
+                    item_summary.item_total_amount,
+                    0
+            ) AS total_amount,
+
+            COALESCE(
+                    item_summary.total_menu_cost,
+                    0
+            ) AS total_menu_cost,
+
+            COALESCE(
+                    item_summary.total_packaging_cost,
+                    0
+            ) AS total_packaging_cost,
+
+            COALESCE(
+                    charge_summary.provider_charge_amount,
+                    0
+            ) AS provider_charge_amount,
+
+            COALESCE(
+                    o.provider_funded_discount_snapshot,
+                    0
+            ) AS provider_funded_discount,
+
+            COALESCE(refund_summary.merchant_liability_amount, 0) AS merchant_liability_amount,
+
+            o.provider_financial_data_status_snapshot
+                AS provider_financial_data_status,
+
+            o.ordered_at,
+
+            o.cooking_started_at,
+
+            o.ready_for_pickup_at,
+
+            o.picked_up_at,
+
+            o.completed_at,
+
+            o.canceled_at,
+
+            o.delivery_address,
+
+            o.customer_request_text
+                AS request_text
+
+        FROM orders o
+
+                 LEFT JOIN (
+            SELECT
+                oi.order_id,
+
+                GROUP_CONCAT(
+                        CONCAT(
+                                oi.menu_name_snapshot,
+                                ' x',
+                                oi.quantity
+                        )
+                        ORDER BY oi.id
+                        SEPARATOR ', '
+                ) AS menu_summary,
+
+                SUM(
+                        oi.quantity
+                ) AS total_quantity,
+
+                SUM(
+                        oi.ordered_unit_price
+                            * oi.quantity
+                ) AS item_total_amount,
+
+                SUM(
+                        oi.menu_cost_snapshot
+                            * oi.quantity
+                ) AS total_menu_cost,
+
+                SUM(
+                        oi.packaging_cost_snapshot
+                            * oi.quantity
+                ) AS total_packaging_cost
+
+            FROM order_items oi
+
+            GROUP BY
+                oi.order_id
+
+        ) item_summary
+                           ON item_summary.order_id = o.id
+
+                 LEFT JOIN (
+            SELECT
+                opc.order_id,
+
+                SUM(
+                        opc.amount
+                ) AS provider_charge_amount
+
+            FROM order_provider_charges opc
+
+            GROUP BY
+                opc.order_id
+
+        ) charge_summary
+                           ON charge_summary.order_id = o.id
+
+                 LEFT JOIN (
+            SELECT order_id, SUM(merchant_liability_amount) AS merchant_liability_amount
+            FROM order_refunds
+            GROUP BY order_id
+        ) refund_summary
+                           ON refund_summary.order_id = o.id
+
+        WHERE o.store_id = #{storeId}
+
+          AND o.ordered_at
+            >= #{businessStartAt}
+
+          AND o.ordered_at
+            &lt; #{businessEndAt}
+
+        ORDER BY
+
+            CASE
+                WHEN o.operation_status
+                    IN (
+                        'COMPLETED',
+                        'CANCELED'
+                         )
+                    THEN 1
+                ELSE 0
+                END ASC,
+
+            o.ordered_at ASC,
+
+            o.id ASC
+
+    </select>
+
+</mapper>

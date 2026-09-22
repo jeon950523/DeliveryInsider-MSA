@@ -1,0 +1,93 @@
+store-client:
+  base-url: ${STORE_SERVICE_URL:http://localhost:8092}
+  internal-api-key: ${INTERNAL_API_KEY:}
+  connect-timeout: ${STORE_CLIENT_CONNECT_TIMEOUT:2s}
+  read-timeout: ${STORE_CLIENT_READ_TIMEOUT:3s}
+
+platform-client:
+  base-url: ${PLATFORM_SERVICE_URL:http://localhost:8093}
+
+server:
+  port: ${APP_PORT:8094}
+
+spring:
+  config:
+    import: optional:file:./.env[.properties]
+
+  application:
+    name: baef-p2-order
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:baef_order}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+    consumer:
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: ${ORDER_PLATFORM_CONSUMER_GROUP:order-platform-event-group}
+
+    listener:
+      ack-mode: record
+order:
+  kafka:
+    platform-order-topic: ${PLATFORM_ORDER_TOPIC:${KAFKA_TOPIC_PREFIX:}platform.order-events}
+    platform-order-dlt-topic: ${PLATFORM_ORDER_DLT_TOPIC:${KAFKA_TOPIC_PREFIX:}platform.order-events.DLT}
+    retry-interval-ms: ${ORDER_KAFKA_RETRY_INTERVAL_MS:1000}
+    max-attempts: ${ORDER_KAFKA_MAX_ATTEMPTS:3}
+  outbox:
+    topic: ${ORDER_EVENT_TOPIC:${KAFKA_TOPIC_PREFIX:}order.events}
+    batch-size: ${ORDER_OUTBOX_BATCH_SIZE:20}
+    poll-interval-ms: ${ORDER_OUTBOX_POLL_INTERVAL_MS:500}
+    lease-seconds: ${ORDER_OUTBOX_LEASE_SECONDS:30}
+    retry-delay-seconds: ${ORDER_OUTBOX_RETRY_DELAY_SECONDS:5}
+    publish-timeout-ms: ${ORDER_OUTBOX_PUBLISH_TIMEOUT_MS:5000}
+    warn-retry-count: ${ORDER_OUTBOX_WARN_RETRY_COUNT:5}
+springdoc:
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json
+  swagger-ui:
+    enabled: false
+  api-docs:
+    path: /api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+
+security:
+  internal:
+    api-key: ${GEMINI_API_KEY:}
+
+logging:
+  pattern:
+    level: "%5p [traceId:%X{traceId:-}]"
+
+mybatis:
+  mapper-locations: classpath:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+sub-service:
+  store-uri: ${STORE_SERVICE_URI:http://localhost:8092}

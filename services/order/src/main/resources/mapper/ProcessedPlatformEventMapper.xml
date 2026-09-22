@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.order.domain.order.mapper.ProcessedPlatformEventMapper">
+
+    <resultMap
+            id="processedPlatformEventResultMap"
+            type="com.deliveryinsider.order.domain.order.entity.ProcessedPlatformEvent">
+
+        <id property="id" column="id"/>
+
+        <result
+                property="platformType"
+                column="platform_type"/>
+
+        <result
+                property="eventId"
+                column="event_id"/>
+
+        <result
+                property="platformOrderId"
+                column="platform_order_id"/>
+
+        <result
+                property="eventType"
+                column="event_type"/>
+
+        <result
+                property="sourceSequence"
+                column="source_sequence"/>
+
+        <result
+                property="processingResult"
+                column="processing_result"/>
+
+        <result
+                property="processedAt"
+                column="processed_at"/>
+
+        <result
+                property="createdAt"
+                column="created_at"/>
+
+    </resultMap>
+
+    <insert
+            id="insert"
+            useGeneratedKeys="true"
+            keyProperty="id">
+
+        INSERT INTO processed_platform_events (
+            platform_type,
+            event_id,
+            platform_order_id,
+            event_type,
+            source_sequence,
+            processing_result
+        )
+        VALUES (
+                   #{platformType},
+                   #{eventId},
+                   #{platformOrderId},
+                   #{eventType},
+                   #{sourceSequence},
+                   #{processingResult}
+               )
+
+    </insert>
+
+    <select
+            id="findByPlatformTypeAndEventId"
+            resultMap="processedPlatformEventResultMap">
+
+        SELECT
+            id,
+            platform_type,
+            event_id,
+            platform_order_id,
+            event_type,
+            source_sequence,
+            processing_result,
+            processed_at,
+            created_at
+        FROM processed_platform_events
+        WHERE platform_type = #{platformType}
+          AND event_id = #{eventId}
+        LIMIT 1
+
+    </select>
+
+</mapper>
