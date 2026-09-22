@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.simulator.domain.provider.repository.SimulatorPersistenceMapper">
+
+    <insert id="insertOrder">
+        INSERT INTO external_orders (
+            provider_type,
+            external_order_id,
+            created_event_id,
+            external_store_id,
+            sequence,
+            status,
+            ordered_at,
+            event_occurred_at,
+            delivery_address,
+            customer_request,
+            financials_json,
+            cancel_code,
+            cancel_reason,
+            snapshot_json
+        )
+        VALUES (
+            #{provider},
+            #{externalOrderId},
+            #{createdEventId},
+            #{externalStoreId},
+            #{sequence},
+            #{status},
+            #{orderedAt},
+            #{eventOccurredAt},
+            #{deliveryAddress},
+            #{customerRequest},
+            #{financialsJson},
+            #{cancelCode},
+            #{cancelReason},
+            #{snapshotJson}
+        )
+    </insert>
+
+    <select id="findOrderSnapshotJson" resultType="string">
+        SELECT snapshot_json
+        FROM external_orders
+        WHERE provider_type = #{provider}
+          AND external_order_id = #{externalOrderId}
+        LIMIT 1
+    </select>
+
+    <select id="lockOrderSnapshotJson" resultType="string">
+        SELECT snapshot_json
+        FROM external_orders
+        WHERE provider_type = #{provider}
+          AND external_order_id = #{externalOrderId}
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <select id="findEventSnapshotJson" resultType="string">
+        SELECT snapshot_json
+        FROM external_order_events
+        WHERE provider_type = #{provider}
+          AND external_order_id = #{externalOrderId}
+          AND source_event_id = #{sourceEventId}
+        LIMIT 1
+    </select>
+
+    <select id="findRecentOrderSnapshotJson" resultType="string">
+        SELECT snapshot_json
+        FROM external_orders
+        WHERE provider_type = #{provider}
+        <if test="externalStoreId != null">
+          AND external_store_id = #{externalStoreId}
+        </if>
+        ORDER BY id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findOrderRowId" resultType="long">
+        SELECT id
+        FROM external_orders
+        WHERE provider_type = #{provider}
+          AND external_order_id = #{externalOrderId}
+        LIMIT 1
+    </select>
+
+    <update id="updateOrder">
+        UPDATE external_orders
+        SET sequence = #{sequence},
+            status = #{status},
+            event_occurred_at = #{eventOccurredAt},
+            delivery_address = #{deliveryAddress},
+            customer_request = #{customerRequest},
+            financials_json = #{financialsJson},
+            cancel_code = #{cancelCode},
+            cancel_reason = #{cancelReason},
+            snapshot_json = #{snapshotJson}
+        WHERE provider_type = #{provider}
+          AND external_order_id = #{externalOrderId}
+    </update>
+
+    <delete id="deleteOrderItems">
+        DELETE FROM external_order_items
+        WHERE order_id = #{orderRowId}
+    </delete>
+
+    <insert id="insertOrderItem">
+        INSERT INTO external_order_items (
+            order_id,
+            external_menu_id,
+            quantity,
+            unit_price
+        )
+        VALUES (
+            #{orderRowId},
+            #{externalMenuId},
+            #{quantity},
+            #{unitPrice}
+        )
+    </insert>
+
+    <insert id="insertEventSnapshot">
+        INSERT INTO external_order_events (
+            provider_type,
+            source_event_id,
+            external_order_id,
+            sequence,
+            status,
+            event_occurred_at,
+            snapshot_json
+        )
+        VALUES (
+            #{provider},
+            #{sourceEventId},
+            #{externalOrderId},
+            #{sequence},
+            #{status},
+            #{eventOccurredAt},
+            #{snapshotJson}
+        )
+    </insert>
+
+</mapper>

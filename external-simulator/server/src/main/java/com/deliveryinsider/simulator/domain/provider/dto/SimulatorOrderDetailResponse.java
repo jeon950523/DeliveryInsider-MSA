@@ -1,0 +1,56 @@
+package com.deliveryinsider.simulator.domain.provider.dto;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+
+public record SimulatorOrderDetailResponse(
+    String orderId,
+    String storeId,
+    Long sequence,
+    com.deliveryinsider.simulator.domain.provider.SimulatorOrderStatus status,
+    com.deliveryinsider.simulator.domain.provider.SimulatorOrderOperationStatus operationStatus,
+    Instant orderedAt,
+    Instant eventOccurredAt,
+    String deliveryAddress,
+    String customerRequest,
+    List<Item> items,
+    Financials financials,
+    String cancelCode,
+    String cancelReason,
+    String refundId,
+    Long refundAmount,
+    String refundReasonCode,
+    String refundReason,
+    String liabilityParty,
+    Long merchantLiabilityAmount,
+    Long platformLiabilityAmount
+) {
+
+    public record Item(
+        String menuId,
+        int quantity,
+        long unitPrice
+    ) {
+    }
+
+    public record Financials(
+        String status,
+        Long grossAmount,
+        Long paidAmount,
+        Long merchantDiscount,
+        Long providerDiscount,
+        List<Charge> charges
+    ) {
+    }
+
+    public record Charge(
+        String type,
+        long amount,
+        BigDecimal rate,
+        Long basisAmount,
+        boolean provisional,
+        String code
+    ) {
+    }
+}

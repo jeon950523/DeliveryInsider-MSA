@@ -1,0 +1,16 @@
+package com.deliveryinsider.simulator.domain.control.dto;
+
+import com.deliveryinsider.simulator.domain.control.model.SimulatorEventResult;
+import com.deliveryinsider.simulator.domain.provider.PlatformType;
+
+import java.time.Instant;
+
+public record SimulatorOrderSendResponse(
+        PlatformType platformType,
+        String sourceEventId,
+        String externalOrderId,
+        SimulatorEventResult result,
+        Integer httpStatus,
+        Instant sentAt
+) {
+}
