@@ -35,7 +35,7 @@
 - **Kafka**: 서비스 간 비동기 이벤트와 consumer group을 분리하며, 재시도와 DLT 구성을 둡니다.
 - **WebSocket**: Notification은 짧은 수명의 티켓을 이용해 연결 경계를 관리합니다.
 - **관측성**: Actuator/Prometheus 엔드포인트를 구성하고, Kubernetes 배포 단위에서 리소스와 환경 설정을 관리합니다.
-- **배포**: Jenkins가 각 소스를 검증·이미지화하고, Argo CD ApplicationSet이 Kubernetes workload를 읽도록 구성되어 있습니다.
+- **배포**: Jenkins가 각 소스를 검증·이미지화하고, Argo CD ApplicationSet이 Kubernetes workload를 읽도록 구성되어 있습니다. 교육 환경별 Kubernetes Manifest와 CI 세부 설정은 공개 범위에서 제외해 별도 비공개 저장소로 분리했습니다.
 
 ## 문서화 원칙
 

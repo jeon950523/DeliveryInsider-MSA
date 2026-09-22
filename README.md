@@ -2,7 +2,7 @@
 
 배달 플랫폼 통합 운영 시스템 **DeliveryInsider**의 2차 팀 프로젝트를 포트폴리오에서 한눈에 볼 수 있도록 통합한 모노레포입니다.
 
-> 이 저장소는 개인 포트폴리오용 통합 뷰입니다. 원본 팀 저장소는 `greencomacademy` 조직에 그대로 보존되어 있으며, 각 디렉터리의 `SOURCE.md`와 아래 목록에서 출처를 확인할 수 있습니다. 현재 원본에 비공개 저장소가 포함되어 있으므로 이 통합본도 비공개로 관리합니다.
+> 이 저장소는 개인 포트폴리오용 통합 뷰입니다. 원본 팀 저장소는 `greencomacademy` 조직에 그대로 보존되어 있으며, 각 디렉터리의 `SOURCE.md`와 아래 목록에서 출처를 확인할 수 있습니다. Kubernetes 배포 매니페스트는 교육 환경 구성을 포함하므로 공개 범위에서 분리해 별도 비공개 저장소로 관리합니다.
 
 ## 프로젝트 맥락
 
@@ -54,8 +54,8 @@ External Simulator API ── HMAC Webhook ─> ├─ Platform ─ Kafka ─> O
 | `client/archive/front-p2-fix` | 초기 프론트엔드 보관본 | [baef-front-p2-fix](https://github.com/greencomacademy/baef-front-p2-fix) |
 | `external-simulator/client` | 외부 플랫폼 시연 Vue 클라이언트 | [baef-external-simulator](https://github.com/greencomacademy/baef-external-simulator) |
 | `external-simulator/server` | 외부 플랫폼 Reference Simulator API | [baef-p2-external-platform-simulator](https://github.com/greencomacademy/baef-p2-external-platform-simulator) |
-| `k8s` | Kubernetes Manifest·Jenkins CI·Argo CD | [baef-p2-k8s](https://github.com/greencomacademy/baef-p2-k8s) |
-| `infra` | 인프라 구성 안내 | 별도 원본 저장소 없음 — `k8s`의 배포 구성 참조 |
+| 별도 비공개 저장소 | Kubernetes Manifest·Jenkins CI·Argo CD | [baef-p2-k8s](https://github.com/greencomacademy/baef-p2-k8s) |
+| `infra` | 인프라 구성 안내 | Kubernetes 배포 구성은 별도 비공개 저장소로 분리 |
 | `docs` | 아키텍처와 출처 문서 | 이 통합 저장소에서 작성 |
 
 ## 이벤트 흐름 예시
@@ -75,7 +75,7 @@ External Simulator API ── HMAC Webhook ─> ├─ Platform ─ Kafka ─> O
 
 ## 실행과 보안
 
-각 서비스는 독립 실행·배포 단위입니다. 환경 변수는 각 프로젝트의 `.env.example` 및 Kubernetes `secret.yaml.example`를 기준으로 별도 주입해야 하며, 실제 Secret·개인 토큰·운영 환경값은 커밋하지 않습니다. 이 통합본은 단일 명령으로 모든 의존성을 기동하는 배포 패키지가 아니라, 원본 팀 프로젝트의 코드와 이력을 포트폴리오용으로 묶은 저장소입니다.
+각 서비스는 독립 실행·배포 단위입니다. 환경 변수는 각 프로젝트의 `.env.example`를 기준으로 별도 주입해야 하며, 실제 Secret·개인 토큰·운영 환경값은 커밋하지 않습니다. Kubernetes `secret.yaml.example`와 교육 환경별 배포 설정은 별도 비공개 저장소에서 관리합니다. 이 통합본은 단일 명령으로 모든 의존성을 기동하는 배포 패키지가 아니라, 원본 팀 프로젝트의 코드와 이력을 포트폴리오용으로 묶은 저장소입니다.
 
 ## Git 이력 보존
 
@@ -83,6 +83,6 @@ External Simulator API ── HMAC Webhook ─> ├─ Platform ─ Kafka ─> O
 
 ## 원본과 통합 범위
 
-포함한 원본은 위 표의 13개입니다. `baef-p2-*` 전체와 실제 연관 저장소인 `beaf-p2-report`, `baef-front-p2-fix`, `baef-external-simulator`를 포함했습니다. 별도의 `infra` 전용 저장소는 조직에서 확인되지 않아 배포/CI 내용이 들어 있는 `baef-p2-k8s`를 `k8s/`로 보존하고, `infra/`에는 그 관계를 문서화했습니다.
+이 공개 저장소에는 12개 원본을 포함합니다. `baef-p2-k8s`를 제외한 `baef-p2-*`와 실제 연관 저장소인 `beaf-p2-report`, `baef-front-p2-fix`, `baef-external-simulator`가 대상입니다. `baef-p2-k8s`의 전체 이력과 배포 구성은 개인 계정의 별도 비공개 저장소 `DeliveryInsider-MSA-k8s`에 보존합니다. 별도의 `infra` 전용 원본 저장소는 조직에서 확인되지 않았습니다.
 
 원본 저장소는 이 과정에서 수정·이동·삭제하지 않았습니다.
