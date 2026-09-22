@@ -38,6 +38,20 @@ External Simulator API ── HMAC Webhook ─> ├─ Platform ─ Kafka ─> O
 - **운영 기능**: Billing의 결제·환불·구독 흐름, Notification의 WebSocket 티켓 기반 알림, Report의 운영 집계와 XLSX 내보내기 기능을 포함합니다.
 - **배포 자동화**: Jenkins가 서비스 빌드·테스트·컨테이너 이미지를 처리하고, Kubernetes Manifest와 Argo CD ApplicationSet으로 배포 대상을 관리합니다.
 
+## Troubleshooting
+
+프로젝트에서 실제로 발생한 16개 사례를 이벤트 신뢰성, 데이터 일관성, 결제 복구, Kafka 운영, 서비스 경계 관점으로 정리했습니다. README에서는 포트폴리오의 기술 범위를 보여주는 다음 다섯 사례를 우선 소개합니다.
+
+| 대표 사례 | 핵심 판단 |
+| --- | --- |
+| Durable Inbox + Fencing | 중복 수신과 Worker 재선점 경쟁에서 stale Worker가 처리 결과를 덮어쓰지 못하도록 Fencing을 적용했습니다. |
+| Kafka DLT·선택적 재처리 및 `sourceSequence` | 환불 이벤트의 DLT 복구 경로를 만들고, 역순 이벤트가 최신 주문 상태를 되돌리지 않도록 순서를 검증했습니다. |
+| Financial Snapshot | 화면과 리포트가 같은 재무 상태를 보도록 불변 Snapshot을 백엔드의 단일 기준으로 정리했습니다. |
+| Kafka Docker Listener + KRaft 데이터 보존 | Host/Docker 주소 관점과 KRaft 실제 데이터 경로를 분리해 컨테이너 전환 장애를 해결했습니다. |
+| Lifecycle Ownership | 주문 Lifecycle의 상태 소유권을 정리해 서비스 간 양방향 이벤트 순환 위험을 제거했습니다. |
+
+Billing `UNKNOWN`과 Reconciliation, Billing Outbox, Refund Liability, Docker 서비스 디스커버리, Gemini 런타임 복구 등 나머지 사례를 포함한 전체 기록은 [Troubleshooting 문서](docs/troubleshooting/TROUBLESHOOTING.md)에서 확인할 수 있습니다.
+
 ## 디렉터리
 
 | 경로 | 역할 | 원본 저장소 |
@@ -56,7 +70,7 @@ External Simulator API ── HMAC Webhook ─> ├─ Platform ─ Kafka ─> O
 | `external-simulator/server` | 외부 플랫폼 Reference Simulator API | [baef-p2-external-platform-simulator](https://github.com/greencomacademy/baef-p2-external-platform-simulator) |
 | 별도 비공개 저장소 | Kubernetes Manifest·Jenkins CI·Argo CD | [baef-p2-k8s](https://github.com/greencomacademy/baef-p2-k8s) |
 | `infra` | 인프라 구성 안내 | Kubernetes 배포 구성은 별도 비공개 저장소로 분리 |
-| `docs` | 아키텍처와 출처 문서 | 이 통합 저장소에서 작성 |
+| `docs` | 아키텍처·출처·Troubleshooting 문서 | 이 통합 저장소에서 작성 |
 
 ## 이벤트 흐름 예시
 
