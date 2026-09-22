@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.platform.domain.integration.PlatformIntegrationMapper">
+    <sql id="settingColumns">id, store_id, platform_type, external_store_id, enabled, connection_status,
+        environment, last_webhook_at, last_success_at, last_error_code, connection_revision</sql>
+    <sql id="menuColumns">id, platform_type, store_id, external_store_id, menu_id, external_menu_id, enabled</sql>
+    <select id="findAll" resultType="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
+        SELECT <include refid="settingColumns"/> FROM store_platform_settings
+        WHERE store_id = #{storeId} ORDER BY platform_type
+    </select>
+    <select id="findOne" resultType="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
+        SELECT <include refid="settingColumns"/> FROM store_platform_settings
+        WHERE store_id = #{storeId} AND platform_type = #{platformType}
+    </select>
+    <select id="findForUpdate" resultType="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
+        SELECT <include refid="settingColumns"/> FROM store_platform_settings
+        WHERE store_id = #{storeId} AND platform_type = #{platformType} FOR UPDATE
+    </select>
+    <select id="findActiveByExternalStoreId" resultType="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
+        SELECT <include refid="settingColumns"/> FROM store_platform_settings
+        WHERE platform_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+          AND enabled = 1
+          AND connection_status = 'ACTIVE'
+        ORDER BY id
+        LIMIT 1
+    </select>
+    <select id="findActiveByExternalStoreIdForUpdate" resultType="com.deliveryinsider.platform.domain.mapping.entity.StorePlatformSetting">
+        SELECT <include refid="settingColumns"/> FROM store_platform_settings
+        WHERE platform_type = #{platformType}
+          AND external_store_id = #{externalStoreId}
+          AND enabled = 1
+          AND connection_status = 'ACTIVE'
+        ORDER BY id
+        LIMIT 1
+        FOR UPDATE
+    </select>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO store_platform_settings (store_id, platform_type, external_store_id, enabled, connection_status, environment)
+        VALUES (#{storeId}, #{platformType}, #{externalStoreId}, #{enabled}, #{connectionStatus}, #{environment})
+    </insert>
+    <update id="update">
+        UPDATE store_platform_settings
+        SET external_store_id = #{externalStoreId}, enabled = #{enabled}, connection_status = #{connectionStatus},
+            environment = #{environment}, last_webhook_at = #{lastWebhookAt}, last_success_at = #{lastSuccessAt},
+            last_error_code = #{lastErrorCode}, connection_revision = #{connectionRevision}
+        WHERE id = #{id} AND store_id = #{storeId} AND platform_type = #{platformType}
+    </update>
+    <update id="moveMenuMappings">
+        UPDATE platform_menu_mappings SET external_store_id = #{externalStoreId}
+        WHERE store_id = #{storeId} AND platform_type = #{platformType}
+    </update>
+    <select id="findMenus" resultType="com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping">
+        SELECT <include refid="menuColumns"/> FROM platform_menu_mappings
+        WHERE store_id = #{storeId} AND platform_type = #{platformType} ORDER BY menu_id
+    </select>
+    <select id="findMenu" resultType="com.deliveryinsider.platform.domain.mapping.entity.PlatformMenuMapping">
+        SELECT <include refid="menuColumns"/> FROM platform_menu_mappings
+        WHERE store_id = #{storeId} AND platform_type = #{platformType} AND menu_id = #{menuId}
+    </select>
+    <insert id="insertMenu" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO platform_menu_mappings (platform_type, store_id, external_store_id, menu_id, external_menu_id, enabled)
+        VALUES (#{platformType}, #{storeId}, #{externalStoreId}, #{menuId}, #{externalMenuId}, #{enabled})
+    </insert>
+    <update id="updateMenu">
+        UPDATE platform_menu_mappings SET external_store_id = #{externalStoreId}, external_menu_id = #{externalMenuId}, enabled = #{enabled}
+        WHERE id = #{id} AND store_id = #{storeId} AND platform_type = #{platformType} AND menu_id = #{menuId}
+    </update>
+    <update id="rebindMenu">
+        UPDATE platform_menu_mappings
+        SET external_store_id = #{externalStoreId},
+            menu_id = #{menuId},
+            external_menu_id = #{externalMenuId},
+            enabled = #{enabled}
+        WHERE id = #{id}
+          AND store_id = #{storeId}
+          AND platform_type = #{platformType}
+    </update>
+</mapper>

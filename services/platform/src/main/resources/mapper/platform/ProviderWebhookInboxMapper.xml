@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.platform.domain.webhook.mapper.ProviderWebhookInboxMapper">
+
+    <resultMap
+            id="providerWebhookInboxResultMap"
+            type="com.deliveryinsider.platform.domain.webhook.entity.ProviderWebhookInbox">
+
+        <id property="id" column="id"/>
+
+        <result property="platformType" column="platform_type"/>
+        <result property="sourceEventId" column="source_event_id"/>
+        <result property="eventType" column="event_type"/>
+        <result property="externalOrderId" column="external_order_id"/>
+
+        <result property="payloadJson" column="payload_json"/>
+        <result property="rawBodySha256" column="raw_body_sha256"/>
+
+        <result property="status" column="status"/>
+
+        <result property="retryCount" column="retry_count"/>
+        <result property="nextRetryAt" column="next_retry_at"/>
+
+        <result property="claimedBy" column="claimed_by"/>
+        <result property="claimedUntil" column="claimed_until"/>
+        <result property="claimVersion" column="claim_version"/>
+
+        <result property="requeueCount" column="requeue_count"/>
+        <result property="lastRequeuedAt" column="last_requeued_at"/>
+
+        <result property="receivedAt" column="received_at"/>
+        <result property="processedAt" column="processed_at"/>
+
+        <result property="lastErrorCode" column="last_error_code"/>
+        <result property="lastErrorMessage" column="last_error_message"/>
+
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+
+    </resultMap>
+
+    <insert
+            id="insert"
+            useGeneratedKeys="true"
+            keyProperty="id">
+
+        INSERT INTO provider_webhook_inbox (
+            platform_type,
+            source_event_id,
+            event_type,
+            external_order_id,
+            payload_json,
+            raw_body_sha256,
+            status
+        )
+        VALUES (
+                   #{platformType},
+                   #{sourceEventId},
+                   #{eventType},
+                   #{externalOrderId},
+                   #{payloadJson},
+                   #{rawBodySha256},
+                   #{status}
+               )
+
+    </insert>
+
+    <select
+            id="findByPlatformTypeAndSourceEventId"
+            resultMap="providerWebhookInboxResultMap">
+
+        SELECT
+            id,
+            platform_type,
+            source_event_id,
+            event_type,
+            external_order_id,
+            payload_json,
+            raw_body_sha256,
+            status,
+            retry_count,
+            next_retry_at,
+            claimed_by,
+            claimed_until,
+            claim_version,
+            requeue_count,
+            last_requeued_at,
+            received_at,
+            processed_at,
+            last_error_code,
+            last_error_message,
+            created_at,
+            updated_at
+        FROM provider_webhook_inbox
+        WHERE platform_type = #{platformType}
+          AND source_event_id = #{sourceEventId}
+
+    </select>
+    <select
+            id="findBlockedForMenuResolution"
+            resultMap="providerWebhookInboxResultMap">
+
+        SELECT
+            id,
+            platform_type,
+            source_event_id,
+            event_type,
+            external_order_id,
+            payload_json,
+            raw_body_sha256,
+            status,
+            retry_count,
+            next_retry_at,
+            claimed_by,
+            claimed_until,
+            claim_version,
+            requeue_count,
+            last_requeued_at,
+            received_at,
+            processed_at,
+            last_error_code,
+            last_error_message,
+            created_at,
+            updated_at
+        FROM provider_webhook_inbox
+        WHERE status = 'BLOCKED'
+          AND last_error_code IN (
+              'PLATFORM_MENU_MAPPING_NOT_FOUND',
+              'PLATFORM_MENU_NOT_ORDERABLE'
+          )
+        ORDER BY id
+
+    </select>
+
+    <select
+            id="findNextClaimCandidate"
+            resultMap="providerWebhookInboxResultMap">
+
+        SELECT
+        id,
+        platform_type,
+        source_event_id,
+        event_type,
+        external_order_id,
+        payload_json,
+        raw_body_sha256,
+        status,
+        retry_count,
+        next_retry_at,
+        claimed_by,
+        claimed_until,
+        claim_version,
+        requeue_count,
+        last_requeued_at,
+        received_at,
+        processed_at,
+        last_error_code,
+        last_error_message,
+        created_at,
+        updated_at
+        FROM provider_webhook_inbox
+        WHERE
+        (
+        status = 'RECEIVED'
+
+        OR (
+        status = 'RETRYABLE_FAILED'
+        AND (
+        next_retry_at IS NULL
+        OR next_retry_at &lt;= CURRENT_TIMESTAMP(6)
+        )
+        )
+
+        OR (
+        status = 'PROCESSING'
+        AND claimed_until &lt; CURRENT_TIMESTAMP(6)
+        )
+        )
+        ORDER BY id
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+
+    </select>
+
+    <update id="claim">
+        UPDATE provider_webhook_inbox
+        SET
+        status = 'PROCESSING',
+        claimed_by = #{workerId},
+        claimed_until = TIMESTAMPADD(
+        SECOND,
+        #{leaseSeconds},
+        CURRENT_TIMESTAMP(6)
+        ),
+        claim_version = claim_version + 1,
+        next_retry_at = NULL
+        WHERE id = #{id}
+        AND claim_version = #{expectedClaimVersion}
+    </update>
+    <update id="markProcessed">
+        UPDATE provider_webhook_inbox
+        SET
+        status = 'PROCESSED',
+        processed_at = CURRENT_TIMESTAMP(6),
+        claimed_by = NULL,
+        claimed_until = NULL,
+        next_retry_at = NULL,
+        last_error_code = NULL,
+        last_error_message = NULL
+        WHERE id = #{id}
+        AND status = 'PROCESSING'
+        AND claimed_by = #{workerId}
+        AND claim_version = #{claimVersion}
+        AND claimed_until >= CURRENT_TIMESTAMP(6)
+    </update>
+    <update id="markRetryableFailed">
+        UPDATE provider_webhook_inbox
+        SET
+        status = 'RETRYABLE_FAILED',
+        retry_count = retry_count + 1,
+        next_retry_at = TIMESTAMPADD(
+        SECOND,
+        #{retryDelaySeconds},
+        CURRENT_TIMESTAMP(6)
+        ),
+        claimed_by = NULL,
+        claimed_until = NULL,
+        last_error_code = #{errorCode},
+        last_error_message = #{errorMessage}
+        WHERE id = #{id}
+        AND status = 'PROCESSING'
+        AND claimed_by = #{workerId}
+        AND claim_version = #{claimVersion}
+        AND claimed_until >= CURRENT_TIMESTAMP(6)
+        AND retry_count + 1 &lt; #{maxRetryCount}
+    </update>
+    <update id="markBlocked">
+        UPDATE provider_webhook_inbox
+        SET
+        status = 'BLOCKED',
+        next_retry_at = NULL,
+        claimed_by = NULL,
+        claimed_until = NULL,
+        last_error_code = #{errorCode},
+        last_error_message = #{errorMessage}
+        WHERE id = #{id}
+        AND status = 'PROCESSING'
+        AND claimed_by = #{workerId}
+        AND claim_version = #{claimVersion}
+        AND claimed_until >= CURRENT_TIMESTAMP(6)
+    </update>
+    <update id="heartbeat">
+        UPDATE provider_webhook_inbox
+        SET
+        claimed_until = TIMESTAMPADD(
+        SECOND,
+        #{leaseSeconds},
+        CURRENT_TIMESTAMP(6)
+        )
+        WHERE id = #{id}
+        AND status = 'PROCESSING'
+        AND claimed_by = #{workerId}
+        AND claim_version = #{claimVersion}
+        AND claimed_until >= CURRENT_TIMESTAMP(6)
+    </update>
+    <update id="requeueBlocked">
+        UPDATE provider_webhook_inbox
+        SET
+        status = 'RECEIVED',
+        retry_count = 0,
+        next_retry_at = CURRENT_TIMESTAMP(6),
+        claimed_by = NULL,
+        claimed_until = NULL,
+        requeue_count = requeue_count + 1,
+        last_requeued_at = CURRENT_TIMESTAMP(6)
+        WHERE id = #{id}
+        AND status = 'BLOCKED'
+    </update>
+    <update id="requeueBlockedForMenuResolution">
+        UPDATE provider_webhook_inbox
+        SET
+        status = 'RECEIVED',
+        retry_count = 0,
+        next_retry_at = CURRENT_TIMESTAMP(6),
+        claimed_by = NULL,
+        claimed_until = NULL,
+        requeue_count = requeue_count + 1,
+        last_requeued_at = CURRENT_TIMESTAMP(6)
+        WHERE status = 'BLOCKED'
+        AND last_error_code IN ('PLATFORM_MENU_MAPPING_NOT_FOUND', 'PLATFORM_MENU_NOT_ORDERABLE')
+    </update>
+    <update id="markRetryExhausted">
+        UPDATE provider_webhook_inbox
+        SET
+        status = 'BLOCKED',
+        retry_count = retry_count + 1,
+        next_retry_at = NULL,
+        claimed_by = NULL,
+        claimed_until = NULL,
+        last_error_code = 'RETRY_EXHAUSTED',
+        last_error_message = #{errorMessage}
+        WHERE id = #{id}
+        AND status = 'PROCESSING'
+        AND claimed_by = #{workerId}
+        AND claim_version = #{claimVersion}
+        AND claimed_until >= CURRENT_TIMESTAMP(6)
+        AND retry_count + 1 >= #{maxRetryCount}
+    </update>
+</mapper>

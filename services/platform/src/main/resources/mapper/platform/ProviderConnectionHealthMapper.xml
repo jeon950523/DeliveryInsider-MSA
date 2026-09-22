@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.deliveryinsider.platform.domain.webhook.mapper.ProviderConnectionHealthMapper">
+    <!-- Only a verified Provider detail can identify a setting. Unknown stores bind nothing. -->
+    <update id="bindResolvedSetting">
+        UPDATE provider_webhook_inbox i
+        LEFT JOIN store_platform_settings s
+          ON s.platform_type = i.platform_type AND s.external_store_id = #{externalStoreId}
+        SET i.resolved_setting_id = s.id, i.resolved_setting_revision = s.connection_revision
+        WHERE i.id = #{inboxId} AND i.claim_version = #{claimVersion}
+          AND i.status = 'PROCESSING' AND i.claimed_until &gt;= CURRENT_TIMESTAMP(6)
+    </update>
+    <update id="recordReceipt">
+        UPDATE store_platform_settings s
+        JOIN provider_webhook_inbox i ON s.id = i.resolved_setting_id
+          AND s.connection_revision = i.resolved_setting_revision
+        SET s.last_webhook_at = GREATEST(COALESCE(s.last_webhook_at, i.received_at), i.received_at)
+        WHERE i.id = #{inboxId}
+    </update>
+    <!-- Called in the same transaction AFTER the fenced Inbox result update.
+         Settings-row locking serializes results; success is the actual Kafka acknowledgment,
+         not a claim that downstream Order/Report/Notification has finished. -->
+    <update id="recordOutcome">
+        UPDATE store_platform_settings s
+        JOIN provider_webhook_inbox i ON s.id = i.resolved_setting_id
+          AND s.connection_revision = i.resolved_setting_revision
+        SET s.last_success_at = CASE WHEN i.status = 'PROCESSED'
+              THEN GREATEST(COALESCE(s.last_success_at, i.processed_at), i.processed_at)
+              ELSE s.last_success_at END,
+            s.last_error_code = i.last_error_code,
+            s.connection_status = CASE WHEN i.status = 'PROCESSED' THEN 'ACTIVE' ELSE s.connection_status END
+        WHERE i.id = #{inboxId} AND i.status IN ('PROCESSED', 'RETRYABLE_FAILED', 'BLOCKED')
+    </update>
+</mapper>
