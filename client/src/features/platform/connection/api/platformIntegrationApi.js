@@ -1,0 +1,14 @@
+import httpClient from '../../../../shared/api/httpClient.js';
+const base = '/api/platform-integrations';
+export const fetchIntegrations = (config = {}) => httpClient.get(base, config);
+export const fetchAvailableExternalStores = (platform, config = {}) => httpClient.get(`${base}/${platform}/external-stores`, config);
+export const saveIntegration = (platform, payload) => httpClient.put(`${base}/${platform}`, payload);
+export const changeIntegrationEnabled = (platform, enabled) => httpClient.patch(`${base}/${platform}/enabled`, { enabled });
+export const fetchIntegrationStatus = (platform) => httpClient.get(`${base}/${platform}/status`);
+export const fetchIntegrationMenus = (platform) => httpClient.get(`${base}/${platform}/menus`);
+export const saveIntegrationMenu = (platform, menuId, payload) => httpClient.put(`${base}/${platform}/menus/${menuId}`, payload);
+export const fetchUnmappedExternalMenus = (platform, config = {}) => httpClient.get(`${base}/${platform}/unmapped-menus`, config);
+export const fetchUnresolvedOrderMenus = (config = {}) => httpClient.get(`${base}/unresolved-order-menus`, config);
+export const connectExistingExternalMenu = (platform, externalMenuId, menuId, config = {}) => httpClient.post(`${base}/${platform}/unmapped-menus/${encodeURIComponent(externalMenuId)}/connect`, { menuId }, config);
+export const createAndConnectExternalMenu = (platform, externalMenuId, payload, config = {}) => httpClient.post(`${base}/${platform}/unmapped-menus/${encodeURIComponent(externalMenuId)}/create-and-connect`, payload, config);
+export const fetchOwnedMenus = (config = {}) => httpClient.get('/api/menus', config);

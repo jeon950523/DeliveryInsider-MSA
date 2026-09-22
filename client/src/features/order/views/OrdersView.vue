@@ -1,0 +1,3044 @@
+<script setup>
+import { computed, nextTick, onMounted, ref, watch, onBeforeUnmount } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import { orderFinancials } from '../utils/orderFinancials.js';
+import { formatReportMoney, financialStatusText } from '../../report/utils/reportHelpers.js';
+import { useOrderStore } from '../stores/useOrderStore';
+import { useOrderRealtimeStore } from '../../notification/stores/useOrderRealtimeStore.js';
+import { createCoalescedRefresh } from '../../notification/utils/orderConnection.js';
+import {
+  diffMinutes,
+  diffSeconds,
+  formatDurationMinutes,
+  formatDurationSeconds,
+  formatKstDateTime,
+  formatKstTime,
+  getCurrentStageLabel,
+  parseServerDateTime,
+} from '../../../shared/utils/timeFormatters.js';
+
+// 필터 상태 관리
+const selectedPlatform = ref('');
+const selectedStatus = ref('');
+const selectedAttention = ref(''); // 확인 필요(위험) 필터 추가
+const searchKeyword = ref('');
+const detailBottomRef = ref(null);
+const ordersContentRef = ref(null);
+const showDetailTopButton = ref(false);
+
+const detailActionsRef = ref(null);
+
+
+const route = useRoute();
+const router = useRouter();
+const orderStore = useOrderStore();
+const realtime = useOrderRealtimeStore();
+let viewActive = true;
+let loadVersion = 0;
+let selectionVersion = 0;
+const automaticRefresh = createCoalescedRefresh(() => loadTodayOrders(true, true));
+watch(() => realtime.revision, automaticRefresh.request);
+
+const selectedActiveOnly = ref(false);
+
+const currentPage = ref(1);
+const pageSize = 10;
+
+// 선택된 주문 상세
+const selectedOrder = ref(null);
+const detailPanelRef = ref(null);
+
+const showCancelModal = ref(false);
+const cancelReasonCode = ref('OUT_OF_STOCK');
+const cancelReasonText = ref('');
+const showRefundModal = ref(false);
+const refundReasonCode = ref('OTHER');
+const refundReasonText = ref('');
+
+const cancellationReasonOptions = [
+  { value: 'OUT_OF_STOCK', label: '재료 품절' },
+  { value: 'STORE_CLOSED', label: '매장 사정 / 영업 불가' },
+  { value: 'MERCHANT_REQUEST', label: '매장 요청' },
+  { value: 'OTHER', label: '기타' },
+];
+
+const refundReasonOptions = [
+  { value: 'DELIVERY_DELAY', label: '배달 지연' },
+  { value: 'PAYMENT_ISSUE', label: '결제 / 정산 확인' },
+  { value: 'MERCHANT_REQUEST', label: '고객 보상 처리' },
+  { value: 'OTHER', label: '기타 (메뉴 누락 · 오배송 · 음식 상태 등)' },
+];
+
+const reasonLabels = {
+  CUSTOMER_CHANGED_MIND: '고객 변심',
+  DUPLICATE_ORDER: '중복 주문',
+  ADDRESS_ISSUE: '주소 문제',
+  OUT_OF_STOCK: '재료 품절',
+  STORE_CLOSED: '매장 사정 / 영업 불가',
+  COOKING_DELAY: '조리 지연',
+  DELIVERY_DELAY: '배달 지연',
+  PAYMENT_ISSUE: '결제 문제',
+  MERCHANT_REQUEST: '매장 요청',
+  OTHER: '기타',
+};
+
+const cancelActorLabels = {
+  CUSTOMER: '고객',
+  MERCHANT: '매장',
+  PROVIDER: '플랫폼',
+  SYSTEM: '시스템',
+};
+
+const liabilityPartyLabels = {
+  MERCHANT: '매장', PLATFORM: '플랫폼', DELIVERY: '배달', CUSTOMER: '고객', SHARED: '공동 부담', UNKNOWN: '확인 필요',
+};
+const getLiabilityPartyLabel = (value) => liabilityPartyLabels[value] || '확인 필요';
+
+// 실제 Order API 응답의 화면 표시 모델
+const orders = ref([]);
+
+// 오늘 주문 관리에서 실제로 점주가 처리해야 하는 진행 상태
+const activeOrderStatuses = ['WAITING', 'COOKING', 'READY_FOR_PICKUP', 'DELIVERING'];
+const requestAttentionStatuses = ['WAITING'];
+
+const isActiveOrder = (order) => {
+  return activeOrderStatuses.includes(order.orderStatus);
+};
+
+const isRequestAttentionOrder = (order) => {
+  return requestAttentionStatuses.includes(order.orderStatus);
+};
+
+const refreshHeaderNotifications = () => {
+  window.dispatchEvent(new CustomEvent('deliveryinsider:notifications-refresh'));
+};
+
+// 2. 검색 및 필터 로직 (확인 필요 필터 추가)
+const filteredOrders = computed(() => {
+  return orders.value.filter((order) => {
+    const riskBadges = order.riskBadges || [];
+
+    const platformMatched =
+      !selectedPlatform.value ||
+      order.platformType === selectedPlatform.value;
+
+    const statusMatched =
+      !selectedStatus.value ||
+      order.orderStatus === selectedStatus.value;
+
+    const activeMatched =
+      !selectedActiveOnly.value ||
+      activeOrderStatuses.includes(order.orderStatus);
+
+    let attentionMatched = true;
+
+    if (selectedAttention.value === 'REQUEST') {
+      attentionMatched = isRequestAttentionOrder(order) && riskBadges.length > 0;
+    }
+
+
+
+    if (selectedAttention.value === 'CANCEL') {
+      attentionMatched = order.orderStatus === 'CANCELED';
+    }
+
+
+    const keyword = searchKeyword.value.trim().toLowerCase();
+
+    const keywordMatched =
+      !keyword ||
+      String(order.orderNo || '').toLowerCase().includes(keyword) ||
+      String(order.merchantOrderNo || '').toLowerCase().includes(keyword) ||
+      String(order.platformOrderNo || '').toLowerCase().includes(keyword) ||
+      String(order.menuSummary || '').toLowerCase().includes(keyword) ||
+      String(order.deliveryAddress || '').toLowerCase().includes(keyword) ||
+      String(order.requestText || '').toLowerCase().includes(keyword);
+
+    return platformMatched && statusMatched && activeMatched && attentionMatched && keywordMatched;
+  });
+});
+
+const totalPages = computed(() => {
+  return Math.max(
+    1,
+    Math.ceil(filteredOrders.value.length / pageSize)
+  );
+});
+
+const pagedOrders = computed(() => {
+  const startIndex =
+    (currentPage.value - 1) * pageSize;
+
+  return filteredOrders.value.slice(
+    startIndex,
+    startIndex + pageSize
+  );
+});
+
+const pageNumbers = computed(() => {
+  return Array.from(
+    { length: totalPages.value },
+    (_, index) => index + 1
+  );
+});
+
+const changePage = async (page) => {
+  if (page < 1 || page > totalPages.value) {
+    return;
+  }
+
+  currentPage.value = page;
+
+  const firstOrder = pagedOrders.value[0];
+
+  if (firstOrder) {
+    await selectOrder(firstOrder);
+  }
+};
+
+watch(
+  [
+    selectedPlatform,
+    selectedStatus,
+    selectedAttention,
+    selectedActiveOnly,
+    searchKeyword,
+  ],
+  () => {
+    currentPage.value = 1;
+  }
+);
+
+
+// 요청사항 확인은 접수대기 주문만 대상으로 삼는다.
+// 외부 플랫폼에서 조리가 시작되면 정상 lifecycle이 진행 중이므로 접수대기 알림에서 제외한다.
+const requestAttentionOrders = computed(() => {
+  return orders.value.filter((order) => {
+    return isRequestAttentionOrder(order) && (order.riskBadges || []).length > 0;
+  });
+});
+
+// 운영 요약 카드에서 사용할 값
+const operationSummary = computed(() => {
+  return {
+    waitingCount: orders.value.filter((o) => o.orderStatus === 'WAITING').length,
+    cookingCount: orders.value.filter((o) => o.orderStatus === 'COOKING').length,
+    readyForPickupCount: orders.value.filter((o) => o.orderStatus === 'READY_FOR_PICKUP').length,
+    deliveringCount: orders.value.filter((o) => o.orderStatus === 'DELIVERING').length,
+    requestRiskCount: requestAttentionOrders.value.length,
+  };
+});
+
+const nextWaitingOrder = computed(() => {
+  return orders.value.find((order) => order.orderStatus === 'WAITING');
+});
+
+// 유틸리티 함수들
+const getPlatformName = (type) => ({ BAEMIN: '배민', COUPANG_EATS: '쿠팡이츠', YOGIYO: '요기요', DDANGYO: '땡겨요' }[type] || type);
+const getPlatformClass = (type) => ({ BAEMIN: 'baemin', COUPANG_EATS: 'coupang', YOGIYO: 'yogiyo', DDANGYO: 'ddangyo' }[type] || 'default');
+const getOrderStatusName = (status) => ({ WAITING: '접수대기', COOKING: '조리중', READY_FOR_PICKUP: '픽업대기', DELIVERING: '배달중', COMPLETED: '배달 완료', CANCELED: '취소', REFUNDED: '환불 완료' }[status] || status);
+const hasRefundDetail = (order) => Boolean(
+  order?.orderStatus === 'REFUNDED'
+  || order?.refundType
+  || order?.refundReason
+  || order?.refundAmount != null
+  || order?.refundedAt,
+);
+const getDetailStatusName = (order) => getOrderStatusName(order?.orderStatus);
+const getDetailStatusClass = (order) => `status-${String(order?.orderStatus || '').toLowerCase()}`;
+const getInternalOrderNumber = (order) => order?.orderNo || order?.merchantOrderNo || (order?.id ? `ORD-${order.id}` : '-');
+const formatMoney = formatReportMoney;
+const formatCost = (amount) => {
+  if (amount == null) return '-';
+  return Number(amount) === 0 ? formatMoney(0) : formatMoney(-amount);
+};
+const orderProfitLabel = (financialDataStatus) => ({
+  AVAILABLE: '추정 수익',
+  PROVISIONAL: '추정 수익 · 주문 시점 예상',
+  PARTIAL: '추정 수익 · 플랫폼 비용 일부 미확정',
+  UNAVAILABLE: '추정 수익 · 플랫폼 비용 미확정',
+}[financialDataStatus] || '추정 수익 · 플랫폼 비용 미확정');
+const formatTime = (dateTime) => formatKstTime(dateTime, '');
+const formatDateTime = (dateTime) => formatKstDateTime(dateTime, '');
+const formatDuration = (minutes) => formatDurationMinutes(minutes, {
+  zeroAsLessThanMinute: true,
+});
+
+const getElapsedPrimaryText = (order) => {
+  const elapsed = formatDuration(getTotalElapsedMinutes(order));
+
+  if (isActiveOrder(order)) {
+    return `주문 후 ${elapsed}`;
+  }
+
+  if (order?.orderStatus === 'CANCELED') {
+    return `취소까지 ${elapsed}`;
+  }
+
+  if (order?.orderStatus === 'COMPLETED') {
+    return `배달 완료까지 ${elapsed}`;
+  }
+
+  return elapsed;
+};
+
+const getElapsedSecondaryText = (order) => {
+  if (!isActiveOrder(order)) {
+    return '';
+  }
+
+  return `${getCurrentStageLabel(order.orderStatus)} ${formatDuration(getCurrentStageElapsedMinutes(order))}째`;
+};
+
+const getDetailTotalElapsedLabel = (order) => {
+  if (!order) {
+    return '-';
+  }
+
+  let endAt = nowTick.value;
+
+  if (order.orderStatus === 'COMPLETED') {
+    endAt = order.completedAtRaw;
+  } else if (order.orderStatus === 'CANCELED') {
+    endAt = order.canceledAtRaw;
+  }
+
+  const seconds = diffSeconds(order.orderedAtRaw, endAt);
+
+  return seconds === null
+    ? formatDuration(getTotalElapsedMinutes(order))
+    : formatDurationSeconds(seconds, { zeroAsLessThanSecond: true });
+};
+
+const getDetailElapsedLabel = (order) => {
+  if (isActiveOrder(order)) {
+    return '주문 후 경과';
+  }
+
+  if (order?.orderStatus === 'CANCELED') {
+    return '취소까지';
+  }
+
+  return '전체 처리';
+};
+
+const getCurrentStageDurationLabel = (order) => {
+  if (!order || !isActiveOrder(order)) {
+    return '-';
+  }
+
+  const seconds = diffSeconds(order.currentStageStartedAtRaw, nowTick.value);
+
+  return seconds === null
+    ? formatDuration(getCurrentStageElapsedMinutes(order))
+    : formatDurationSeconds(seconds, { zeroAsLessThanSecond: true });
+};
+
+const getStageHistoryText = (order, stageStatus) => {
+  if (!order) {
+    return '-';
+  }
+
+  if (order.orderStatus === stageStatus && isActiveOrder(order)) {
+    return '진행 중';
+  }
+
+  const stageMap = {
+    WAITING: {
+      start: order.orderedAtRaw,
+      end: order.cookingStartedAtRaw,
+      fallback: order.processingTime?.waitingMinutes,
+    },
+    COOKING: {
+      start: order.cookingStartedAtRaw,
+      end: order.readyForPickupAtRaw,
+      fallback: order.processingTime?.cookingMinutes,
+    },
+    READY_FOR_PICKUP: {
+      start: order.readyForPickupAtRaw,
+      end: order.pickedUpAtRaw,
+      fallback: order.processingTime?.pickupWaitingMinutes,
+    },
+    DELIVERING: {
+      start: order.pickedUpAtRaw,
+      end: order.completedAtRaw,
+      fallback: order.processingTime?.deliveryMinutes,
+    },
+  };
+
+  const stage = stageMap[stageStatus];
+
+  if (!stage) {
+    return '-';
+  }
+
+  const seconds = diffSeconds(stage.start, stage.end);
+
+  if (seconds !== null && stage.start && stage.end) {
+    return formatDurationSeconds(seconds, { zeroAsLessThanSecond: true });
+  }
+
+  return formatDuration(stage.fallback);
+};
+
+const nowTick = ref(new Date());
+let elapsedTimer = null;
+
+const getTotalElapsedMinutes = (order) => {
+  if (!order) {
+    return null;
+  }
+
+  if (isActiveOrder(order)) {
+    return diffMinutes(order.orderedAtRaw, nowTick.value)
+      ?? order.totalElapsedMinutes
+      ?? null;
+  }
+
+  return order.processingTime?.totalProcessingMinutes
+    ?? order.processingTime?.totalElapsedMinutes
+    ?? order.totalElapsedMinutes
+    ?? null;
+};
+
+const getCurrentStageElapsedMinutes = (order) => {
+  if (!order || !isActiveOrder(order)) {
+    return null;
+  }
+
+  return diffMinutes(order.currentStageStartedAtRaw, nowTick.value)
+    ?? order.currentStageElapsedMinutes
+    ?? null;
+};
+
+const getStateActionHint = (status) => ({
+  WAITING: '외부 플랫폼 접수 대기',
+  COOKING: '외부 플랫폼 조리 중',
+  READY_FOR_PICKUP: '픽업 대기 중',
+  DELIVERING: '배달 진행 중',
+  COMPLETED: '배달 완료',
+  CANCELED: '취소 완료',
+}[status] || '상태 변경 불가');
+
+const isExternalProviderOrder = (order) => Boolean(
+  order?.platformType && order?.platformOrderNo,
+);
+
+const canCancelOrder = (order) =>
+  !isExternalProviderOrder(order)
+  && ['WAITING', 'COOKING', 'READY_FOR_PICKUP'].includes(order?.orderStatus);
+
+const canRefundOrder = (order) =>
+  !isExternalProviderOrder(order)
+  && order?.orderStatus === 'COMPLETED' && !order?.refundType;
+
+const getReasonLabel = (reasonCode) =>
+  reasonLabels[reasonCode] || reasonCode || '-';
+
+const getCancelActorLabel = (actor) =>
+  cancelActorLabels[actor] || actor || '-';
+
+const getOrderItemName = (item) => {
+  return item.orderedMenuName || item.menuName || '-';
+};
+
+const getOrderItemTotalAmount = (item) => {
+  const savedAmount = Number(item.itemMenuAmount || 0);
+
+  if (savedAmount > 0) {
+    return savedAmount;
+  }
+
+  return Number(item.orderedMenuPrice || 0) * Number(item.quantity || 0);
+};
+const getOrderSortValue = (order) => {
+  const parsed = parseServerDateTime(order?.orderedAtRaw);
+
+  if (parsed) {
+    return parsed.getTime();
+  }
+
+  return Number(order?.id || 0);
+};
+
+// 진행 주문은 먼저 들어온 순서, 종료 주문은 그 뒤에 배치한다.
+const sortFifoOrders = (orderList) => {
+  return [...orderList].sort((a, b) => {
+    const aActive = isActiveOrder(a);
+    const bActive = isActiveOrder(b);
+
+    if (aActive !== bActive) {
+      return aActive ? -1 : 1;
+    }
+
+    if (aActive) {
+      return getOrderSortValue(a) - getOrderSortValue(b);
+    }
+
+    return getOrderSortValue(b) - getOrderSortValue(a);
+  });
+};
+
+
+const REQUEST_ATTENTION_LEVELS = ['WARNING', 'DANGER'];
+
+const normalizeRiskValue = (value) => {
+  return String(value || '').trim().toUpperCase();
+};
+
+const getRiskBadges = (order) => {
+  const badges = [];
+  const riskType = normalizeRiskValue(order.requestRiskType);
+  const riskLevel = normalizeRiskValue(order.requestRiskLevel);
+
+  if (riskType === 'ALLERGY') {
+    badges.push('알러지 주의');
+  }
+
+  if (riskType === 'DISPUTE') {
+    badges.push('분쟁 가능');
+  }
+
+  if (riskType === 'EXCESSIVE') {
+    badges.push('과도 요청');
+  }
+
+  if (riskType === 'GROUP') {
+    badges.push('배달사항 확인');
+  }
+
+  if (
+    ['REQUEST', 'REQUEST_RISK'].includes(riskType) ||
+    (REQUEST_ATTENTION_LEVELS.includes(riskLevel) && badges.length === 0)
+  ) {
+    badges.push(riskLevel === 'DANGER' ? '위험 요청' : '요청사항 확인');
+  }
+
+
+  return badges;
+};
+
+const toOrderViewData = (order) => {
+  return {
+    id: order.id,
+    orderNo: order.orderNo,
+    merchantOrderNo: order.merchantOrderNo || order.orderNo,
+    platformOrderNo: order.platformOrderNumber,
+    platformType: order.platformType,
+    menuSummary: order.menuSummary,
+    totalQuantity: order.totalQuantity,
+    orderStatus: order.orderStatus,
+    totalAmount: Number(order.totalAmount || 0),
+    orderedAtRaw: order.orderedAt,
+    cookingStartedAtRaw: order.cookingStartedAt,
+    currentStageStartedAtRaw: order.currentStageStartedAt,
+    orderedAt: formatTime(order.orderedAt),
+    cookingStartedAt: formatTime(order.cookingStartedAt),
+    currentStageStartedAt: formatTime(order.currentStageStartedAt),
+    totalElapsedMinutes: order.totalElapsedMinutes,
+    currentStageElapsedMinutes: order.currentStageElapsedMinutes,
+    deliveryAddress: order.deliveryAddress,
+
+    requestText: order.requestText || '',
+    requestRiskType: order.requestRiskType || '',
+    requestRiskLevel: order.requestRiskLevel || '',
+    riskBadges: getRiskBadges(order),
+
+    cancelType: order.cancelType || '',
+    cancelReason: order.cancelReason || '',
+    canceledAt: formatTime(order.canceledAt),
+
+    refundType: order.refundType || '',
+    refundReason: order.refundReason || '',
+    refundAmount: order.refundAmount ?? null,
+    liabilityParty: order.liabilityParty || '',
+    merchantLiabilityAmount: order.merchantLiabilityAmount ?? null,
+    platformLiabilityAmount: order.platformLiabilityAmount ?? null,
+    refundedAt: formatTime(order.refundedAt),
+
+    items: [],
+    commissionAmount: null,
+    deliveryFeeAmount: null,
+    couponAmount: null,
+    menuCostAmount: null,
+    packagingAmount: null,
+  };
+};
+
+const toOrderDetailViewData = (detail, baseOrder = {}) => {
+  const request = detail.request || {};
+  const cancellation = detail.cancellation || {};
+  const refund = detail.refund || {};
+
+  return {
+    ...baseOrder,
+
+    id: detail.id,
+    orderNo: detail.orderNo,
+    merchantOrderNo: detail.merchantOrderNo || detail.orderNo,
+    platformOrderNo: detail.platformOrderNumber,
+    platformType: detail.platformType,
+    orderStatus: detail.orderStatus,
+
+    ...orderFinancials(detail),
+
+    deliveryAddress: detail.deliveryAddress,
+    processingTime: detail.processingTime || baseOrder.processingTime || null,
+
+    orderedAtRaw: detail.orderedAt || baseOrder.orderedAtRaw || '',
+    cookingStartedAtRaw: detail.cookingStartedAt || baseOrder.cookingStartedAtRaw || '',
+    readyForPickupAtRaw: detail.readyForPickupAt || baseOrder.readyForPickupAtRaw || '',
+    pickedUpAtRaw: detail.pickedUpAt || baseOrder.pickedUpAtRaw || '',
+    completedAtRaw: detail.completedAt || baseOrder.completedAtRaw || '',
+    canceledAtRaw: detail.canceledAt || baseOrder.canceledAtRaw || '',
+    currentStageStartedAtRaw: baseOrder.currentStageStartedAtRaw || '',
+
+    orderedAt: formatTime(detail.orderedAt),
+    cookingStartedAt: formatTime(detail.cookingStartedAt),
+    readyForPickupAt: formatTime(detail.readyForPickupAt),
+    pickedUpAt: formatTime(detail.pickedUpAt),
+    completedAt: formatTime(detail.completedAt),
+    canceledAt: formatTime(detail.canceledAt),
+    refundedAt: formatTime(detail.refundedAt || refund.refundedAt),
+
+    menuSummary:
+      baseOrder.menuSummary ||
+      detail.items?.map((item) => item.orderedMenuName).join(', ') ||
+      '',
+
+    totalQuantity:
+      baseOrder.totalQuantity ||
+      detail.items?.reduce((sum, item) => sum + Number(item.quantity || 0), 0) ||
+      0,
+
+    requestText:
+      request.requestText ||
+      baseOrder.requestText ||
+      '',
+
+    requestRiskType:
+      request.riskType ||
+      baseOrder.requestRiskType ||
+      '',
+
+    requestRiskLevel:
+      request.riskLevel ||
+      baseOrder.requestRiskLevel ||
+      '',
+
+    riskBadges: getRiskBadges({
+      requestRiskType: request.riskType || baseOrder.requestRiskType,
+      requestRiskLevel: request.riskLevel || baseOrder.requestRiskLevel,
+
+    }),
+
+    cancelType:
+      cancellation.cancelType ||
+      baseOrder.cancelType ||
+      '',
+
+    cancelReason:
+      cancellation.cancelReasonText ||
+      cancellation.cancelReason ||
+      baseOrder.cancelReason ||
+      '',
+
+    refundType:
+      refund.refundType ||
+      baseOrder.refundType ||
+      '',
+
+    refundReason:
+      refund.refundReason ||
+      baseOrder.refundReason ||
+      '',
+
+    refundAmount: refund.refundAmount ?? baseOrder.refundAmount ?? null,
+    liabilityParty: refund.liabilityParty || baseOrder.liabilityParty || '',
+    merchantLiabilityAmount: refund.merchantLiabilityAmount ?? baseOrder.merchantLiabilityAmount ?? null,
+    platformLiabilityAmount: refund.platformLiabilityAmount ?? baseOrder.platformLiabilityAmount ?? null,
+
+    items: detail.items || [],
+  };
+};
+const shortAddress = (address) => address && address.length > 18 ? `${address.slice(0, 18)}...` : address || '-';
+
+// 요청사항 주의 안내 문구 생성
+const getRequestAttentionMessage = (order) => {
+  const badges = order.riskBadges || [];
+  if (badges.includes('알러지 주의')) return '알러지 관련 단어가 포함되어 있습니다. 조리 전 재료와 제외 요청을 먼저 확인하세요.';
+  if (badges.includes('분쟁 가능')) return '취소·환불·리뷰 관련 표현이 포함되어 있습니다. 접수 전 제공 가능 범위를 확인하세요.';
+  if (badges.includes('과도 요청')) return '추가 제공 요청이 포함되어 있습니다. 매장 제공 기준을 확인하세요.';
+  if (badges.includes('배달 전달 주의')) return '전달 방식이나 시간 관련 요청이 포함되어 있습니다.';
+  return '';
+};
+const applyRouteQueryFilters = () => {
+  const query = route.query;
+
+  selectedPlatform.value = String(query.platform || '');
+  selectedStatus.value = String(query.status || '');
+  const attention = String(query.attention || query.filter || '');
+  const allowedAttentionFilters = ['REQUEST', 'CANCEL'];
+  selectedAttention.value = allowedAttentionFilters.includes(attention)
+    ? attention
+    : '';
+  selectedActiveOnly.value = query.active === 'true';
+
+  if (query.keyword) {
+    searchKeyword.value = String(query.keyword);
+  }
+};
+// 주문목록조회
+const loadTodayOrders = async (preserveSelection = false, quiet = false) => {
+  const request = ++loadVersion;
+  try {
+    const todayResult = await orderStore.findToday({}, { quiet });
+    if (!viewActive || request !== loadVersion) return;
+
+    orders.value = sortFifoOrders(
+      todayResult.map(toOrderViewData)
+    );
+
+    const routeOrderId = Number((preserveSelection === true ? selectedOrder.value?.id : null) || route.query.id || 0);
+
+    const targetOrder =
+      routeOrderId
+        ? orders.value.find((order) => Number(order.id) === routeOrderId)
+        : pagedOrders.value[0] || orders.value[0];
+
+    if (targetOrder) {
+      await selectOrder(targetOrder, { quiet });
+    } else {
+      selectionVersion++; selectedOrder.value = null;
+    }
+  } catch (error) {
+    // Pinia 오류 상태와 기존 공통 인증/서버 오류 흐름에서 안내한다.
+  }
+};
+
+onMounted(async () => {
+  elapsedTimer = window.setInterval(() => {
+    nowTick.value = new Date();
+  }, 30_000);
+
+  applyRouteQueryFilters();
+  await loadTodayOrders();
+  await bindDetailScrollContainer();
+});
+onBeforeUnmount(() => {
+  viewActive = false; loadVersion++; selectionVersion++; automaticRefresh.stop();
+  if (elapsedTimer) {
+    window.clearInterval(elapsedTimer);
+  }
+
+  const pageArea = getPageScrollContainer();
+
+  if (pageArea) {
+    pageArea.removeEventListener('scroll', updateDetailTopButtonVisible);
+  }
+
+  window.removeEventListener('scroll', updateDetailTopButtonVisible);
+});
+/*
+ * 같은 OrdersView 안에서 query만 바뀌는 이동을 처리한다.
+ * 예: /orders?active=true → /orders
+ * Vue Router는 같은 컴포넌트를 재사용하므로 onMounted가 다시 실행되지 않는다.
+ */
+watch(
+  () => route.fullPath,
+  async () => {
+    applyRouteQueryFilters();
+    currentPage.value = 1;
+
+    if (!orders.value.length) {
+      await loadTodayOrders();
+      return;
+    }
+
+    const routeOrderId = Number(route.query.id || 0);
+    const targetOrder = routeOrderId
+      ? orders.value.find((order) => Number(order.id) === routeOrderId)
+      : pagedOrders.value[0] || orders.value[0];
+
+    if (targetOrder) {
+      await selectOrder(targetOrder);
+    } else {
+      selectedOrder.value = null;
+    }
+  }
+);
+
+// 필터 및 주문 선택 조작
+const clearFilters = () => {
+  selectedPlatform.value = '';
+  selectedStatus.value = '';
+  selectedAttention.value = '';
+  selectedActiveOnly.value = false;
+  searchKeyword.value = '';
+  currentPage.value = 1;
+};
+
+const selectOrder = async (order, { quiet = false } = {}) => {
+  const request = ++selectionVersion;
+  selectedOrder.value = order;
+
+  try {
+    const detail =
+      await orderStore.findOne(order.id, { quiet });
+
+    if (viewActive && request === selectionVersion && selectedOrder.value?.id === order.id) applyUpdatedOrder(detail, order);
+  } catch (error) {
+    // 오래된 상세 요청이 현재 선택을 덮지 않는다. 사용자 요청 오류는 Store에서 안내한다.
+  }
+};
+
+const isElementVisibleInPageArea = (element) => {
+  if (!element) {
+    return false;
+  }
+
+  const pageArea = getPageScrollContainer();
+  const elementRect = element.getBoundingClientRect();
+
+  if (pageArea) {
+    const pageRect = pageArea.getBoundingClientRect();
+
+    return (
+      elementRect.top >= pageRect.top + 12 &&
+      elementRect.bottom <= pageRect.bottom - 12
+    );
+  }
+
+  return (
+    elementRect.top >= 12 &&
+    elementRect.bottom <= window.innerHeight - 12
+  );
+};
+
+const isDetailActionVisible = () => {
+  return isElementVisibleInPageArea(detailActionsRef.value);
+};
+
+const scrollToDetailPanel = async () => {
+  await nextTick();
+
+  // Desktop에서는 목록과 상세를 함께 보며 비교할 수 있도록 자동 스크롤하지 않는다.
+  if (!window.matchMedia('(max-width: 760px)').matches || isDetailActionVisible()) {
+    return;
+  }
+
+  const scrollTarget = detailPanelRef.value || detailBottomRef.value;
+
+  if (!scrollTarget) {
+    return;
+  }
+
+  scrollTarget.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+    inline: 'nearest',
+  });
+};
+
+const selectOrderAndScroll = async (order) => {
+  await selectOrder(order);
+  await scrollToDetailPanel();
+  await bindDetailScrollContainer();
+};
+
+const setOrderFilter = (type, value) => {
+  selectedActiveOnly.value = false;
+
+  if (type === 'status') {
+    selectedStatus.value = value;
+    selectedAttention.value = '';
+  } else if (type === 'attention') {
+    selectedAttention.value = value;
+    selectedStatus.value = '';
+  }
+  currentPage.value = 1;
+};
+
+const getPageScrollContainer = () => {
+  return document.querySelector('.page-area');
+};
+
+const getCurrentPageScrollTop = () => {
+  const pageArea = getPageScrollContainer();
+
+  if (pageArea) {
+    return pageArea.scrollTop;
+  }
+
+  return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+};
+
+const updateDetailTopButtonVisible = () => {
+  showDetailTopButton.value = selectedOrder.value && getCurrentPageScrollTop() > 260;
+};
+
+const scrollToPageTop = () => {
+  const pageArea = getPageScrollContainer();
+
+  if (pageArea) {
+    pageArea.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  }
+
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth',
+  });
+
+  document.documentElement.scrollTo({
+    top: 0,
+    behavior: 'smooth',
+  });
+
+  document.body.scrollTo({
+    top: 0,
+    behavior: 'smooth',
+  });
+
+  window.setTimeout(() => {
+    updateDetailTopButtonVisible();
+  }, 350);
+};
+const bindDetailScrollContainer = async () => {
+  await nextTick();
+
+  const pageArea = getPageScrollContainer();
+
+  if (pageArea) {
+    pageArea.removeEventListener('scroll', updateDetailTopButtonVisible);
+    pageArea.addEventListener('scroll', updateDetailTopButtonVisible, {
+      passive: true,
+    });
+  }
+
+  window.removeEventListener('scroll', updateDetailTopButtonVisible);
+  window.addEventListener('scroll', updateDetailTopButtonVisible, {
+    passive: true,
+  });
+
+  updateDetailTopButtonVisible();
+};
+
+const applyUpdatedOrder = (updatedDetail, baseOrder = {}) => {
+  const updatedOrder =
+    toOrderDetailViewData(updatedDetail, baseOrder);
+
+  selectedOrder.value = updatedOrder;
+
+  const index =
+    orders.value.findIndex((item) => item.id === updatedOrder.id);
+
+  if (index !== -1) {
+    orders.value[index] = updatedOrder;
+    orders.value = sortFifoOrders(orders.value);
+  }
+
+  return updatedOrder;
+};
+
+const refreshOrderAfterWrite = async () => { await loadTodayOrders(true); return selectedOrder.value; };
+
+const openCancelModal = (order) => {
+  if (!canCancelOrder(order)) return;
+  selectedOrder.value = order;
+  cancelReasonCode.value = 'OUT_OF_STOCK';
+  cancelReasonText.value = '';
+  showCancelModal.value = true;
+};
+
+const closeCancelModal = () => {
+  if (orderStore.changingOrderId === selectedOrder.value?.id) return;
+  showCancelModal.value = false;
+};
+
+const submitCancellation = async () => {
+  const order = selectedOrder.value;
+  if (!order || !canCancelOrder(order)) return;
+
+  if (cancelReasonCode.value === 'OTHER' && !cancelReasonText.value.trim()) {
+    alert('기타 사유를 입력해 주세요.');
+    return;
+  }
+
+  try {
+    await orderStore.requestCancellation(order.id, {
+      reasonCode: cancelReasonCode.value,
+      reasonText: cancelReasonText.value.trim() || null,
+    });
+    showCancelModal.value = false;
+    if (viewActive) await refreshOrderAfterWrite(order.id);
+    refreshHeaderNotifications();
+    alert('플랫폼에 주문 취소를 요청했습니다. 상태 반영까지 잠시 걸릴 수 있습니다.');
+  } catch (error) {
+    console.error('주문 취소 요청 실패:', error);
+  }
+};
+
+const openRefundModal = (order) => {
+  if (!canRefundOrder(order)) return;
+  selectedOrder.value = order;
+  refundReasonCode.value = 'OTHER';
+  refundReasonText.value = '';
+  showRefundModal.value = true;
+};
+
+const closeRefundModal = () => {
+  if (orderStore.changingOrderId === selectedOrder.value?.id) return;
+  showRefundModal.value = false;
+};
+
+const submitRefund = async () => {
+  const order = selectedOrder.value;
+  if (!order || !canRefundOrder(order)) return;
+
+  if (refundReasonCode.value === 'OTHER' && !refundReasonText.value.trim()) {
+    alert('기타 환불 사유를 입력해 주세요.');
+    return;
+  }
+
+  try {
+    await orderStore.requestRefund(order.id, {
+      reasonCode: refundReasonCode.value,
+      reasonText: refundReasonText.value.trim() || null,
+    });
+    showRefundModal.value = false;
+    if (viewActive) await refreshOrderAfterWrite(order.id);
+    refreshHeaderNotifications();
+    alert('환불 요청 이력을 저장했습니다. 실제 외부 지급 완료 상태는 별도 확인이 필요합니다.');
+  } catch (error) {
+    console.error('환불 요청 실패:', error);
+  }
+};
+
+</script>
+
+<template>
+  <div class="orders-view" data-tour="order-management">
+    <p v-if="orderStore.errorMessage" role="alert">{{ orderStore.errorMessage }}</p>
+    <header class="page-header">
+      <div>
+        <span class="category-text">TODAY ORDER</span>
+        <h1>통합 주문 현황</h1>
+        <p>특정 주문의 현재 상태, 외부 이벤트 흐름, 취소 결과를 조회합니다. 기간 분석은 운영 리포트에서 확인하세요.</p>
+      </div>
+      <div class="header-actions">
+        <button
+          type="button"
+          class="sub-button"
+          @click="loadTodayOrders"
+        >
+          새로고침
+        </button>
+      </div>
+    </header>
+
+    <section v-if="nextWaitingOrder" class="new-order-section">
+      <div class="new-order-head">
+        <div>
+          <span class="new-label">다음 접수 주문</span>
+          <strong>{{ getInternalOrderNumber(nextWaitingOrder) }}</strong>
+        </div>
+        <span class="queue-badge">접수대기 {{ operationSummary.waitingCount }}건</span>
+      </div>
+
+      <div class="new-order-body new-order-split">
+        <div class="new-order-main">
+          <h2>{{ nextWaitingOrder.menuSummary }}</h2>
+          <p>
+            총 {{ nextWaitingOrder.totalQuantity }}개 ·
+            {{ formatMoney(nextWaitingOrder.totalAmount) }} ·
+            주문 후 {{ formatDuration(getTotalElapsedMinutes(nextWaitingOrder)) }}
+          </p>
+        </div>
+
+        <div
+          class="new-order-request-box"
+          :class="{ attention: (nextWaitingOrder.riskBadges || []).length > 0 }"
+        >
+          <span>요청사항</span>
+          <strong>
+            {{ nextWaitingOrder.requestText || '요청사항 없음' }}
+          </strong>
+
+          <small v-if="(nextWaitingOrder.riskBadges || []).length">
+            {{ nextWaitingOrder.riskBadges.join(' · ') }}
+          </small>
+        </div>
+
+        <div class="new-order-actions">
+          <button
+            type="button"
+            class="sub-button"
+            @click="selectOrderAndScroll(nextWaitingOrder)"
+          >
+            주문 상세
+          </button>
+
+          <button
+            v-if="canCancelOrder(nextWaitingOrder)"
+            type="button"
+            class="danger-button"
+            :disabled="orderStore.changingOrderId === nextWaitingOrder.id"
+            @click="openCancelModal(nextWaitingOrder)"
+          >
+            주문 취소
+          </button>
+
+          <span class="done-text">외부 플랫폼에서 조리 시작을 기다리는 중</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="summary-grid">
+      <article class="summary-card waiting clickable" @click="setOrderFilter('status', 'WAITING')">
+        <div class="summary-card-head"><span>접수대기</span></div>
+        <strong>{{ operationSummary.waitingCount }}건</strong>
+        <p>접수 후 경과시간을 확인</p>
+      </article>
+
+      <article class="summary-card cooking clickable" @click="setOrderFilter('status', 'COOKING')">
+        <div class="summary-card-head"><span>조리중</span></div>
+        <strong>{{ operationSummary.cookingCount }}건</strong>
+        <p>조리 시작 후 경과시간 확인</p>
+      </article>
+
+      <article class="summary-card ready clickable" @click="setOrderFilter('status', 'READY_FOR_PICKUP')">
+        <div class="summary-card-head"><span>픽업대기</span></div>
+        <strong>{{ operationSummary.readyForPickupCount }}건</strong>
+        <p>조리 완료 후 픽업 대기</p>
+      </article>
+
+      <article class="summary-card delivering clickable" @click="setOrderFilter('status', 'DELIVERING')">
+        <div class="summary-card-head"><span>배달중</span></div>
+        <strong>{{ operationSummary.deliveringCount }}건</strong>
+        <p>플랫폼 배달 진행 상태</p>
+      </article>
+    </section>
+
+    <section class="filter-panel">
+      <div class="filter-group">
+        <label>플랫폼</label>
+        <select v-model="selectedPlatform">
+          <option value="">전체 플랫폼</option>
+          <option value="BAEMIN">배민</option>
+          <option value="COUPANG_EATS">쿠팡이츠</option>
+          <option value="YOGIYO">요기요</option>
+          <option value="DDANGYO">땡겨요</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label>주문 상태</label>
+        <select v-model="selectedStatus" @change="selectedAttention = ''">
+          <option value="">전체 상태</option>
+          <option value="WAITING">접수대기</option>
+          <option value="COOKING">조리중</option>
+          <option value="READY_FOR_PICKUP">픽업대기</option>
+          <option value="DELIVERING">배달중</option>
+          <option value="COMPLETED">배달 완료</option>
+          <option value="CANCELED">취소</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label>확인 필요</label>
+        <select v-model="selectedAttention" @change="selectedStatus = ''">
+          <option value="">전체</option>
+          <option value="REQUEST">요청사항 확인</option>
+          <option value="CANCEL">취소 이력</option>
+        </select>
+      </div>
+
+      <div class="filter-group grow">
+        <label>검색</label>
+        <input v-model="searchKeyword" type="text" placeholder="주문번호, 메뉴명, 주소, 요청사항 검색" />
+      </div>
+
+      <button type="button" class="sub-button filter-button" @click="clearFilters">초기화</button>
+    </section>
+
+    <section class="orders-content" ref="ordersContentRef">
+      
+      <article class="order-list-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>당일 주문 목록</h2>
+            <p>오늘 기준 주문만 표시합니다.</p>
+          </div>
+          <span class="count-text">
+           총 {{ filteredOrders.length }}건 · {{ currentPage }}/{{ totalPages }}페이지 </span>
+        </div>
+
+        <div class="table-scroll">
+          <table class="order-table">
+            <thead>
+              <tr>
+                <th>주문번호</th>
+                <th>플랫폼</th>
+                <th>상태</th>
+                <th>메뉴</th>
+                <th>배달주소</th>
+                <th>요청사항</th>
+                <th>경과시간</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr 
+                v-for="order in pagedOrders" 
+                :key="order.id"
+                :class="{ selected: selectedOrder?.id === order.id }"
+                @click="selectOrderAndScroll(order)"
+              >
+                <td class="order-no-cell">
+                  <button
+                    type="button"
+                    class="order-number-button merchant-order-number"
+                    @click.stop="selectOrderAndScroll(order)"
+                  >
+                    <span :title="getInternalOrderNumber(order)">{{ getInternalOrderNumber(order) }}</span>
+                  </button>
+                  <small>{{ order.orderedAt }}</small>
+                </td>
+
+                <td>
+                  <span
+                    class="platform-badge"
+                    :class="getPlatformClass(order.platformType)"
+                  >
+                    {{ getPlatformName(order.platformType) }}
+                  </span>
+                </td>
+
+                <td>
+                  <span
+                    class="status-badge"
+                    :class="`status-${String(order.orderStatus || '').toLowerCase()}`"
+                  >
+                    {{ getOrderStatusName(order.orderStatus) }}
+                  </span>
+                </td>
+
+                <td class="menu-cell">
+                  <strong>{{ order.menuSummary }}</strong>
+                  <small>{{ order.totalQuantity }}개 · {{ formatMoney(order.totalAmount) }}</small>
+                </td>
+
+                <td class="text-cell address-cell">
+                  <strong :title="order.deliveryAddress">
+                    {{ shortAddress(order.deliveryAddress) }}
+                  </strong>
+                </td>
+
+                <td class="text-cell request-cell">
+                  <small class="request-text-preview">
+                    {{ order.requestText || '요청사항 없음' }}
+                  </small>
+                  <div v-if="(order.riskBadges || []).length" class="request-badge-line">
+                    <span
+                      v-for="badge in order.riskBadges"
+                      :key="badge"
+                      class="risk-badge"
+                    >
+                      {{ badge }}
+                    </span>
+                  </div>
+                </td>
+
+                <td class="elapsed-cell">
+                  <strong>{{ getElapsedPrimaryText(order) }}</strong>
+                  <small v-if="isActiveOrder(order)">{{ getElapsedSecondaryText(order) }}</small>
+                </td>
+              </tr>
+              <tr v-if="filteredOrders.length === 0">
+                <td colspan="7" class="empty-message">조건에 맞는 주문이 없습니다.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div
+            v-if="filteredOrders.length > pageSize"
+            class="pagination"
+          >
+            <button
+              type="button"
+              class="page-button"
+              :disabled="currentPage === 1"
+              @click="changePage(currentPage - 1)"
+            >
+              이전
+            </button>
+
+            <button
+              v-for="page in pageNumbers"
+              :key="page"
+              type="button"
+              class="page-number"
+              :class="{ active: currentPage === page }"
+              @click="changePage(page)"
+            >
+              {{ page }}
+            </button>
+
+            <button
+              type="button"
+              class="page-button"
+              :disabled="currentPage === totalPages"
+              @click="changePage(currentPage + 1)"
+            >
+              다음
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <section
+        v-if="selectedOrder"
+        ref="detailPanelRef"
+        class="order-detail-panel"
+        data-testid="order-detail-full-width"
+      >
+        <div class="detail-head">
+          <div>
+            <span class="detail-label">주문 상세</span>
+            <h2>{{ getInternalOrderNumber(selectedOrder) }}</h2>
+            <p class="detail-sub-id">플랫폼 {{ getPlatformName(selectedOrder.platformType) }}</p>
+          </div>
+          <span
+            class="status-badge"
+            :class="getDetailStatusClass(selectedOrder)"
+          >
+            {{ getDetailStatusName(selectedOrder) }}
+          </span>
+        </div>
+
+        <div class="order-detail-grid">
+        <div class="detail-section detail-card order-info-card">
+          <h3>주문 정보</h3>
+          <div class="detail-row"><span>주문번호</span><strong>{{ getInternalOrderNumber(selectedOrder) }}</strong></div>
+          <div class="detail-row"><span>플랫폼</span><strong>{{ getPlatformName(selectedOrder.platformType) }}</strong></div>
+          <div class="detail-menu-block">
+          <div class="detail-menu-title">
+            <span>메뉴</span>
+            <strong>총 {{ selectedOrder.totalQuantity }}개</strong>
+          </div>
+
+          <div
+            v-if="(selectedOrder.items || []).length"
+            class="detail-menu-list"
+          >
+            <div
+              v-for="item in selectedOrder.items"
+              :key="item.id"
+              class="detail-menu-item"
+            >
+              <div>
+                <strong>{{ getOrderItemName(item) }}</strong>
+                <small>
+                  {{ Number(item.quantity || 0) }}개 ·
+                  단가 {{ formatMoney(item.orderedMenuPrice) }}
+                </small>
+              </div>
+
+              <b>{{ formatMoney(getOrderItemTotalAmount(item)) }}</b>
+            </div>
+          </div>
+
+          <strong v-else class="detail-menu-fallback">
+            {{ selectedOrder.menuSummary }}
+          </strong>
+        </div>
+          <div class="detail-row"><span>배달주소</span><strong>{{ selectedOrder.deliveryAddress }}</strong></div>
+          <div class="detail-row request-row"><span>요청사항</span><strong>{{ selectedOrder.requestText || '없음' }}</strong></div>
+        </div>
+
+        <div class="detail-section detail-card processing-time-section">
+          <h3>전체 타임라인</h3>
+
+          <div class="processing-summary">
+            <div>
+              <span>주문 접수</span>
+              <strong>{{ formatDateTime(selectedOrder.orderedAtRaw) }}</strong>
+            </div>
+            <div>
+              <span>{{ getDetailElapsedLabel(selectedOrder) }}</span>
+              <strong>{{ getDetailTotalElapsedLabel(selectedOrder) }}</strong>
+            </div>
+          </div>
+
+          <div v-if="isActiveOrder(selectedOrder)" class="current-stage-time">
+            <span>현재 단계</span>
+            <strong>
+              {{ getCurrentStageLabel(selectedOrder.orderStatus) }} ·
+              {{ getCurrentStageDurationLabel(selectedOrder) }}째
+            </strong>
+          </div>
+
+          <div v-if="selectedOrder.processingTime" class="processing-stage-list">
+            <div>
+              <span>접수 대기</span>
+              <strong>{{ getStageHistoryText(selectedOrder, 'WAITING') }}</strong>
+            </div>
+            <div>
+              <span>조리</span>
+              <strong>{{ getStageHistoryText(selectedOrder, 'COOKING') }}</strong>
+            </div>
+            <div>
+              <span>픽업 대기</span>
+              <strong>{{ getStageHistoryText(selectedOrder, 'READY_FOR_PICKUP') }}</strong>
+            </div>
+            <div>
+              <span>배달</span>
+              <strong>{{ getStageHistoryText(selectedOrder, 'DELIVERING') }}</strong>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="detail-section detail-card request-guide" :class="(selectedOrder.riskBadges||[]).length ? 'attention' : 'plain'">
+          <h3>고객 요청사항</h3>
+          <p class="request-text-large">{{ selectedOrder.requestText || '요청사항이 없습니다.' }}</p>
+          
+          <div v-if="(selectedOrder.riskBadges||[]).length" class="request-risk-summary">
+            <strong>{{ (selectedOrder.riskBadges||[]).join(' · ') }}</strong>
+            <span>{{ getRequestAttentionMessage(selectedOrder) }}</span>
+          </div>
+        </div>
+
+        <div class="detail-section detail-card financial-card">
+          <h3>비용 스냅샷</h3><p data-testid="order-financial-status">{{ financialStatusText(selectedOrder.financialDataStatus) }}</p>
+          <p v-if="selectedOrder.financialDataStatus === 'PROVISIONAL'" class="financial-snapshot-note">
+            주문 발생 시점의 가격과 비용 조건으로 계산된 예상값입니다. 실제 플랫폼 정산값과 차이가 발생할 수 있습니다.
+          </p>
+
+          <div class="cost-row">
+            <span>주문금액</span>
+            <strong>{{ formatMoney(selectedOrder.totalAmount) }}</strong>
+          </div>
+
+          <div class="cost-row minus">
+            <span>플랫폼 수수료</span>
+            <strong data-testid="order-commission">{{ formatCost(selectedOrder.commissionAmount) }}</strong>
+          </div>
+
+          <div class="cost-row minus">
+            <span>배달비 부담</span>
+            <strong>{{ formatCost(selectedOrder.deliveryFeeAmount) }}</strong>
+          </div>
+
+          <div class="cost-row minus">
+            <span>쿠폰 부담</span>
+            <strong>{{ formatCost(selectedOrder.couponAmount) }}</strong>
+          </div>
+
+          <div class="cost-row minus">
+            <span>메뉴 원가</span>
+            <strong>{{ formatCost(selectedOrder.menuCostAmount) }}</strong>
+          </div>
+
+          <div class="cost-row minus">
+            <span>포장비</span>
+            <strong>{{ formatCost(selectedOrder.packagingAmount) }}</strong>
+          </div>
+
+          <div
+            v-if="selectedOrder.platformSupportAmount"
+            class="cost-row plus"
+          >
+            <span>플랫폼 지원금</span>
+            <strong>+{{ formatMoney(selectedOrder.platformSupportAmount) }}</strong>
+          </div>
+
+          <div
+            v-if="selectedOrder.orderStatus !== 'CANCELED'"
+            class="cost-row total"
+            :class="{ negative: Number(selectedOrder.netProfit || 0) < 0 }"
+          >
+            <span data-testid="order-profit-label">{{ orderProfitLabel(selectedOrder.financialDataStatus) }}</span>
+            <strong>{{ formatMoney(selectedOrder.netProfit) }}</strong>
+          </div>
+        </div>
+        </div>
+
+        <section v-if="selectedOrder.cancelReason" class="detail-history-card cancel-history">
+          <h3>{{ isExternalProviderOrder(selectedOrder) ? '외부 플랫폼 취소 결과' : '취소 이력' }}</h3>
+          <p>
+            {{ selectedOrder.canceledAt }} ·
+            {{ getCancelActorLabel(selectedOrder.cancelType) }} ·
+            {{ getReasonLabel(selectedOrder.cancelReason) }}
+          </p>
+        </section>
+
+        <section v-if="hasRefundDetail(selectedOrder)" class="detail-history-card refund-history">
+          <h3>환불 정보</h3>
+          <dl class="refund-liability-summary">
+            <div><dt>고객 환불액</dt><dd>{{ formatMoney(selectedOrder.refundAmount) }}</dd></div>
+            <div><dt>환불 사유</dt><dd>{{ getReasonLabel(selectedOrder.refundReason) }}</dd></div>
+            <div><dt>귀책 주체</dt><dd>{{ getLiabilityPartyLabel(selectedOrder.liabilityParty) }}</dd></div>
+            <div><dt>매장 부담</dt><dd>{{ formatMoney(selectedOrder.merchantLiabilityAmount) }}</dd></div>
+            <div><dt>플랫폼 부담</dt><dd>{{ formatMoney(selectedOrder.platformLiabilityAmount) }}</dd></div>
+            <div><dt>환불 시각</dt><dd>{{ selectedOrder.refundedAt || '-' }}</dd></div>
+          </dl>
+        </section>
+
+        <div
+          v-if="canCancelOrder(selectedOrder) || canRefundOrder(selectedOrder) || !isExternalProviderOrder(selectedOrder)"
+          ref="detailActionsRef"
+          class="detail-actions order-command-actions"
+        >
+          <button
+            v-if="canCancelOrder(selectedOrder)"
+            type="button"
+            class="danger-button"
+            :disabled="orderStore.changingOrderId === selectedOrder.id"
+            @click="openCancelModal(selectedOrder)"
+          >
+            주문 취소
+          </button>
+
+          <button
+            v-if="canRefundOrder(selectedOrder)"
+            type="button"
+            class="primary-button state-action-button"
+            :disabled="orderStore.changingOrderId === selectedOrder.id"
+            @click="openRefundModal(selectedOrder)"
+          >
+            환불 요청
+          </button>
+
+          <button
+            v-else-if="!isExternalProviderOrder(selectedOrder) && !canCancelOrder(selectedOrder) && !canRefundOrder(selectedOrder)"
+            type="button"
+            class="sub-button state-action-button"
+            disabled
+          >
+            {{ getStateActionHint(selectedOrder.orderStatus) }}
+          </button>
+        </div>
+        <div ref="detailBottomRef" class="detail-bottom-anchor"></div>
+      </section>
+    </section>
+
+    <div
+      v-if="showCancelModal"
+      class="order-modal-backdrop"
+      role="presentation"
+      @click.self="closeCancelModal"
+    >
+      <section class="order-modal" role="dialog" aria-modal="true" aria-labelledby="cancel-modal-title">
+        <div class="order-modal-head">
+          <div>
+            <span class="category-text">ORDER CANCEL</span>
+            <h2 id="cancel-modal-title">주문 취소</h2>
+          </div>
+          <button type="button" class="modal-close-button" @click="closeCancelModal">×</button>
+        </div>
+
+        <p class="order-modal-note">
+          기사 픽업 전 주문만 취소할 수 있습니다. 취소 요청은 외부 플랫폼에 전달되고,
+          플랫폼 이벤트가 돌아온 뒤 최종 취소 상태와 이력이 반영됩니다.
+        </p>
+
+        <label class="order-modal-field">
+          <span>취소 사유</span>
+          <select v-model="cancelReasonCode">
+            <option
+              v-for="reason in cancellationReasonOptions"
+              :key="reason.value"
+              :value="reason.value"
+            >
+              {{ reason.label }}
+            </option>
+          </select>
+        </label>
+
+        <label class="order-modal-field">
+          <span>상세 사유</span>
+          <textarea
+            v-model="cancelReasonText"
+            maxlength="500"
+            rows="4"
+            placeholder="필요한 경우 상세 사유를 입력하세요. 기타 선택 시 필수입니다."
+          ></textarea>
+        </label>
+
+        <div class="order-modal-actions">
+          <button type="button" class="sub-button" @click="closeCancelModal">닫기</button>
+          <button
+            type="button"
+            class="danger-button"
+            :disabled="orderStore.changingOrderId === selectedOrder?.id"
+            @click="submitCancellation"
+          >
+            {{ orderStore.changingOrderId === selectedOrder?.id ? '요청 중...' : '주문 취소 요청' }}
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div
+      v-if="showRefundModal"
+      class="order-modal-backdrop"
+      role="presentation"
+      @click.self="closeRefundModal"
+    >
+      <section class="order-modal" role="dialog" aria-modal="true" aria-labelledby="refund-modal-title">
+        <div class="order-modal-head">
+          <div>
+            <span class="category-text">ORDER REFUND</span>
+            <h2 id="refund-modal-title">환불 요청</h2>
+          </div>
+          <button type="button" class="modal-close-button" @click="closeRefundModal">×</button>
+        </div>
+
+        <p class="order-modal-note">
+          배달 완료 주문에 대한 환불 요청 이력을 저장합니다.
+          현재 외부 플랫폼 Simulator에는 실제 지급 환불 API가 없어 지급 완료 상태까지 자동 확정하지 않습니다.
+        </p>
+
+        <label class="order-modal-field">
+          <span>환불 사유</span>
+          <select v-model="refundReasonCode">
+            <option
+              v-for="reason in refundReasonOptions"
+              :key="reason.value"
+              :value="reason.value"
+            >
+              {{ reason.label }}
+            </option>
+          </select>
+        </label>
+
+        <label class="order-modal-field">
+          <span>상세 사유</span>
+          <textarea
+            v-model="refundReasonText"
+            maxlength="500"
+            rows="4"
+            placeholder="메뉴 누락, 오배송, 음식 상태 등 상세 사유를 입력하세요."
+          ></textarea>
+        </label>
+
+        <div class="order-modal-actions">
+          <button type="button" class="sub-button" @click="closeRefundModal">닫기</button>
+          <button
+            type="button"
+            class="primary-button"
+            :disabled="orderStore.changingOrderId === selectedOrder?.id"
+            @click="submitRefund"
+          >
+            {{ orderStore.changingOrderId === selectedOrder?.id ? '요청 중...' : '환불 요청 저장' }}
+          </button>
+        </div>
+      </section>
+    </div>
+
+         <button
+      v-if="showDetailTopButton"
+      type="button"
+      class="detail-floating-top-button"
+      title="주문 상세 상단으로"
+      aria-label="주문 상세 상단으로 이동"
+      @click="scrollToPageTop"
+        >
+          ↑
+       </button>
+
+
+  </div>
+</template>
+
+<style scoped>
+/* ============================================================
+   공통 및 레이아웃 시스템
+   ============================================================ */
+.orders-view {
+  min-height: calc(100vh - 78px);
+  padding: 30px;
+  background-color: #f4f6fc;
+  color: #164E68;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.category-text {
+  color: #2784B8;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.page-header h1 {
+  font-size: 38px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  color: #111827;
+  line-height: 1.18;
+}
+
+.page-header p {
+  color: #6b7280;
+  font-size: 18px;
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ============================================================
+   Readability Pass 버튼 및 인풋
+   ============================================================ */
+.primary-button,
+.sub-button,
+.danger-button,
+.table-button,
+.order-number-button,
+.modal-close-button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.primary-button, .sub-button, .danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 18px;
+  font-weight: 400;
+  transition: all 0.2s;
+}
+.detail-bottom-anchor {
+  height: 1px;
+}
+.primary-button { border: 0; color: #ffffff; background-color: #2784b8; }
+.primary-button:hover { background-color: #1f6f99; }
+.sub-button { border: 1px solid #dbe3ee; color: #334155; background-color: #ffffff; }
+.sub-button:hover { background-color: #f8fafc; }
+.sub-button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.danger-outline { color: #b91c1c; border-color: #fecaca; }
+
+/* ============================================================
+   신규 주문 및 요약 카드
+   ============================================================ */
+/* .new-order-section {
+  overflow: hidden;
+  margin-bottom: 16px;
+  border: 2px solid #2784b8;
+  border-radius: 16px;
+  background-color: #ffffff;
+  box-shadow: 0 18px 44px rgba(37, 132, 184, 0.16);
+} */
+ .new-order-section {
+  overflow: hidden;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  background-color: #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.02);
+}
+.new-order-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #164e68, #2784b8);
+}
+.new-order-head div { display: flex; align-items: center; gap: 10px; }
+.new-label {
+  display: inline-flex; align-items: center; min-height: 30px; padding: 0 12px; 
+  border-radius: 999px; color: #164e68; background-color: #eaf8fd; font-size: 14px; font-weight: 400;
+}
+.new-order-head strong { font-size: 20px; font-weight: 300; }
+.queue-badge { display: inline-flex; align-items: center; min-height: 30px; padding: 0 12px; border-radius: 999px; color: #ffffff; background-color: rgba(255,255,255,0.16); font-size: 14px; font-weight: 400; }
+.new-order-body { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 22px; }
+.new-order-main h2 { margin: 0 0 6px; color: #111827; font-size: 24px; font-weight: 400; }
+.new-order-main p { margin: 0; color: #64748b; font-size: 16px; }
+.new-order-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+/* .summary-card { min-width: 0; padding: 22px; border: 1px solid #e5e7eb; border-radius: 18px; background-color: #ffffff; } */
+.summary-card {
+  min-width: 0;
+  box-sizing: border-box;
+  height: 152px;
+  padding: 19px 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background-color: #fbfdff;
+  box-shadow: none;
+}
+.summary-card.clickable { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+.summary-card.clickable:hover { transform: translateY(-2px); border-color: #87ceeb; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); }
+.summary-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.summary-card-head span { color: #475569; font-size: 16px; font-weight: 900; }
+.summary-card-head small { color: #94a3b8; font-size: 14px; font-weight: 800; }
+.summary-card strong { display: block; margin-bottom: 6px; color: #111827; font-size: 34px; font-weight: 400; letter-spacing: -0.04em; }
+.summary-card p { margin: 0; color: #64748b; font-size: 15px; }
+.summary-card.waiting { border-color: #87ceeb; background-color: #eaf8fd; }
+.summary-card.cooking { border-color: #bfdbfe; }
+.summary-card.delivering { border-color: #bbf7d0; }
+.summary-card.risk { border-color: #fecaca; background-color: #fff7f7; }
+.summary-card.risk strong { color: #dc2626; }
+
+/* ============================================================
+   검색 필터 패널
+   ============================================================ */
+/* .filter-panel { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 16px; padding: 18px; border: 1px solid #e5e7eb; border-radius: 18px; background-color: #ffffff; } */
+.filter-panel {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  padding: 30px;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  background-color: #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.02);
+}
+.filter-group { display: grid; gap: 8px; min-width: 150px; }
+.filter-group.grow { flex: 1; }
+.filter-group label { color: #64748b; font-size: 16px; font-weight: 900; }
+.filter-group select, .filter-group input { width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid #dbe3ee; border-radius: 12px; color: #334155; background-color: #ffffff; font-size: 17px; outline: none; }
+.filter-group select:focus, .filter-group input:focus { border-color: #87ceeb; box-shadow: 0 0 0 3px rgba(135, 206, 235, 0.24); }
+
+/* ============================================================
+   메인 테이블 & 상세 패널 (가독성 향상)
+   ============================================================ */
+.orders-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+/* .order-list-panel, .order-detail-panel { border: 1px solid #e5e7eb; border-radius: 18px; background-color: #ffffff; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06); } */
+.order-list-panel,
+.order-detail-panel {
+  box-sizing: border-box;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  background-color: #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.02);
+}
+/* .order-list-panel { min-width: 0; padding: 22px; } */
+.order-list-panel {
+  min-width: 0;
+  padding: 30px;
+}
+.panel-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.panel-title-row h2 { margin: 0 0 6px; color: #111827; font-size: 23px; font-weight: 900; }
+.panel-title-row p { margin: 0; color: #64748b; font-size: 16px; }
+.count-text { color: #000000; font-size: 16px; font-weight: 400; white-space: nowrap; }
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.order-table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.order-table th,
+.order-table td {
+  padding: 16px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 15px;
+}
+
+.order-table th {
+  color: #64748b;
+  background-color: #f8fafc;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.order-table td {
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.order-table tbody tr {
+  cursor: pointer;
+}
+
+.order-table tbody tr:hover,
+.order-table tbody tr.selected {
+  background-color: #eaf8fd;
+}
+
+.order-table td strong {
+  display: block;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.order-table td small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.order-table th:nth-child(1),
+.order-table td:nth-child(1) {
+  width: 190px;
+}
+
+.order-table th:nth-child(2),
+.order-table td:nth-child(2) {
+  width: 105px;
+}
+
+.order-table th:nth-child(3),
+.order-table td:nth-child(3) {
+  width: 105px;
+}
+
+.order-table th:nth-child(4),
+.order-table td:nth-child(4) {
+  width: 150px;
+}
+
+.order-table th:nth-child(5),
+.order-table td:nth-child(5) {
+  width: 190px;
+}
+
+.order-table th:nth-child(6),
+.order-table td:nth-child(6) {
+  width: 160px;
+}
+
+.order-table th:nth-child(7),
+.order-table td:nth-child(7) {
+  width: 105px;
+}
+
+.order-table th:nth-child(8),
+.order-table td:nth-child(8) {
+  width: 105px;
+}
+
+.text-cell {
+  text-align: left !important;
+}
+
+.menu-cell {
+  text-align: center !important;
+}
+
+.order-no-cell {
+  text-align: center;
+}
+
+.order-number-button {
+  display: inline-block;
+  max-width: 165px;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  color: #000000;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.35;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.menu-cell strong {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  color: #111827;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.35;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-cell small {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.address-cell strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.request-text-preview {
+  display: -webkit-box !important;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+/* 신규 주문 패널 */
+.new-order-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(260px, 0.9fr) auto;
+  align-items: stretch;
+}
+
+.new-order-request-box {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-height: 86px;
+  padding: 16px;
+  border: 1px solid #dbe3ee;
+  border-radius: 14px;
+  background-color: #f8fafc;
+}
+
+.new-order-request-box.attention {
+  border-color: #fed7aa;
+  background-color: #fff7ed;
+}
+
+.new-order-request-box span {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.new-order-request-box strong {
+  color: #111827;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.45;
+  word-break: keep-all;
+}
+
+.new-order-request-box small {
+  color: #c2410c;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.page-button,
+.page-number {
+  min-width: 38px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+  color: #475569;
+  background-color: #ffffff;
+  font-size: 15px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.page-number.active {
+  color: #ffffff;
+  border-color: #2784b8;
+  background-color: #2784b8;
+}
+
+.page-button:disabled,
+.page-number:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 뱃지 통일 (플랫폼 중립화 포함) */
+.platform-badge, .status-badge, .risk-badge { 
+  display: inline-flex; align-items: center; justify-content: center; min-height: 30px; 
+  padding: 0 12px; margin: 2px 2px 2px 0; border-radius: 999px; font-size: 14px; font-weight: 900; white-space: nowrap; 
+}
+
+.status-badge.status-waiting { color: #121213; background-color: #eaf8fd; }
+.status-badge.status-cooking { color: #92400e; background-color: #fffbeb; }
+.status-badge.status-delivering { color: #166534; background-color: #dcfce7; }
+.status-badge.status-completed { color: #334155; background-color: #f1f5f9; }
+.status-badge.status-canceled { color: #991b1b; background-color: #fee2e2; }
+.status-badge.status-refunded { color: #92400e; background-color: #fef3c7; }
+.risk-badge { color: #9a3412; background-color: #ffedd5; }
+
+.table-button { min-height: 36px; padding: 0 10px; border: 0; background-color: #eaf8fd; color: #1f1f20; font-size: 14px; font-weight: 900; transition: all 0.2s; }
+.table-button:hover { background-color: #d9f0fa; }
+.table-button:disabled { opacity: 0.55; cursor: not-allowed; }
+.done-text { color: #94a3b8; font-size: 15px; font-weight: 800; }
+.empty-message { height: 120px; color: #9ca3af; text-align: center; }
+
+/* ============================================================
+   상세 패널
+   ============================================================ */
+.order-detail-panel {
+  position: static;
+  padding: 30px;
+}
+.detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9; }
+.detail-label { color: #64748b; font-size: 14px; font-weight: 900; }
+.detail-head h2 { margin: 6px 0 0; color: #111827; font-size: 22px; font-weight: 900; }
+.detail-sub-id { margin: 6px 0 0; color: #64748b; font-size: 15px; font-weight: 750; }
+
+.detail-section { padding-top: 20px; }
+.detail-section h3 { margin: 0 0 12px; color: #111827; font-size: 17px; font-weight: 900; }
+
+.detail-row,
+.cost-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+  color: #475569;
+  font-size: 16px;
+}
+
+.cost-row strong {
+  color: #111827;
+  font-weight: 700;
+  text-align: right;
+  word-break: keep-all;
+}
+
+.detail-row strong {
+  max-width: 220px;
+  line-height: 1.45;
+  color: #111827;
+  font-weight: 400;
+  text-align: right;
+  word-break: keep-all;
+}
+
+.detail-row:nth-child(4) strong {
+  word-break: break-word;
+}
+
+.request-row strong {
+  max-width: 220px;
+  line-height: 1.4;
+}
+
+.cost-row.minus strong {
+  color: #dc2626;
+}
+
+.cost-row.plus strong {
+  color: #15803d;
+}
+.cost-row.total { margin-top: 6px; padding-top: 16px; border-bottom: 0; border-top: 1px solid #dbe3ee; font-weight: 900; }
+.cost-row.total strong { color: #15803d; font-size: 19px; }
+.cost-row.total.negative strong { color: #dc2626; }
+
+/* 요청사항 / 취소 가이드 영역 */
+.request-guide, .cancel-history, .refund-history { padding: 16px; margin-top: 18px; border-radius: 14px; background: #f8fafc; }
+.request-guide.plain { border: 1px solid #e5e7eb; background: #ffffff; }
+.request-guide.attention { border: 1px solid #e5e7eb; border-left: 5px solid #f59e0b; background: #ffffff; }
+.request-guide h3, .cancel-history h3, .refund-history h3 { margin-bottom: 10px; }
+.request-text-large { margin: 0; color: #334155; font-size: 17px; font-weight: 800; line-height: 1.6; }
+.request-risk-summary { display: grid; gap: 6px; margin-top: 14px; padding: 12px 14px; border-radius: 12px; border: 1px solid #fde68a; background: #fffbeb; color: #92400e; }
+.request-risk-summary strong { font-size: 15px; }
+.request-risk-summary span { color: #78350f; font-size: 15px; line-height: 1.5; }
+.cancel-history { background: #fef2f2; border: 1px solid #fecaca; }
+.refund-history { background: #fffbeb; border: 1px solid #fde68a; }
+.cancel-history p, .refund-history p { margin: 0; color: #475569; font-size: 16px; line-height: 1.6; font-weight: 700; }
+
+.detail-actions { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-top: 24px; }
+
+.order-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.detail-card,
+.detail-history-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background-color: #ffffff;
+}
+
+.order-detail-grid .detail-section {
+  padding-top: 0;
+}
+
+.order-detail-grid .request-guide {
+  grid-column: 1 / -1;
+  order: 4;
+  margin-top: 0;
+}
+
+.detail-history-card {
+  margin-top: 16px;
+}
+
+.detail-history-card h3 {
+  margin: 0 0 12px;
+  color: #111827;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.refund-liability-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.refund-liability-summary > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+.refund-liability-summary dt {
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.refund-liability-summary dd {
+  margin: 5px 0 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+/* ============================================================
+   반응형
+   ============================================================ */
+@media (max-width: 1280px) {
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .orders-content { grid-template-columns: 1fr; }
+  .order-detail-panel { position: static; }
+}
+
+@media (max-width: 760px) {
+  .orders-view { padding: 18px; }
+  .page-header, .new-order-body, .filter-panel { flex-direction: column; align-items: stretch; }
+  .header-actions, .new-order-actions { justify-content: flex-start; }
+  .summary-grid { grid-template-columns: 1fr; }
+  .cancel-preset-grid { grid-template-columns: repeat(2, 1fr); }
+  .detail-actions { grid-template-columns: 1fr; }
+
+  .refund-liability-summary { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   2026-06-27 화면 보정
+   - 다음 접수 주문 카드 중앙 정렬
+   - 주문 목록 테이블 가로 스크롤 최소화
+   - 플랫폼 주문번호/액션 칼럼 한 화면 표시
+   ============================================================ */
+.new-order-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px;
+}
+
+.new-order-split {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(320px, 0.95fr) auto;
+  align-items: stretch;
+}
+
+.new-order-main {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  min-height: 86px;
+  text-align: center;
+}
+
+.new-order-main h2 {
+  margin: 0 0 8px;
+  color: #111827;
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.25;
+}
+
+.new-order-main p {
+  margin: 0;
+  color: #64748b;
+  font-size: 19px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.new-order-actions {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.new-order-actions .primary-button,
+.new-order-actions .sub-button {
+  min-height: 86px;
+  min-width: 108px;
+  padding: 0 20px;
+  font-size: 19px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.order-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.order-table th,
+.order-table td {
+  padding: 12px 7px;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.order-table td {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.order-table th:nth-child(1),
+.order-table td:nth-child(1) {
+  width: 132px;
+}
+
+.order-table th:nth-child(2),
+.order-table td:nth-child(2) {
+  width: 82px;
+}
+
+.order-table th:nth-child(3),
+.order-table td:nth-child(3) {
+  width: 82px;
+}
+
+.order-table th:nth-child(4),
+.order-table td:nth-child(4) {
+  width: 145px;
+}
+
+.order-table th:nth-child(5),
+.order-table td:nth-child(5) {
+  width: 135px;
+}
+
+.order-table th:nth-child(6),
+.order-table td:nth-child(6) {
+  width: 120px;
+}
+
+.order-table th:nth-child(7),
+.order-table td:nth-child(7) {
+  width: 82px;
+}
+
+.order-table th:nth-child(8),
+.order-table td:nth-child(8) {
+  width: 88px;
+}
+
+.order-number-button {
+  display: inline-block;
+  max-width: 118px;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  color: #000000;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.25;
+  text-decoration: none;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.order-no-cell small {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px !important;
+  line-height: 1.25;
+}
+
+.menu-cell strong {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.3;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-cell small {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.request-text-preview {
+  display: -webkit-box !important;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.table-button {
+  min-height: 34px;
+  padding: 0 8px;
+  border: 0;
+  background-color: #eaf8fd;
+  color: #1f1f20;
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+@media (max-width: 1280px) {
+  .new-order-split {
+    grid-template-columns: 1fr;
+  }
+
+  .new-order-actions {
+    justify-content: stretch;
+  }
+
+  .new-order-actions .primary-button,
+  .new-order-actions .sub-button {
+    flex: 1;
+  }
+}
+.detail-menu-block {
+  display: grid;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.detail-menu-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-menu-title span {
+  color: #6b7280;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.detail-menu-title strong {
+  color: #111827;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.detail-menu-list {
+  display: grid;
+  gap: 8px;
+}
+
+.detail-menu-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background-color: #f8fafc;
+}
+
+.detail-menu-item strong {
+  display: block;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.detail-menu-item small {
+  display: block;
+  margin-top: 3px;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.detail-menu-item b {
+  flex-shrink: 0;
+  color: #164E68;
+  font-size: 14px;
+}
+
+.detail-menu-fallback {
+  color: #111827;
+  font-size: 15px;
+}
+
+/* ============================================================
+   2026-06-27 주문 상세 액션 위치 보정
+   - 배달중 상태의 완료 처리 버튼이 왼쪽으로 밀리지 않게 오른쪽 칸 고정
+   ============================================================ */
+.detail-actions {
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr);
+  align-items: stretch;
+}
+
+.detail-actions .state-action-button {
+  grid-column: 2;
+}
+
+.detail-actions .primary-button.state-action-button,
+.detail-actions .sub-button.state-action-button {
+  width: 100%;
+}
+
+
+
+/* ============================================================
+   2026-06-27 주문 화면 버튼/모달/글자 굵기 보정
+   ============================================================ */
+.orders-view {
+  font-weight: 500;
+}
+
+.page-header h1,
+.panel-title-row h2,
+.detail-section h3,
+.detail-head h2,
+.new-order-main h2 {
+  font-weight: 400;
+}
+
+.category-text,
+.filter-group label,
+.summary-card-head span,
+.detail-label,
+.card-label {
+  font-weight: 500;
+}
+
+.new-order-main h2 {
+  font-size: 26px;
+}
+
+.new-order-main p {
+  font-size: 17px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.new-order-request-box strong,
+.request-text-large {
+  font-weight: 400;
+}
+
+.new-order-actions .primary-button,
+.new-order-actions .sub-button {
+  min-width: 102px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.order-table th {
+  font-weight: 700;
+}
+
+.order-number-button,
+.menu-cell strong,
+.table-button,
+.status-badge,
+.platform-badge,
+.risk-badge,
+
+.menu-cell small,
+.request-text-preview,
+.text-cell strong,
+.order-no-cell small {
+  font-weight: 500;
+}
+
+.detail-actions {
+  grid-template-columns: 1fr;
+}
+
+.detail-actions .state-action-button {
+  grid-column: 1;
+}
+
+.detail-floating-top-button {
+  position: fixed;
+  right: 28px;
+  bottom: 110px;
+  z-index: 60;
+
+  width: 44px;
+  height: 44px;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+
+  background-color: rgba(255, 255, 255, 0.96);
+  color: #164e68;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+
+  backdrop-filter: blur(8px);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.detail-floating-top-button:hover {
+  transform: translateY(-2px);
+  border-color: #87ceeb;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+}
+
+@media (max-width: 1200px) {
+  .detail-floating-top-button {
+    right: 18px;
+    bottom: 88px;
+  }
+}
+
+
+
+
+
+.merchant-order-number span {
+  display: inline-block;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* 2026-09-04 실제 주문 경과시간 UI */
+.summary-card.ready {
+  border-color: #fde68a;
+  background-color: #fffbeb;
+}
+
+.status-badge.status-ready_for_pickup {
+  color: #92400e;
+  background-color: #fef3c7;
+}
+
+.request-badge-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.elapsed-cell strong {
+  color: #164E68;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.elapsed-cell small {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.processing-time-section {
+  background: #f8fafc;
+}
+
+.processing-summary,
+.processing-stage-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.processing-summary > div,
+.processing-stage-list > div,
+.current-stage-time {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.processing-summary span,
+.processing-stage-list span,
+.current-stage-time span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.processing-summary strong,
+.processing-stage-list strong,
+.current-stage-time strong {
+  display: block;
+  margin-top: 5px;
+  color: #111827;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.current-stage-time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  border-color: #87ceeb;
+  background: #eaf8fd;
+}
+
+.current-stage-time strong {
+  margin-top: 0;
+  color: #164E68;
+}
+
+.processing-stage-list {
+  margin-top: 10px;
+}
+
+@media (max-width: 760px) {
+  .processing-summary,
+  .processing-stage-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.order-no-cell .merchant-order-number,
+.order-no-cell .merchant-order-number span {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Use the actual content width: the persistent sidebar also consumes desktop space. */
+.orders-view { container-type: inline-size; }
+@container (max-width: 1500px) {
+  .orders-content { grid-template-columns: minmax(0, 1fr); }
+  .order-detail-panel { position: static; }
+}
+
+@container (max-width: 1200px) {
+  .order-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .refund-liability-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 760px) {
+  .order-detail-grid,
+  .refund-liability-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .order-detail-grid .request-guide {
+    grid-column: auto;
+  }
+}
+
+/* 1024×768 POS: 탐색과 핵심 주문 처리를 한 화면 폭에 우선 배치한다. */
+@container (max-width: 1100px) {
+  .summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .summary-card {
+    height: auto;
+    min-height: 104px;
+    padding: 13px 10px;
+  }
+
+  .summary-card-head { margin-bottom: 7px; }
+  .summary-card-head span { font-size: 13px; }
+  .summary-card strong { margin-bottom: 0; font-size: 24px; }
+  .summary-card p { display: none; }
+
+  .filter-panel {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .filter-group {
+    flex: 1 1 150px;
+    min-width: 0;
+  }
+
+  .filter-group.grow { flex-basis: 230px; }
+  .filter-group label { font-size: 14px; }
+  .filter-group select,
+  .filter-group input { min-height: 42px; font-size: 15px; }
+  .filter-button { min-height: 42px; }
+
+  .order-list-panel { padding: 18px; }
+  .panel-title-row h2 { font-size: 20px; }
+  .panel-title-row p, .count-text { font-size: 14px; }
+
+  .order-table th,
+  .order-table td { padding: 10px 6px; }
+
+  .order-table th:nth-child(5),
+  .order-table td:nth-child(5),
+  .order-table th:nth-child(6),
+  .order-table td:nth-child(6) { display: none; }
+
+  .order-table th:nth-child(1),
+  .order-table td:nth-child(1) { width: 128px; }
+  .order-table th:nth-child(2),
+  .order-table td:nth-child(2) { width: 74px; }
+  .order-table th:nth-child(3),
+  .order-table td:nth-child(3) { width: 80px; }
+  .order-table th:nth-child(4),
+  .order-table td:nth-child(4) { width: 1%; }
+  .order-table th:nth-child(7),
+  .order-table td:nth-child(7) { width: 74px; }
+  .order-table th:nth-child(8),
+  .order-table td:nth-child(8) { width: 82px; }
+
+  .detail-section { padding: 16px; }
+  .detail-head { padding: 18px; }
+}
+
+/* ============================================================
+   주문 취소 / 환불 액션
+   ============================================================ */
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  background: #fff;
+  color: #b91c1c;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: #f87171;
+  background: #fef2f2;
+}
+
+.danger-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.new-order-actions {
+  flex-wrap: wrap;
+}
+
+.order-command-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.order-command-actions > button {
+  width: 100%;
+}
+
+.order-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.order-modal {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 24px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.order-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.order-modal-head h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 24px;
+}
+
+.modal-close-button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #dbe3ee;
+  background: #fff;
+  color: #475569;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.order-modal-note {
+  margin: 18px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.order-modal-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.order-modal-field > span {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.order-modal-field select,
+.order-modal-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #fff;
+  color: #111827;
+  font: inherit;
+}
+
+.order-modal-field select {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.order-modal-field textarea {
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.5;
+}
+
+.order-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+@media (max-width: 720px) {
+  .order-command-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .order-modal-backdrop {
+    padding: 12px;
+  }
+
+  .order-modal {
+    padding: 18px;
+  }
+
+  .order-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .order-modal-actions > button {
+    width: 100%;
+  }
+}
+
+</style>

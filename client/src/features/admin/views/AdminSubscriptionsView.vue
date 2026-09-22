@@ -1,0 +1,6 @@
+<script setup>
+import { onMounted } from 'vue'; import { useAdminStore } from '../stores/useAdminStore.js'; import AdminStatePanel from '../components/AdminStatePanel.vue'; import AdminTable from '../components/AdminTable.vue';
+const admin=useAdminStore(); const state=admin.resources.subscriptions; const columns=[{key:'storeId',label:'매장'},{key:'plan',label:'플랜'},{key:'subscriptionStatus',label:'구독 상태'},{key:'startedAt',label:'시작일'},{key:'nextBillingAt',label:'다음 결제일'},{key:'latestPaymentStatus',label:'최근 결제 상태'}]; const formatDate=v=>v?new Date(v).toLocaleString('ko-KR'):'-'; onMounted(()=>admin.loadSubscriptions().catch(()=>{}));
+</script>
+<template><div class="page"><p>구독과 결제 상태를 조회만 하며 결제 성공이나 활성 상태를 강제로 변경하지 않습니다.</p><AdminStatePanel :loading="state.loading" :error="state.error" :empty="state.data?.items?.length===0" empty-text="구독 데이터가 없습니다." @retry="admin.loadSubscriptions().catch(()=>{})"><AdminTable :columns="columns" :rows="state.data?.items||[]"><template #startedAt="{row}">{{formatDate(row.startedAt)}}</template><template #nextBillingAt="{row}">{{formatDate(row.nextBillingAt)}}</template></AdminTable></AdminStatePanel></div></template>
+<style scoped>.page>p{margin:0 0 16px;color:#64748b}</style>

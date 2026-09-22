@@ -1,0 +1,510 @@
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../../features/auth/stores/useAuthStore.js'
+import { useStoreStore } from '../../features/store/stores/useStoreStore.js'
+import { useDashboardStore } from '../../features/dashboard/stores/useDashboardStore.js'
+import { formatDurationMinutes } from '../../shared/utils/timeFormatters.js'
+
+defineProps({
+  isOpen: {
+    type: Boolean,
+    default: true,
+  },
+})
+
+const emit = defineEmits(['toggle'])
+const router = useRouter()
+const dashboardStore = useDashboardStore()
+const authStore = useAuthStore()
+const storeStore = useStoreStore()
+
+const navItems = ref([
+  { name: '현재 운영 상황', path: '/dashboard', tour: 'dashboard-navigation' },
+  { name: '통합 주문 현황', path: '/orders', tour: 'order-navigation' },
+  { name: '메뉴 수익 관리', path: '/menus', tour: 'menu-navigation' },
+  { name: '매장 관리', path: '/store', tour: 'store-navigation' },
+  { name: '운영 리포트', path: '/reports', tour: 'report-navigation' },
+  { name: '구독 관리', path: '/billing', tour: 'billing-navigation' },
+])
+
+const REQUEST_ATTENTION_TYPES = [
+  'ALLERGY',
+  'DISPUTE',
+  'EXCESSIVE',
+  'GROUP',
+  'REQUEST',
+  'REQUEST_RISK',
+]
+
+const REQUEST_ATTENTION_LEVELS = ['WARNING', 'DANGER']
+
+const normalizeRiskValue = (value) => String(value || '').trim().toUpperCase()
+
+const isRequestRiskOrder = (order = {}) => {
+  if (order.orderStatus !== 'WAITING') {
+    return false
+  }
+
+  const riskType = normalizeRiskValue(order.requestRiskType)
+  const riskLevel = normalizeRiskValue(order.requestRiskLevel)
+
+  return (
+    REQUEST_ATTENTION_TYPES.includes(riskType) ||
+    REQUEST_ATTENTION_LEVELS.includes(riskLevel)
+  )
+}
+
+const operationSummary = computed(() => {
+  const data = dashboardStore.operationSummary
+  const requestRisk = dashboardStore.todayOrders.filter(isRequestRiskOrder).length
+
+  if (!data) {
+    return {
+      orderCount: 0,
+      progressCount: 0,
+      waitingCount: 0,
+      cookingCount: 0,
+      readyForPickupCount: 0,
+      deliveringCount: 0,
+      oldestActiveOrderElapsedMinutes: 0,
+      averageCompletedProcessingMinutes: null,
+      requestRisk,
+      lossRisk: 0,
+      sales: 0,
+      profit: 0,
+      completedCount: 0,
+      cancelCount: 0,
+      cancelRate: 0,
+    }
+  }
+
+  return {
+    orderCount: data.todayOrderCount || 0,
+    progressCount: data.progressOrderCount || 0,
+    waitingCount: data.waitingCount || 0,
+    cookingCount: data.cookingCount || 0,
+    readyForPickupCount: data.readyForPickupCount || 0,
+    deliveringCount: data.deliveringCount || 0,
+    oldestActiveOrderElapsedMinutes: data.oldestActiveOrderElapsedMinutes || 0,
+    averageCompletedProcessingMinutes: data.averageCompletedProcessingMinutes ?? null,
+    requestRisk,
+    lossRisk: data.lossRiskCount || 0,
+    sales: data.todaySales || 0,
+    profit: data.todayAdjustedEstimatedProfit ?? data.todayNetProfit ?? 0,
+    completedCount: data.completedCount || 0,
+    cancelCount: data.canceledCount || data.cancelCount || 0,
+    cancelRate: data.cancelRate || 0,
+  }
+})
+
+const updatedAtText = computed(() => {
+  if (!dashboardStore.lastUpdatedAt) {
+    return '동기화 전'
+  }
+
+  return `${dashboardStore.lastUpdatedAt.toLocaleTimeString('ko-KR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })} 기준`
+})
+
+const formatMoney = (value) => `${Number(value || 0).toLocaleString('ko-KR')}원`
+const formatDuration = (value) => formatDurationMinutes(value, { zeroAsLessThanMinute: true })
+
+onMounted(async () => {
+  if (!authStore.isLoggedIn || !storeStore.hasStore || dashboardStore.operationSummary) {
+    return
+  }
+
+  try {
+    await dashboardStore.loadDashboard({ showAlert: false })
+  } catch (error) {
+    if (error?.code === 'AUTH_REQUIRED' || error?.response?.status === 401) {
+      return
+    }
+
+    console.error('사이드바 운영 요약 조회 실패:', error)
+  }
+})
+</script>
+
+<template>
+  <aside class="side-bar" :class="{ 'is-collapsed': !isOpen }">
+    
+    <button class="toggle-btn" @click="emit('toggle')" aria-label="사이드바 토글">
+      <span class="arrow-icon" :class="{ 'rotated': !isOpen }">‹</span>
+    </button>
+    
+    <div class="sidebar-content">
+      <div class="logo-area">
+        <div class="brand">
+          <strong>DeliveryInsider</strong>
+        </div>
+        <!-- <img src="/logo.png" alt="배프(BAEF) 로고" class="main-logo" /> -->
+      </div>
+
+      <section v-if="dashboardStore.loadError" class="side-operation-card side-operation-error" data-tour="dashboard-summary">
+        <span class="side-card-label">현재 운영</span>
+        <strong>조회 실패</strong>
+        <p class="side-load-text">운영 수치를 확인할 수 없습니다.</p>
+        <small class="side-card-help">대시보드에서 다시 시도해 주세요.</small>
+      </section>
+
+      <template v-else>
+      <section class="side-operation-card" data-tour="dashboard-summary">
+        <span class="side-card-label">
+          현재 운영 <em>{{ updatedAtText }}</em>
+        </span>
+        <strong>진행 {{ operationSummary.progressCount }}건</strong>
+        <p class="side-load-text">
+          가장 오래된 주문 {{ formatDuration(operationSummary.oldestActiveOrderElapsedMinutes) }}
+        </p>
+        <div class="side-risk-lines">
+          <span>대기 {{ operationSummary.waitingCount }}</span>
+          <span>조리 {{ operationSummary.cookingCount }}</span>
+          <span>픽업 {{ operationSummary.readyForPickupCount }}</span>
+          <span>배달 {{ operationSummary.deliveringCount }}</span>
+        </div>
+        <small class="side-card-help">
+          완료 평균 {{ operationSummary.averageCompletedProcessingMinutes === null ? '-' : formatDuration(operationSummary.averageCompletedProcessingMinutes) }}
+        </small>
+      </section>
+
+      <section class="side-metric-card side-performance-card">
+        <span class="side-performance-title">오늘 실적</span>
+        <strong class="side-sales-amount">{{ formatMoney(operationSummary.sales) }}</strong>
+        <div class="side-profit-row">
+          <span>조정 후 예상 순수익</span>
+          <strong>{{ formatMoney(operationSummary.profit) }}</strong>
+        </div>
+        <div class="side-performance-grid">
+          <div>
+            <span>완료</span>
+            <strong>{{ operationSummary.completedCount }}건</strong>
+          </div>
+          <div>
+            <span>취소율</span>
+            <strong>{{ operationSummary.cancelRate }}%</strong>
+          </div>
+        </div>
+        <div class="side-report-shortcuts">
+          <button type="button" @click="router.push({ path: '/reports', query: { tab: 'sales' } })">매출 리포트</button>
+          <button type="button" @click="router.push({ path: '/reports', query: { tab: 'cancel' } })">취소 리포트</button>
+        </div>
+      </section>
+
+      <section class="side-action-card" data-tour="active-orders">
+        <span>바로가기</span>
+        <button type="button" @click="router.push({ path: '/orders', query: { active: 'true' } })">
+          진행 주문 <strong>{{ operationSummary.progressCount }}건</strong>
+        </button>
+        <button type="button" @click="router.push({ path: '/orders', query: { status: 'READY_FOR_PICKUP' } })">
+          픽업 대기 <strong>{{ operationSummary.readyForPickupCount }}건</strong>
+        </button>
+        <button type="button" @click="router.push({ path: '/orders', query: { attention: 'REQUEST' } })">
+          요청사항 <strong>{{ operationSummary.requestRisk }}건</strong>
+        </button>
+        <button type="button" @click="router.push({ path: '/reports', query: { tab: 'cancel' } })">
+          취소 확인 <strong>{{ operationSummary.cancelCount }}건</strong>
+        </button>
+      </section>
+      </template>
+
+      <nav class="side-list">
+        <router-link
+          class="menu-item"
+          v-for="(item, index) in navItems" 
+          :key="index"
+          :to="item.path"
+          :data-tour="item.tour"
+        >
+          <span class="menu-name">{{ item.name }}</span>
+        </router-link>
+      </nav>
+    </div>
+  </aside>
+</template>
+
+<style scoped>
+/* ============================================================
+   디자인 시스템 변수 (배프1차.html 기준 완벽 이식)
+   ============================================================ */
+.side-bar {
+  --bg-sidebar: #ffffff;
+  --border-color: #e2e8f0;
+  --primary: #2784B8;
+  --primary-light: #EAF8FD;
+  --text-main: #164E68;
+  --text-sub: #475569;
+  --text-muted: #94a3b8;
+  --hover-bg: #f8fafc;
+  
+  --sidebar-width: 326px;
+  --transition-speed: 0.22s;
+
+  height: 100vh;
+  width: var(--sidebar-width);
+  background-color: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color);
+  box-sizing: border-box;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 50;
+  overflow: visible; 
+  transition: width var(--transition-speed) ease;
+}
+
+.side-bar.is-collapsed { width: 64px !important; }
+
+.sidebar-content {
+  width: var(--sidebar-width);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: opacity 0.18s ease;
+}
+
+.side-bar.is-collapsed .sidebar-content {
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* ============================================================
+   로고 영역 (가운데 정렬 및 크기 확대)
+   ============================================================ */
+.logo-area { 
+  /* 상하 여백 유지, 좌우 여백 자동(center 정렬)을 위해 수정 */
+  padding: 30px 16px 24px; 
+  display: flex;
+  justify-content: center; /* 로고를 완벽하게 가로 중앙으로 정렬 */
+  align-items: center;
+  width: 100%;
+}
+
+.main-logo {
+  height: 100px; /* 기존 38px에서 60px로 대폭 확대 (원하시는 크기에 맞게 조절 가능) */
+  width: auto;
+  max-width: 100%; /* 부모 요소를 넘지 않도록 방지 */
+  object-fit: contain;
+}
+
+/* ============================================================
+   사이드바 공통 대시보드 카드 스타일
+   ============================================================ */
+.side-operation-card,
+.side-metric-card,
+.side-action-card {
+  margin: 0 14px 12px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
+}
+
+.side-card-label,
+.side-metric-card > span,
+.side-action-card > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 900;
+}
+.side-card-label em { color: #94a3b8; font-size: 13px; font-style: normal; font-weight: 800; }
+
+.side-operation-card strong { display: block; color: #111827; font-size: 30px; font-weight: 900; line-height: 1.1; }
+.side-operation-card p,
+.side-metric-card p,
+.side-metric-card small { margin-top: 8px; color: #475569; font-size: 15px; font-weight: 800; line-height: 1.45; }
+
+.side-operation-card .side-load-text { margin-top: 8px; }
+.side-risk-lines {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
+  color: #164e68;
+}
+.side-risk-lines span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.62);
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+/* 배경색 분기: 현재 운영 상황의 운영 브리핑 색상과 동일하게 사용 */
+.side-operation-card { background: #f0fdf4; border-color: #bbf7d0; }
+.side-operation-card.level-정상 { background: #f0fdf4; border-color: #bbf7d0; }
+.side-operation-card.level-주의 { background: #fff7ed; border-color: #fed7aa; }
+.side-operation-card.level-위험 { background: #fff5f5; border-color: #fecaca; }
+
+.side-load { height: 8px; margin-top: 12px; overflow: hidden; border-radius: 999px; background: #e5e7eb; }
+.side-load span { display: block; height: 100%; border-radius: inherit; background: #16a34a; }
+.side-operation-card.level-주의 .side-load span { background: #d97706; }
+.side-operation-card.level-위험 .side-load span { background: #dc2626; }
+.side-card-help { display: block; margin-top: 8px; color: #64748b; font-size: 15px; font-weight: 700; }
+
+/* ============================================================
+   오늘 실적 그라디언트 카드
+   ============================================================ */
+.side-performance-card {
+  padding: 22px 20px;
+  border: 2px solid #dbeafe;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 10px 24px rgba(39, 132, 184, 0.11);
+}
+
+.side-performance-title { display: block; margin-bottom: 10px; color: #164E68; font-size: 19px; font-weight: 950; letter-spacing: -0.03em; }
+.side-sales-amount { display: block; color: #0f172a; font-size: 36px; line-height: 1.05; font-weight: 950; letter-spacing: -0.06em; }
+
+.side-profit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 11px 10px;
+  border-radius: 14px;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+}
+.side-profit-row span {
+  min-width: 0;
+  color: #166534;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.2;
+  white-space: nowrap;
+  margin-bottom: 0;
+}
+.side-profit-row strong {
+  color: #15803d;
+  font-size: clamp(18px, 1.45vw, 22px);
+  line-height: 1.1;
+  font-weight: 950;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-bottom: 0;
+}
+
+.side-performance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.side-performance-grid div { padding: 12px 10px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; text-align: center; }
+.side-performance-grid span { display: block; color: #64748b; font-size: 15px; font-weight: 850; margin-bottom: 0; }
+.side-performance-grid strong { display: block; margin-top: 4px; color: #0f172a; font-size: 25px; line-height: 1.05; font-weight: 950; margin-bottom: 0; }
+
+.side-report-shortcuts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.side-report-shortcuts button { min-height: 38px; border: 1px solid #dbe3ee; border-radius: 12px; background: #ffffff; color: #334155; font-size: 13px; font-weight: 900; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+.side-report-shortcuts button:hover { border-color: #2784b8; color: #164e68; background: #f8fafc; }
+
+/* ============================================================
+   액션 리스트
+   ============================================================ */
+.side-action-card button { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 44px; margin-top: 7px; padding: 0 14px; border: 1px solid #dbe3ee; border-radius: 12px; color: #334155; background: #f8fafc; font-size: 15px; font-weight: 800; cursor: pointer; }
+.side-action-card button:hover { color: #164E68; background: #EAF8FD; }
+.side-action-card button strong { font-size: 16px; font-weight: 900; }
+
+/* ============================================================
+   메뉴 링크 리스트 영역
+   ============================================================ */
+.side-list {
+  padding: 0 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none; 
+  padding: 0 16px;
+  min-height: 52px;
+  color: var(--text-sub); 
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 800;
+  border-radius: 14px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.menu-item:hover {
+  background-color: var(--hover-bg);
+  color: var(--text-main);
+}
+
+.router-link-active {
+  background-color: var(--primary-light);
+  color: var(--primary);
+  font-weight: 800;
+}
+.router-link-active::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 60%;
+  width: 4px;
+  background-color: var(--primary);
+  border-radius: 0 4px 4px 0;
+}
+
+/* ============================================================
+   사다리꼴 토글 버튼
+   ============================================================ */
+.toggle-btn {
+  position: absolute;
+  right: -24px; 
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 80px; 
+  background-color: var(--bg-sidebar);
+  clip-path: polygon(0 0, 100% 15%, 100% 85%, 0 100%);
+  border-radius: 0 8px 8px 0; 
+  filter: drop-shadow(3px 0 4px rgba(0, 0, 0, 0.08));
+  border: none;
+  color: var(--text-sub);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 100;
+}
+
+.side-bar.is-collapsed .toggle-btn {
+  right: -28px;
+  width: 30px;
+  height: 92px;
+  color: #2784B8;
+}
+
+@media (max-width: 768px) {
+  .side-bar.is-collapsed {
+    width: 0 !important;
+    border-right: 0;
+  }
+}
+
+.arrow-icon { font-size: 20px; font-weight: 1000; display: flex; transition: transform var(--transition-speed) ease; }
+.arrow-icon.rotated { transform: rotate(180deg); }
+</style>
