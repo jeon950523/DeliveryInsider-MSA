@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.auth.mapper.UserMapper">
+
+    <resultMap
+            id="userResultMap"
+            type="com.deliveryinsider.auth.entity.UserEntity">
+
+        <id property="id" column="id"/>
+        <result property="email" column="email"/>
+        <result property="passwordHash" column="password_hash"/>
+        <result
+                property="status"
+                column="status"
+                javaType="com.deliveryinsider.auth.entity.UserStatus"/>
+        <result
+                property="role"
+                column="role"
+                javaType="com.deliveryinsider.auth.entity.UserRole"/>
+        <result property="phoneNumber" column="phone_number"/>
+        <result property="phoneVerifiedAt" column="phone_verified_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert
+            id="insert"
+            useGeneratedKeys="true"
+            keyProperty="id">
+
+        INSERT INTO users (
+            email,
+            password_hash,
+            status,
+            role
+        )
+        VALUES (
+                   #{email},
+                   #{passwordHash},
+                   #{status},
+                   COALESCE(#{role}, 'USER')
+               )
+
+    </insert>
+
+    <select
+            id="findByEmail"
+            resultMap="userResultMap">
+
+        SELECT
+            id,
+            email,
+            password_hash,
+            status,
+            role,
+            phone_number,
+            phone_verified_at,
+            created_at,
+            updated_at
+        FROM users
+        WHERE email = #{email}
+
+    </select>
+
+    <select
+            id="findById"
+            resultMap="userResultMap">
+
+        SELECT
+            id,
+            email,
+            password_hash,
+            status,
+            role,
+            phone_number,
+            phone_verified_at,
+            created_at,
+            updated_at
+        FROM users
+        WHERE id = #{id}
+
+    </select>
+
+    <select
+            id="findByPhoneNumber"
+            resultMap="userResultMap">
+
+        SELECT
+            id,
+            email,
+            password_hash,
+            status,
+            role,
+            phone_number,
+            phone_verified_at,
+            created_at,
+            updated_at
+        FROM users
+        WHERE phone_number = #{phoneNumber}
+
+    </select>
+
+    <update id="updateVerifiedPhone">
+        UPDATE users
+        SET phone_number = #{phoneNumber},
+            phone_verified_at = #{phoneVerifiedAt},
+            updated_at = #{phoneVerifiedAt}
+        WHERE id = #{id}
+          AND phone_verified_at IS NULL
+    </update>
+
+    <update id="updateStatus">
+        UPDATE users
+        SET status = #{status}
+        WHERE id = #{id}
+        AND status != #{status}
+    </update>
+
+    <update id="updatePasswordHash">
+        UPDATE users
+        SET password_hash = #{passwordHash},
+            updated_at = CURRENT_TIMESTAMP(6)
+        WHERE id = #{id}
+    </update>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(*) FROM users
+    </select>
+
+    <select id="countByStatus" resultType="long">
+        SELECT COUNT(*) FROM users WHERE status = #{status}
+    </select>
+
+    <select id="countPhoneVerified" resultType="long">
+        SELECT COUNT(*) FROM users WHERE phone_verified_at IS NOT NULL
+    </select>
+
+    <select id="countByRole" resultType="long">
+        SELECT COUNT(*) FROM users WHERE role = #{role}
+    </select>
+
+    <select id="findAdminPage" resultMap="userResultMap">
+        SELECT
+            id,
+            email,
+            status,
+            role,
+            phone_verified_at,
+            created_at
+        FROM users
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+</mapper>

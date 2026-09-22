@@ -1,0 +1,80 @@
+server:
+  port: ${APP_PORT:8091}
+
+spring:
+  config:
+    import: optional:file:./.env[.properties]
+
+  application:
+    name: baef-p2-auth
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:baef_auth}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:30000}
+
+springdoc:
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json
+  swagger-ui:
+    enabled: false
+  api-docs:
+    path: /api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+
+security:
+  internal:
+    api-key: ${GEMINI_API_KEY:}
+
+logging:
+  pattern:
+    level: "%5p [traceId:%X{traceId:-}]"
+
+mybatis:
+  mapper-locations: classpath:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+jwt:
+  issuer: deliveryinsider
+  header-key: Authorization
+  scheme: Bearer
+  access-token-expiry-ms: ${JWT_ACCESS_TOKEN_EXPIRY_MS:1800000}
+  refresh-token-expiry-ms: ${JWT_REFRESH_TOKEN_EXPIRY_MS:1209600000}
+  refresh-token-cookie-name: refresh-token
+  secret: ${JWT_SECRET:}
+
+phone-verification:
+  expiry-seconds: ${PHONE_VERIFICATION_EXPIRY_SECONDS:180}
+  resend-cooldown-seconds: ${PHONE_VERIFICATION_RESEND_COOLDOWN_SECONDS:60}
+  max-attempts: ${PHONE_VERIFICATION_MAX_ATTEMPTS:5}
+
+solapi:
+  base-url: ${SOLAPI_BASE_URL:https://api.solapi.com}
+  api-key: ${GEMINI_API_KEY:}
+  api-secret: ${SOLAPI_API_SECRET:}
+  sender-number: ${SOLAPI_SENDER_NUMBER:}
+
+
+kakao-oauth:
+  rest-api-key: ${KAKAO_REST_API_KEY:${KAKAO_CLIENT_ID:}}
+  client-secret: ${KAKAO_CLIENT_SECRET:}
+  redirect-uri: ${KAKAO_REDIRECT_URI:http://localhost:8090/api/auth/oauth2/callback/kakao}
+  front-callback-uri: ${KAKAO_FRONT_CALLBACK_URI:http://localhost:5174/login/oauth2/callback}
+  auth-base-url: ${KAKAO_AUTH_BASE_URL:https://kauth.kakao.com}
+  api-base-url: ${KAKAO_API_BASE_URL:https://kapi.kakao.com}
+  state-cookie-name: ${KAKAO_STATE_COOKIE_NAME:kakao-oauth-state}
+  state-ttl-seconds: ${KAKAO_STATE_TTL_SECONDS:300}
+  cookie-secure: ${KAKAO_COOKIE_SECURE:false}

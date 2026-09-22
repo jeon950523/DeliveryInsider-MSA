@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.deliveryinsider.auth.phone.mapper.PhoneVerificationMapper">
+
+    <resultMap
+        id="phoneVerificationResultMap"
+        type="com.deliveryinsider.auth.phone.entity.PhoneVerificationEntity">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="phoneNumber" column="phone_number"/>
+        <result property="codeHash" column="code_hash"/>
+        <result
+            property="status"
+            column="status"
+            javaType="com.deliveryinsider.auth.phone.entity.PhoneVerificationStatus"/>
+        <result property="attemptCount" column="attempt_count"/>
+        <result property="expiresAt" column="expires_at"/>
+        <result property="resendAvailableAt" column="resend_available_at"/>
+        <result property="verifiedAt" column="verified_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert
+        id="insert"
+        useGeneratedKeys="true"
+        keyProperty="id">
+        INSERT INTO phone_verifications (
+            user_id,
+            phone_number,
+            code_hash,
+            status,
+            attempt_count,
+            expires_at,
+            resend_available_at,
+            verified_at
+        )
+        VALUES (
+            #{userId},
+            #{phoneNumber},
+            #{codeHash},
+            #{status},
+            #{attemptCount},
+            #{expiresAt},
+            #{resendAvailableAt},
+            #{verifiedAt}
+        )
+    </insert>
+
+    <select
+        id="findLatestByUserId"
+        resultMap="phoneVerificationResultMap">
+        SELECT
+            id,
+            user_id,
+            phone_number,
+            code_hash,
+            status,
+            attempt_count,
+            expires_at,
+            resend_available_at,
+            verified_at,
+            created_at,
+            updated_at
+        FROM phone_verifications
+        WHERE user_id = #{userId}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select
+        id="findLatestByPhoneNumber"
+        resultMap="phoneVerificationResultMap">
+        SELECT
+            id,
+            user_id,
+            phone_number,
+            code_hash,
+            status,
+            attempt_count,
+            expires_at,
+            resend_available_at,
+            verified_at,
+            created_at,
+            updated_at
+        FROM phone_verifications
+        WHERE phone_number = #{phoneNumber}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select
+        id="findLatestByUserIdAndPhoneNumber"
+        resultMap="phoneVerificationResultMap">
+        SELECT
+            id,
+            user_id,
+            phone_number,
+            code_hash,
+            status,
+            attempt_count,
+            expires_at,
+            resend_available_at,
+            verified_at,
+            created_at,
+            updated_at
+        FROM phone_verifications
+        WHERE user_id = #{userId}
+          AND phone_number = #{phoneNumber}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <update id="recordFailedAttempt">
+        UPDATE phone_verifications
+        SET attempt_count = attempt_count + 1,
+            status = CASE
+                WHEN attempt_count + 1 &gt;= #{maxAttempts}
+                    THEN 'LOCKED'
+                ELSE status
+            END,
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+          AND status = 'PENDING'
+    </update>
+
+    <update id="markExpired">
+        UPDATE phone_verifications
+        SET status = 'EXPIRED',
+            updated_at = #{updatedAt}
+        WHERE id = #{id}
+          AND status = 'PENDING'
+    </update>
+
+    <update id="markVerified">
+        UPDATE phone_verifications
+        SET status = 'VERIFIED',
+            verified_at = #{verifiedAt},
+            updated_at = #{verifiedAt}
+        WHERE id = #{id}
+          AND status = 'PENDING'
+    </update>
+
+</mapper>
