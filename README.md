@@ -40,17 +40,19 @@ External Simulator API ── HMAC Webhook ─> ├─ Platform ─ Kafka ─> O
 
 ## Troubleshooting
 
-프로젝트에서 실제로 발생한 16개 사례를 이벤트 신뢰성, 데이터 일관성, 결제 복구, Kafka 운영, 서비스 경계 관점으로 정리했습니다. README에서는 포트폴리오의 기술 범위를 보여주는 다음 다섯 사례를 우선 소개합니다.
+실제 개발·운영 과정에서 원인 추적이 필요했던 장애와 데이터 불일치, 그 과정에서 남긴 설계 결정을 [Troubleshooting 문서](docs/troubleshooting/TROUBLESHOOTING.md)에 정리했습니다.
 
-| 대표 사례 | 핵심 판단 |
+문서에서 상세히 다루는 사례는 다음과 같습니다.
+
+| 사례 | 확인한 핵심 |
 | --- | --- |
-| Durable Inbox + Fencing | 중복 수신과 Worker 재선점 경쟁에서 stale Worker가 처리 결과를 덮어쓰지 못하도록 Fencing을 적용했습니다. |
-| Kafka DLT·선택적 재처리 및 `sourceSequence` | 환불 이벤트의 DLT 복구 경로를 만들고, 역순 이벤트가 최신 주문 상태를 되돌리지 않도록 순서를 검증했습니다. |
-| Financial Snapshot | 화면과 리포트가 같은 재무 상태를 보도록 불변 Snapshot을 백엔드의 단일 기준으로 정리했습니다. |
-| Kafka Docker Listener + KRaft 데이터 보존 | Host/Docker 주소 관점과 KRaft 실제 데이터 경로를 분리해 컨테이너 전환 장애를 해결했습니다. |
-| Lifecycle Ownership | 주문 Lifecycle의 상태 소유권을 정리해 서비스 간 양방향 이벤트 순환 위험을 제거했습니다. |
+| Kafka 환불 DLT와 선택적 재처리 | Platform 발행 이후 Order 상태가 바뀌지 않는 흐름을 DLT까지 추적하고, 미반영 이벤트만 선별 재처리했습니다. |
+| Financial Snapshot 정합성 | 주문 상세·Dashboard·Report·XLSX의 비용 차이를 같은 주문 Snapshot 기준으로 대조했습니다. |
+| Durable Inbox + Fencing | Webhook 중복과 Worker lease 만료 후 재선점 경쟁을 분리하고 claimVersion으로 stale Worker를 차단했습니다. |
+| Kafka Docker Listener + KRaft 데이터 보존 | Host/Docker listener와 KRaft 실제 log directory를 분리해 기존 Topic·Group·Offset을 보존했습니다. |
+| Billing 404 의미 처리 | Plan 데이터 부재와 정상 미구독 상태를 분리해 신규 구독 흐름이 오류로 막히지 않도록 수정했습니다. |
 
-Billing `UNKNOWN`과 Reconciliation, Billing Outbox, Refund Liability, Docker 서비스 디스커버리, Gemini 런타임 복구 등 나머지 사례를 포함한 전체 기록은 [Troubleshooting 문서](docs/troubleshooting/TROUBLESHOOTING.md)에서 확인할 수 있습니다.
+WebSocket Origin, 메뉴 Mapping Redrive, 영업일 경계, Billing Outbox, Docker 서비스 디스커버리, Gemini 런타임 문제는 짧은 장애 기록으로 남겼습니다. sourceSequence, Billing UNKNOWN/Reconciliation, 주문 Lifecycle Ownership, 서비스별 CI/GitOps는 관련 설계 결정으로 구분했습니다.
 
 ## 디렉터리
 
