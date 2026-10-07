@@ -16,6 +16,6 @@
 | `external-simulator/server` | [baef-p2-external-platform-simulator](https://github.com/greencomacademy/baef-p2-external-platform-simulator) | 공개 통합 |
 | 별도 비공개 저장소 | [baef-p2-k8s](https://github.com/greencomacademy/baef-p2-k8s) | `DeliveryInsider-MSA-k8s`로 분리 |
 
-모든 공개 통합 경로는 `git subtree add`를 `--squash` 없이 실행해 원본 변경 이력을 보존했습니다. 단, 공개 전환 시 Report 이력에서 탐지된 실제 GCP API 키는 빈 환경 변수 기본값으로 정제했습니다. 이 보안 정제로 공개 통합본의 Git 커밋 ID는 재발급되었지만, 비밀값을 제외한 변경 이력은 유지됩니다. `baef-p2-k8s`는 배포 환경 정보를 분리하기 위해 개인 계정의 별도 비공개 저장소에 원본 전체 이력을 보존합니다.
+모든 공개 통합 경로는 `git subtree add`를 `--squash` 없이 실행해 원본 변경 이력을 보존했습니다. 공개 전환 과정에서 과거 이력의 민감한 자격정보는 제거하고 공개용 history를 다시 작성했으며, 비밀값을 제외한 변경 이력은 유지했습니다. `baef-p2-k8s`는 배포 환경 정보를 분리하기 위해 개인 계정의 별도 비공개 저장소에 원본 전체 이력을 보존합니다.
 
 조직 목록에서 독립된 2차 `infra` 저장소는 확인되지 않았습니다. 관련 구성은 `baef-p2-k8s`에 포함되어 있습니다.
