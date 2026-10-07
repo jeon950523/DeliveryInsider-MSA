@@ -1,14 +1,25 @@
 # DeliveryInsider MSA
 
-배달 플랫폼 통합 운영 시스템 **DeliveryInsider**의 2차 팀 프로젝트를 포트폴리오에서 한눈에 볼 수 있도록 통합한 모노레포입니다.
+배달 플랫폼 주문을 한곳에서 받아 **매장 운영, 주문 상태, 결제·구독, 리포트, 실시간 알림**으로 연결하는 통합 운영 시스템입니다.
 
-> 이 저장소는 개인 포트폴리오용 통합 뷰입니다. 원본 팀 저장소는 `greencomacademy` 조직에 그대로 보존되어 있으며, 각 디렉터리의 `SOURCE.md`와 아래 목록에서 출처를 확인할 수 있습니다. Kubernetes 배포 매니페스트는 교육 환경 구성을 포함하므로 공개 범위에서 분리해 별도 비공개 저장소로 관리합니다.
+1차 단일 Backend/Frontend MVP에서 출발해 2차에서는 도메인별 서비스를 분리하고, 외부 Webhook과 Kafka 이벤트를 중심으로 주문 흐름을 다시 구성했습니다.
 
-## 프로젝트 맥락
+[Architecture](docs/architecture.md) · [Troubleshooting](docs/troubleshooting/TROUBLESHOOTING.md) · [원본 저장소 목록](docs/source-inventory.md)
 
-1차에서는 단일 백엔드/프론트엔드 기반 MVP를 구현했습니다. 2차에서는 도메인별 책임을 분리하고, 서비스 사이의 주문·정산·알림 흐름을 이벤트 중심으로 재구성했습니다.
+## 한눈에 보기
 
-이 프로젝트는 팀 프로젝트입니다. 저는 **조장 및 핵심 구현 담당자**로서 서비스 경계와 통합 흐름을 조율하고 구현에 참여했습니다. 모든 기능은 팀원들의 협업 결과이며, 이 저장소는 개인의 단독 산출물로 표현하지 않습니다.
+| 항목 | 내용 |
+| --- | --- |
+| 프로젝트 | 2차 팀 프로젝트, MSA 전환 |
+| 역할 | 조장 및 핵심 구현 담당 — 서비스 경계와 통합 흐름 조율 및 구현 참여 |
+| 핵심 흐름 | HMAC Webhook → Platform Inbox → Provider Adapter → Kafka → Order → Outbox → Report / Notification |
+| 주요 기술 | Java 21, Spring Boot 4.1, Spring Cloud Gateway, MySQL, Kafka, Vue 3 |
+| 운영·배포 | Docker, Jenkins CI, Kubernetes, Argo CD ApplicationSet |
+| 공개 시연 범위 | External Simulator의 BAEMIN 최소 vertical slice 중심 |
+
+> 이 저장소는 여러 원본 팀 저장소를 한곳에서 볼 수 있도록 통합한 공개본입니다. 원본 이력은 `greencomacademy` 조직 저장소와 각 디렉터리의 `SOURCE.md`에서 확인할 수 있습니다. 교육 환경의 Kubernetes 배포 상세와 Secret은 별도 비공개 저장소로 분리했습니다.
+
+## 시스템 흐름
 
 ```text
 DeliveryInsider Client ──┐
@@ -22,39 +33,40 @@ External Simulator API ── HMAC Webhook ─> ├─ Platform ─ Kafka ─> O
                                           └─ Billing / Report / Notification (WebSocket)
 ```
 
+Platform은 외부 Provider 계약을 Adapter에서 `CanonicalPlatformOrder`로 변환하고, Inbox로 중복 수신과 재처리 상태를 관리합니다. Order는 주문 상태 변경과 Outbox 이벤트를 함께 기록하고, Report와 Notification이 후속 이벤트를 소비합니다.
+
+## 핵심 구현과 기술 판단
+
+- **서비스 경계 분리** — Auth, Store, Platform, Order, Billing, Report, Notification, SCG로 책임을 나눴습니다.
+- **외부 연동 표준화** — Provider별 Webhook 계약을 Adapter로 격리하고 내부 주문 모델로 변환했습니다.
+- **이벤트 신뢰성** — Inbox/Outbox, Kafka 재시도·DLT, `sourceSequence`, claimVersion 기반 fencing으로 중복·재처리·역순 이벤트를 다뤘습니다.
+- **재무 데이터 정합성** — 주문 시점 Financial Snapshot을 기준으로 주문 상세, Dashboard, Report, XLSX의 비용 의미를 맞췄습니다.
+- **Billing 복구 경계** — Payment 결과의 `FAILED`와 `UNKNOWN`을 구분하고 Reconciliation과 Outbox로 외부 PG 결과 불확실성을 처리했습니다.
+- **운영 알림** — Notification의 WebSocket 신호 이후 Client가 REST로 최신 상태를 다시 조회하도록 구성했습니다.
+
 ## 기술 스택
 
 - Backend: Java 21, Spring Boot 4.1, Spring Cloud Gateway
-- Data & messaging: MySQL, Apache Kafka, Outbox/Inbox, DLT·재시도 정책
+- Data & messaging: MySQL, Apache Kafka, Inbox/Outbox, DLT·재시도 정책
 - Frontend: Vue 3, Vite
 - Delivery: Docker, Jenkins CI, Kubernetes, Argo CD ApplicationSet
-- Observability: Spring Boot Actuator/Prometheus 엔드포인트
-
-## 주요 구현 포인트
-
-- **도메인 분리**: 인증, 매장, 외부 플랫폼, 주문, 결제·구독, 리포트, 알림을 독립 서비스로 구성했습니다.
-- **신뢰성 있는 이벤트 처리**: 주문 서비스의 Outbox, 플랫폼 Webhook·Catalog Inbox와 Kafka 재시도/DLT 흐름으로 중복·일시 장애를 다룹니다.
-- **외부 플랫폼 연동 경계**: Provider별 계약을 Adapter로 분리하고 `CanonicalPlatformOrder`로 내부 모델을 표준화합니다. 현재 백엔드 시연은 BAEMIN 최소 vertical slice를 중심으로 합니다.
-- **운영 기능**: Billing의 결제·환불·구독 흐름, Notification의 WebSocket 티켓 기반 알림, Report의 운영 집계와 XLSX 내보내기 기능을 포함합니다.
-- **배포 자동화**: Jenkins가 서비스 빌드·테스트·컨테이너 이미지를 처리하고, Kubernetes Manifest와 Argo CD ApplicationSet으로 배포 대상을 관리합니다.
+- Observability: Spring Boot Actuator / Prometheus
 
 ## Troubleshooting
 
 실제 개발·운영 과정에서 원인 추적이 필요했던 장애와 데이터 불일치, 그 과정에서 남긴 설계 결정을 [Troubleshooting 문서](docs/troubleshooting/TROUBLESHOOTING.md)에 정리했습니다.
 
-문서에서 상세히 다루는 사례는 다음과 같습니다.
-
 | 사례 | 확인한 핵심 |
 | --- | --- |
-| Kafka 환불 DLT와 선택적 재처리 | Platform 발행 이후 Order 상태가 바뀌지 않는 흐름을 DLT까지 추적하고, 미반영 이벤트만 선별 재처리했습니다. |
-| Financial Snapshot 정합성 | 주문 상세·Dashboard·Report·XLSX의 비용 차이를 같은 주문 Snapshot 기준으로 대조했습니다. |
-| Durable Inbox + Fencing | Webhook 중복과 Worker lease 만료 후 재선점 경쟁을 분리하고 claimVersion으로 stale Worker를 차단했습니다. |
-| Kafka Docker Listener + KRaft 데이터 보존 | Host/Docker listener와 KRaft 실제 log directory를 분리해 기존 Topic·Group·Offset을 보존했습니다. |
-| Billing 404 의미 처리 | Plan 데이터 부재와 정상 미구독 상태를 분리해 신규 구독 흐름이 오류로 막히지 않도록 수정했습니다. |
+| Kafka 환불 DLT와 선택적 재처리 | Platform 발행 이후 Order 상태가 바뀌지 않는 흐름을 DLT까지 추적하고 미반영 이벤트만 선별 재처리 |
+| Financial Snapshot 정합성 | 주문 상세·Dashboard·Report·XLSX의 비용 차이를 같은 주문 Snapshot 기준으로 대조 |
+| Durable Inbox + Fencing | Webhook 중복과 Worker lease 만료 후 재선점 경쟁을 분리하고 claimVersion으로 stale Worker 차단 |
+| Kafka Docker Listener + KRaft | Host/Docker listener와 실제 KRaft log directory를 분리해 기존 Topic·Group·Offset 보존 |
+| Billing 404 의미 처리 | Plan 데이터 부재와 정상 미구독 상태를 분리해 신규 구독 흐름 복구 |
 
-WebSocket Origin, 메뉴 Mapping Redrive, 영업일 경계, Billing Outbox, Docker 서비스 디스커버리, Gemini 런타임 문제는 짧은 장애 기록으로 남겼습니다. sourceSequence, Billing UNKNOWN/Reconciliation, 주문 Lifecycle Ownership, 서비스별 CI/GitOps는 관련 설계 결정으로 구분했습니다.
+WebSocket Origin, 메뉴 Mapping Redrive, 영업일 경계, Billing Outbox, Docker 서비스 디스커버리, Gemini 런타임 문제는 짧은 장애 기록으로 남겼습니다.
 
-## 디렉터리
+## 저장소 구성
 
 | 경로 | 역할 | 원본 저장소 |
 |---|---|---|
@@ -66,30 +78,15 @@ WebSocket Origin, 메뉴 Mapping Redrive, 영업일 경계, Billing Outbox, Dock
 | `services/notification` | 알림·WebSocket | [baef-p2-notification](https://github.com/greencomacademy/baef-p2-notification) |
 | `services/billing` | 결제·환불·구독 | [baef-p2-billing](https://github.com/greencomacademy/baef-p2-billing) |
 | `gateway/scg` | API Gateway | [baef-p2-scg](https://github.com/greencomacademy/baef-p2-scg) |
-| `client` | DeliveryInsider 운영 클라이언트 | [baef-p2-client](https://github.com/greencomacademy/baef-p2-client) |
+| `client` | 운영 클라이언트 | [baef-p2-client](https://github.com/greencomacademy/baef-p2-client) |
 | `client/archive/front-p2-fix` | 초기 프론트엔드 보관본 | [baef-front-p2-fix](https://github.com/greencomacademy/baef-front-p2-fix) |
 | `external-simulator/client` | 외부 플랫폼 시연 Vue 클라이언트 | [baef-external-simulator](https://github.com/greencomacademy/baef-external-simulator) |
 | `external-simulator/server` | 외부 플랫폼 Reference Simulator API | [baef-p2-external-platform-simulator](https://github.com/greencomacademy/baef-p2-external-platform-simulator) |
 | 별도 비공개 저장소 | Kubernetes Manifest·Jenkins CI·Argo CD | [baef-p2-k8s](https://github.com/greencomacademy/baef-p2-k8s) |
-| `infra` | 인프라 구성 안내 | Kubernetes 배포 구성은 별도 비공개 저장소로 분리 |
-| `docs` | 아키텍처·출처·Troubleshooting 문서 | 이 통합 저장소에서 작성 |
+| `docs` | Architecture·Source·Troubleshooting | 이 통합 저장소에서 작성 |
 
-## 이벤트 흐름 예시
+## 실행과 공개 범위
 
-```text
-외부 플랫폼 시연 UI
-  → External Simulator API
-  → HMAC Webhook
-  → SCG → Platform Inbox
-  → Provider Adapter → CanonicalPlatformOrder
-  → Kafka → Order
-  → Order Outbox → Kafka
-  → Report / Notification / Billing
-```
+각 서비스는 독립 실행·배포 단위이며 환경 변수와 외부 의존성은 서비스별 설정이 필요합니다. 실제 Secret·개인 토큰·교육 환경 운영값은 공개 저장소에 포함하지 않습니다.
 
-자세한 경계와 현재 구현 범위는 [아키텍처 문서](docs/architecture.md)를 참고하세요.
-
-## 실행과 보안
-
-각 서비스는 독립 실행·배포 단위입니다. 환경 변수는 각 프로젝트의 `.env.example`를 기준으로 별도 주입해야 하며, 실제 Secret·개인 토큰·운영 환경값은 커밋하지 않습니다. Kubernetes `secret.yaml.example`와 교육 환경별 배포 설정은 별도 비공개 저장소에서 관리합니다. 이 통합본은 단일 명령으로 모든 의존성을 기동하는 배포 패키지가 아니라, 원본 팀 프로젝트의 코드와 이력을 포트폴리오용으로 묶은 저장소입니다.
-
+이 통합본은 모든 의존성을 한 명령으로 기동하는 배포 패키지가 아니라, 팀 프로젝트의 공개 가능한 코드와 이력을 검토할 수 있도록 구성한 저장소입니다.
