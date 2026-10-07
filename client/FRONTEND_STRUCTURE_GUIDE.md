@@ -16,7 +16,7 @@ src/
 │  ├─ mock/
 │  ├─ order/
 │  ├─ platform/
-│  │  ├─ connection/    # B 신규 담당
+│  │  ├─ connection/    # 플랫폼 연결 관리
 │  │  └─ settings/      # 1차 플랫폼 수수료 설정 호환
 │  ├─ profile/
 │  ├─ report/
